@@ -1,0 +1,6 @@
+{
+  "platforms": ["android", "apple", "web"],
+  "android": {
+    "modules": ["expo.modules.rtlsdr.RtlSdrModule"]
+  }
+}

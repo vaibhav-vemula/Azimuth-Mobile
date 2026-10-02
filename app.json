@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Azimuth",
+    "slug": "azimuth-v1",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0D14",
+    "platforms": [
+      "android",
+      "web"
+    ],
+    "android": {
+      "package": "com.azimuth.v1"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}
