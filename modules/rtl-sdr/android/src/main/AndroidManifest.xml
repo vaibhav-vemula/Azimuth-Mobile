@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    required="false": a required USB-host feature would hide the app from devices without
+    USB-OTG, which would also block the satellite tracking tabs.
+  -->
+  <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+  <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <application>
+    <service
+        android:name="expo.modules.rtlsdr.RecordingService"
+        android:exported="false"
+        android:foregroundServiceType="connectedDevice" />
+  </application>
+</manifest>

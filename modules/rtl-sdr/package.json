@@ -1,0 +1,7 @@
+{
+  "name": "rtl-sdr",
+  "version": "1.0.0",
+  "description": "RTL-SDR USB receiver, FM demodulator and baseband recorder for Azimuth (bundles the GPL RTL-SDR Blog librtlsdr fork)",
+  "main": "index.ts",
+  "license": "GPL-3.0-or-later"
+}

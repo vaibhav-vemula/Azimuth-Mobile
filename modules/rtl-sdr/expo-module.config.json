@@ -1,5 +1,5 @@
 {
-  "platforms": ["android", "apple", "web"],
+  "platforms": ["android"],
   "android": {
     "modules": ["expo.modules.rtlsdr.RtlSdrModule"]
   }

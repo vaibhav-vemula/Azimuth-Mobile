@@ -34,6 +34,39 @@ const RtlSdrWebModule: RtlSdrNativeModule = {
   async setVolume(_volume: number) {
     return unsupported('setVolume');
   },
+  async setSampleRate(_rateHz: number) {
+    return unsupported('setSampleRate');
+  },
+  async setGain(_gainDb: number | null) {
+    return unsupported('setGain');
+  },
+  async getGains() {
+    return unsupported('getGains');
+  },
+  async setBiasTee(_enabled: boolean) {
+    return unsupported('setBiasTee');
+  },
+  async startRecording(_name: string, _label: string, _maxDurationMs: number) {
+    return unsupported('startRecording');
+  },
+  async stopRecording() {
+    return unsupported('stopRecording');
+  },
+  async writeRecordingMetadata(_name: string, _json: string) {
+    return unsupported('writeRecordingMetadata');
+  },
+  async listRecordings() {
+    return unsupported('listRecordings');
+  },
+  async deleteRecording(_name: string) {
+    return unsupported('deleteRecording');
+  },
+  async exportRecording(_name: string) {
+    return unsupported('exportRecording');
+  },
+  async getFreeStorageBytes() {
+    return unsupported('getFreeStorageBytes');
+  },
   addListener<EventName extends keyof RtlSdrModuleEvents>(
     eventName: EventName,
     _listener: RtlSdrModuleEvents[EventName]

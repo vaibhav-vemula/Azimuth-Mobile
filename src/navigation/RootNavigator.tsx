@@ -1,0 +1,98 @@
+import { ComponentType } from 'react';
+import { DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import RadioScreen from '../screens/radio/RadioScreen';
+import PassesScreen from '../screens/satellites/PassesScreen';
+import PassDetailScreen from '../screens/satellites/PassDetailScreen';
+import CaptureScreen from '../screens/satellites/CaptureScreen';
+import RecordingsScreen from '../screens/recordings/RecordingsScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
+import { colors, typography } from '../theme';
+import { RootTabParamList, SatellitesStackParamList } from './types';
+
+const Tab = createBottomTabNavigator<RootTabParamList>();
+const Stack = createNativeStackNavigator<SatellitesStackParamList>();
+
+const TAB_ICONS: Record<keyof RootTabParamList, { active: keyof typeof Ionicons.glyphMap; idle: keyof typeof Ionicons.glyphMap }> = {
+  Radio: { active: 'radio', idle: 'radio-outline' },
+  Satellites: { active: 'planet', idle: 'planet-outline' },
+  Recordings: { active: 'albums', idle: 'albums-outline' },
+  Settings: { active: 'settings', idle: 'settings-outline' },
+};
+
+const navTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: colors.background,
+    card: colors.backgroundElevated,
+    primary: colors.accent,
+    text: colors.textPrimary,
+    border: colors.surfaceBorder,
+  },
+};
+
+/** Wraps a screen so an unexpected render error shows a fallback instead of taking the whole app down. */
+function guarded<P extends object>(Component: ComponentType<P>): ComponentType<P> {
+  function Guarded(props: P) {
+    return (
+      <ErrorBoundary>
+        <Component {...props} />
+      </ErrorBoundary>
+    );
+  }
+  Guarded.displayName = `Guarded(${Component.displayName ?? Component.name})`;
+  return Guarded;
+}
+
+const GuardedRadio = guarded(RadioScreen);
+const GuardedPasses = guarded(PassesScreen);
+const GuardedPassDetail = guarded(PassDetailScreen);
+const GuardedCapture = guarded(CaptureScreen);
+const GuardedRecordings = guarded(RecordingsScreen);
+const GuardedSettings = guarded(SettingsScreen);
+
+function SatellitesStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.backgroundElevated },
+        headerTintColor: colors.accent,
+        headerTitleStyle: { ...typography.subheading, color: colors.textPrimary },
+        contentStyle: { backgroundColor: colors.background },
+        headerShadowVisible: false,
+      }}
+    >
+      <Stack.Screen name="Passes" component={GuardedPasses} options={{ headerShown: false }} />
+      <Stack.Screen name="PassDetail" component={GuardedPassDetail} options={{ title: 'Pass details' }} />
+      <Stack.Screen name="Capture" component={GuardedCapture} options={{ title: 'Capture', presentation: 'modal' }} />
+    </Stack.Navigator>
+  );
+}
+
+export function RootNavigator() {
+  return (
+    <NavigationContainer theme={navTheme}>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: { backgroundColor: colors.backgroundElevated, borderTopColor: colors.surfaceBorder },
+          tabBarActiveTintColor: colors.accent,
+          tabBarInactiveTintColor: colors.textSecondary,
+          tabBarLabelStyle: { ...typography.caption, fontSize: 11 },
+          tabBarIcon: ({ color, size, focused }: { color: string; size: number; focused: boolean }) => (
+            <Ionicons name={focused ? TAB_ICONS[route.name].active : TAB_ICONS[route.name].idle} color={color} size={size} />
+          ),
+        })}
+      >
+        <Tab.Screen name="Radio" component={GuardedRadio} />
+        <Tab.Screen name="Satellites" component={SatellitesStack} />
+        <Tab.Screen name="Recordings" component={GuardedRecordings} />
+        <Tab.Screen name="Settings" component={GuardedSettings} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}

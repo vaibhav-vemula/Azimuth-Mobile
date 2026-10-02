@@ -1,162 +1,153 @@
-# Azimuth V1
+# Azimuth
 
-A Software Defined Radio receiver for Android. Plug an RTL-SDR dongle into your phone over USB-OTG, tune a frequency, and watch a live 64-bin spectrum analyzer.
+An Android app for the **RTL-SDR Blog V4** (and other RTL2832U dongles) that does two things well:
 
-Built with Expo (SDK 53), a local Expo native module written in Kotlin, and the RTL-SDR Blog `librtlsdr` driver compiled in through the NDK.
+- **Radio:** a live spectrum analyzer and wideband FM receiver.
+- **Satellites:** predicts the next **Meteor-M2 3 / M2-4** weather-satellite passes over your location, shows each pass N2YO-style (ground track on a map plus a sky plot), and **records the pass** to a file you can turn into a weather image with SatDump.
 
-> **Status:** compiles and builds for Android, but has not yet been tested on a physical device with a dongle. See [Known limitations](#known-limitations).
+Everything is computed on the phone. There are no accounts and no servers of ours; orbital data comes from CelesTrak and SatNOGS.
+
+## Status
+
+Built and verified without hardware in the loop: the full app compiles for Android (debug APK builds), the JavaScript bundles with Hermes, 70+ unit tests and 450 native DSP checks pass, and the pass predictor matches an independent implementation (Skyfield) to under a second on all 12 passes in a 48 hour comparison.
+
+**Not yet verified on a real satellite pass.** FM reception, the spectrum and the USB driver were confirmed on a real V4. Satellite capture needs a real overhead pass and a suitable antenna. See [Known limitations](#known-limitations).
+
+## Screens
+
+| Tab | What it does |
+|-----|--------------|
+| **Radio** | Connect the dongle, tune any frequency 0.5 MHz to 1.766 GHz (HF via the V4 upconverter), live spectrum, mono wideband-FM audio with volume. |
+| **Satellites** | Next passes for M2-3 and M2-4 (peak elevation, direction, quality, countdown), reminders, and per-pass detail: ground-track map with coverage footprint, polar sky plot, a time scrubber, and a **Capture** button. |
+| **Recordings** | Saved passes with size, duration, peak elevation and gap count. Share, export to Downloads, or delete. |
+| **Settings** | Location (GPS or manual), minimum pass elevation, reminders, orbital-data status, storage. |
 
 ## Hardware
 
-- Android phone with USB host (OTG) support, Android 6.0+ (API 23)
-- RTL-SDR dongle. Developed against the **RTL-SDR Blog V4** (RTL2832U + R828D), which receives roughly 0.5 MHz to 1766 MHz.
-- USB-OTG adapter or cable
+- Android 7+ phone with USB host (OTG), plus an OTG adapter
+- RTL-SDR Blog V4 (RTL2832U + R828D). Other RTL2832U dongles should work for Radio.
+- For satellites: a **137 MHz antenna** with a clear view of the sky, outdoors if you can. A V-dipole (two 53 cm elements at 120 degrees, pointing at the sky) is the usual starter; a QFH is better. The short telescopic FM whip is not suitable. An LNA powered through the V4 **bias-tee** helps on weak passes (the toggle is on the capture screen).
 
-Also recognized: Realtek `0x0BDA` with product ID `0x2832` / `0x2838`, and vendor `0x0245`.
+## Setup and run
 
-## Requirements
-
-- Node.js 18+
-- JDK 17 or 21
-- Android SDK with an NDK (r26 or r27) and CMake 3.22.1 (install via Android Studio's SDK Manager)
-- `ANDROID_HOME` set
-
-This is a **development build**. It will not run in Expo Go because it uses a local native module.
-
-## Run
+Requirements: Node 20+, JDK 17 or 21, Android SDK with an NDK (r26/r27) and CMake 3.22.1, `ANDROID_HOME` set.
 
 ```bash
 npm install
-npx expo run:android
+npx expo run:android      # builds and installs a development build
+npm start                 # later: just start Metro
 ```
 
-With the app installed and the dev server running:
+This needs a **development build**, not Expo Go (it contains a local native module).
+
+The dongle uses the phone's only USB port, so you cannot also have `adb` over USB. Use wireless debugging (Settings > Developer options > Wireless debugging), then `adb connect <ip>:<port>` and `adb reverse tcp:8081 tcp:8081` so the app can reach Metro. Alternatively install a release build, which bundles its JavaScript:
 
 ```bash
-npm start
+npx expo run:android --variant release
 ```
 
-Plug in the dongle, tap **CONNECT**, and accept the USB permission prompt. Then enter a frequency in MHz, tap **TUNE**, and tap **START STREAM**.
+Logs: `adb logcat -s RtlSdrJni librtlsdr RtlSdrModule`.
 
-To hear an FM station, tune to it (88 to 108 MHz) and tap **LISTEN**. This turns on audio and starts the stream if it isn't running. Use the − and + buttons for volume.
+## Recording a pass
 
-If versions drift, run `npx expo install --fix`.
+1. Open **Satellites**, tap a pass, and check the sky plot and quality. Passes above about 30 degrees decode best.
+2. The **Capture** button becomes available 5 minutes before the pass. Open it.
+3. Choose the downlink frequency (137.100 or 137.900 MHz; see below), gain (auto is a fine start) and bias-tee.
+4. Optional but recommended: **Monitor signal first** to confirm the antenna works and see which frequency the satellite is on.
+5. Tap **Start recording**. It runs as an Android foreground service, so it continues with the screen off, and it stops itself shortly after the satellite sets. You can stop earlier; the part recorded is saved.
 
-## Project layout
+Manual capture only for now: nothing starts by itself.
+
+### Which frequency?
+
+SatNOGS lists both 137.100 and 137.900 MHz for each of M2-3 and M2-4, and operators switch between them, so the app does not guess. Use the signal monitor: LRPT shows up as a flat-topped block about 140 kHz wide at one of the two marked frequencies. The choice is remembered per satellite.
+
+## What is stored
+
+Each pass becomes a folder in the app's storage (`Android/data/<package>/files/captures/`):
 
 ```
-azimuth-v1/
-├── App.tsx                          UI: status banner, tuning input, controls
-├── src/components/
-│   └── SpectrumVisualizer.tsx       64-bar spectrum card (cyan -> red by power)
-└── modules/rtl-sdr/
-    ├── index.ts                     Typed wrappers + addSignalListener / addStatusListener
-    ├── expo-module.config.json
-    ├── src/
-    │   ├── RtlSdrModule.ts          requireNativeModule('rtl-sdr')
-    │   ├── RtlSdrModule.web.ts      Web stubs (warn + throw)
-    │   └── RtlSdrModule.types.ts    Event and module types
-    └── android/
-        ├── build.gradle             Library + CMake/NDK config
-        └── src/main/
-            ├── java/expo/modules/rtlsdr/
-            │   ├── RtlSdrModule.kt  USB discovery, permissions, lifecycle, stream thread
-            │   └── RtlSdrNative.kt  JNI declarations
-            └── cpp/
-                ├── rtlsdr_jni.cpp   JNI bridge
-                ├── spectrum.cpp/.h  Hann window + 1024-pt FFT -> 64 bins
-                ├── fm_demod.cpp/.h  Wideband FM demodulator -> 48 kHz mono PCM
-                └── third_party/     librtlsdr (Blog fork, patched) + libusb 1.0.27
+Meteor-M2-4_20261002T191930Z/
+├── baseband.cs8            raw signal samples, no header
+└── baseband.sigmf-meta     metadata (SigMF 1.0.0 JSON)
 ```
 
-## How it works
+- **`baseband.cs8`**: interleaved signed 8-bit I/Q at **288 kS/s** centred on the downlink frequency (SigMF datatype `ci8`). The dongle runs at 2.304 MS/s; the app low-pass filters and decimates by 8 on the fly, with a slow automatic gain so the weak signal is not lost in 8-bit rounding. About **0.58 MB per second, roughly 350 MB for a 10 minute pass.**
+- **`baseband.sigmf-meta`**: satellite, NORAD ID, frequency, sample rate, gain, bias-tee, receiver, pass times and peak elevation, the orbital elements used, your location rounded to about 1 km, and at the end the byte count, duration and number of lost USB blocks (**0 means a gap-free capture**). It is written when recording starts and finalised when it stops, so a crash still leaves a usable file.
 
-1. Kotlin finds the dongle via `UsbManager`, requests USB permission, and opens a `UsbDeviceConnection`.
-2. The connection's file descriptor is passed to a patched `librtlsdr` (`rtlsdr_open_fd`). Android's sandbox blocks libusb from enumerating the bus, so the descriptor is wrapped instead.
-3. The driver samples at 2.4 MS/s with auto gain. Below 28.8 MHz the V4's built-in upconverter is handled by the driver.
-4. A background thread reads IQ blocks. Each block is run through a Hann-windowed FFT, averaged, DC-spike-suppressed, and reduced to 64 bins in dBFS, then scaled to 0..1.
-5. Bins are emitted to JS as `onSignalData` at up to 30 FPS. Connection changes are emitted as `onStatusChange`.
-6. When audio is on, the same IQ block is also demodulated (see below) and played through `AudioTrack`.
+**Share** sends the data file through Android's share sheet. **Export** copies the whole folder to `Downloads/Azimuth/<name>/` so a computer can reach it.
 
-The visible span is the tuned frequency plus or minus 1.2 MHz.
+## From recording to image
 
-## FM audio
+The app records; it does not yet decode. Use [SatDump](https://www.satdump.org/) on a computer:
 
-Each 13.3 ms IQ block (32000 samples) goes through a mono wideband-FM chain in `fm_demod.cpp`:
+1. Export or share `baseband.cs8` to the computer.
+2. In SatDump choose **Offline processing**, pipeline **METEOR M2-X LRPT 72k** (`meteor_m2-x_lrpt`), or the **80k** variant (`meteor_m2-x_lrpt_80k`) if no frames are found.
+3. Input level: **Baseband**. Baseband format: **cs8**. Sample rate: **288000**. Select the file and start.
+4. The channel images and composites appear in the output folder.
 
-1. 127-tap low-pass (110 kHz) and decimate by 10 to 240 kS/s
-2. Quadrature discriminator (phase difference between consecutive samples)
-3. 129-tap low-pass (16 kHz, which also removes the 19 kHz stereo pilot) and decimate by 5 to 48 kS/s
-4. 75 µs de-emphasis (North America; use 50 µs elsewhere by changing the `FmDemodulator` constructor argument)
-5. 16-bit PCM, exactly 640 samples per block
+An in-app decoder (QPSK demodulation, Viterbi, Reed-Solomon, image assembly) is the planned next phase; the recording format above is exactly what it will read.
 
-Playback uses `AudioTrack` with non-blocking writes. A slow audio device can drop audio but can never stall the USB reads, which would corrupt the IQ stream.
+## Pass prediction
 
-Audio is mono. Stereo decoding, RDS, and AM/narrowband-FM modes are not implemented.
+Orbital elements come from CelesTrak (by NORAD ID) with SatNOGS DB as a fallback, are cached on the phone, and refresh every 12 hours. SGP4 propagation uses `satellite.js`. Rise, set and peak times are refined to about one second. The app warns when the cached data is older than 5 days.
 
-## JavaScript API
+Meteor-M2 4 (NORAD 59051) and Meteor-M2 3 (NORAD 57166) are tracked. To add another satellite, add an entry to `src/data/satellites.ts`.
 
-```ts
-import {
-  connect, disconnect, tune, startStream, stopStream,
-  addSignalListener, addStatusListener,
-} from './modules/rtl-sdr';
+## Project structure
 
-const status = addStatusListener(({ status, deviceName, frequency }) => { /* ... */ });
-const signal = addSignalListener(({ bins }) => { /* 64 floats, 0..1 */ });
-
-await connect();
-await tune(98_500_000);   // Hz
-await startStream();
-await setAudioEnabled(true);   // hear FM while streaming
-await setVolume(0.8);          // 0..1
-// ...
-await stopStream();
-await disconnect();
-
-status.remove();
-signal.remove();
+```
+App.tsx, index.ts, metro.config.js
+src/
+  theme/            design tokens (colors, Space Grotesk typography)
+  components/       GlassCard, Screen, buttons/badges, SpectrumVisualizer, starfield
+  navigation/       bottom tabs + Satellites stack (Passes > Detail > Capture)
+  screens/
+    radio/          Radio tab
+    satellites/     passes list, pass detail, capture, ground-track map, sky plot
+    recordings/     recordings library
+    settings/       settings
+  data/
+    tle/            TLE fetch (CelesTrak + SatNOGS), parse, cache
+    propagation/    SGP4 wrapper and pass prediction
+    satellites.ts   the satellites the app knows
+  receiver/         shared dongle state (connect, tune, modes)
+  capture/          recording orchestration and SigMF metadata
+  state/            persisted settings, location, passes (Zustand + MMKV)
+  notifications/    pass reminders
+  utils/            formatting, signal estimate
+modules/rtl-sdr/
+  index.ts, src/    TypeScript API
+  android/
+    src/main/java/  Kotlin: USB, streaming, recording, foreground service
+    src/main/cpp/   C++: JNI bridge, FFT, FM demodulator, baseband recorder,
+                    and vendored librtlsdr (RTL-SDR Blog fork) + libusb
 ```
 
-| Function | Description |
-|----------|-------------|
-| `connect()` | Finds the dongle, requests permission, opens and initializes it |
-| `tune(frequencyHz)` | Sets center frequency (500 kHz to 1766 MHz) |
-| `startStream()` / `stopStream()` | Starts or stops the spectrum stream |
-| `disconnect()` | Stops streaming and releases the device |
-| `setAudioEnabled(enabled)` | Plays demodulated wideband-FM audio while a stream is running |
-| `setVolume(volume)` | Output volume, 0 to 1 |
-
-Status values: `disconnected`, `connecting`, `connected`, `streaming`, `error`.
-
-Errors are rejected with codes such as `ERR_RTLSDR_NO_DEVICE`, `ERR_RTLSDR_PERMISSION`, `ERR_RTLSDR_OPEN_FAILED`, `ERR_RTLSDR_NOT_CONNECTED`, `ERR_RTLSDR_FREQUENCY`.
-
-## Tuning the display
-
-Bar height maps a dBFS range onto 0..1. The defaults are in `RtlSdrModule.kt`:
-
-```kotlin
-private const val DISPLAY_FLOOR_DB = -70f
-private const val DISPLAY_CEIL_DB = -20f
-```
-
-Lower the floor if weak signals are clipped, raise it if the noise floor is too high.
-
-## Debugging
+## Development
 
 ```bash
-adb logcat -s RtlSdrJni librtlsdr RtlSdrModule
+npm test                                   # TypeScript tests (Jest)
+npm run typecheck
+sh modules/rtl-sdr/android/src/main/cpp/tests/run.sh   # native DSP checks, host-only
+npx expo prebuild --platform android       # then: cd android && ./gradlew :rtl-sdr:assembleDebug
 ```
 
-`librtlsdr`'s own messages (tuner detection, "RTL-SDR Blog V4 Detected") appear under the `librtlsdr` tag.
+The native DSP test builds with any C++17 compiler and checks the spectrum placement, FM demodulation accuracy, stereo-pilot rejection, recorder file sizes, filter alias rejection and gain control.
 
 ## Known limitations
 
-- Not yet validated on real hardware.
-- Android only. The module config lists `apple`, but there is no iOS implementation, and the web build uses stubs that throw.
-- Fixed sample rate (2.4 MS/s) and automatic gain. Manual gain, bias-tee, and PPM correction are supported by `librtlsdr` but not exposed yet.
-- Audio is wideband FM only (mono). No AM, narrowband FM, SSB, or stereo/RDS decoding.
+- **No real-pass verification yet.** The capture path (decimation, file format, foreground service, storage) is tested synthetically and builds, but has not recorded a real LRPT signal.
+- **Sharing a recording** uses `expo-sharing` on app-private storage, which some devices refuse. **Export to Downloads** (Android 10+) is the reliable route.
+- **Scheduled/automatic capture** is not implemented; you start each recording yourself.
+- **Android only.** No iOS or web support (the web build has stubs that throw).
+- **Display scaling** (bar height) uses a fixed dB range chosen from calculation; adjust `DISPLAY_FLOOR_DB` / `DISPLAY_CEIL_DB` in `RtlSdrModule.kt` if your noise floor sits high or low.
+- Gain is automatic or a fixed step; PPM correction is not exposed.
+
+## Data sources
+
+[CelesTrak](https://celestrak.org/) and [SatNOGS DB](https://db.satnogs.org/) for orbital elements. The map uses the bundled equirectangular Earth image `assets/earth-day.jpg`, so it works offline.
 
 ## License
 
-`librtlsdr` is GPL-2.0-or-later and is statically linked into the native library, so distributing a built app requires releasing its source under a GPL-compatible license. libusb is LGPL-2.1-or-later. Provenance, versions, and the exact local patch are documented in `modules/rtl-sdr/android/src/main/cpp/third_party/README.md`.
+Azimuth is licensed **GPL-3.0-or-later** (see `LICENSE`). It statically links the RTL-SDR Blog fork of `librtlsdr` (GPL-2.0-or-later) and libusb 1.0.27 (LGPL-2.1-or-later), so distributing a built app requires making the app's source available under a GPL-compatible license. Provenance, versions and the one local patch (`rtlsdr_open_fd`, which wraps Android's USB file descriptor) are in `modules/rtl-sdr/android/src/main/cpp/third_party/README.md`.

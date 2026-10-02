@@ -1,21 +1,45 @@
 {
   "expo": {
     "name": "Azimuth",
-    "slug": "azimuth-v1",
+    "slug": "azimuth",
+    "scheme": "azimuth",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0A0D14",
-    "platforms": [
-      "android",
-      "web"
-    ],
+    "backgroundColor": "#05070D",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#05070D"
+    },
     "android": {
-      "package": "com.azimuth.v1"
+      "package": "com.azimuth.v1",
+      "adaptiveIcon": {
+        "backgroundColor": "#05070D",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
+      "expo-font",
       "expo-asset",
-      "expo-font"
+      "expo-sharing",
+      "expo-dev-client",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Azimuth uses your location to predict when satellites pass overhead."
+        }
+      ],
+      "expo-notifications"
     ]
   }
 }

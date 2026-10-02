@@ -1,27 +1,61 @@
 {
-  "name": "azimuth-v1",
+  "name": "azimuth",
   "version": "1.0.0",
-  "main": "expo/AppEntry.js",
+  "license": "GPL-3.0-or-later",
+  "main": "index.ts",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
     "android": "expo run:android",
-    "prebuild": "expo prebuild --platform android",
-    "ios": "expo run:ios"
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "expo": "~53.0.0",
-    "expo-asset": "~11.1.7",
-    "expo-constants": "~17.1.8",
-    "expo-font": "~13.3.2",
-    "expo-keep-awake": "~14.1.4",
-    "expo-modules-core": "~2.5.0",
-    "expo-status-bar": "~2.2.0",
-    "react": "19.0.0",
-    "react-native": "0.79.6"
+    "@expo-google-fonts/space-grotesk": "^0.4.1",
+    "@expo/vector-icons": "^15.0.2",
+    "@react-navigation/bottom-tabs": "^7.20.0",
+    "@react-navigation/native": "^7.5.0",
+    "@react-navigation/native-stack": "^7.5.0",
+    "expo": "~57.0.26",
+    "expo-asset": "~57.0.18",
+    "expo-blur": "~57.0.3",
+    "expo-constants": "~57.0.0",
+    "expo-dev-client": "~57.0.19",
+    "expo-font": "~57.0.4",
+    "expo-keep-awake": "~57.0.0",
+    "expo-location": "~57.0.20",
+    "expo-notifications": "~57.0.21",
+    "expo-sharing": "~57.0.22",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-mmkv": "^4.3.2",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "satellite.js": "^7.1.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@types/react": "~19.0.10",
-    "typescript": "~5.8.3"
+    "@types/jest": "29.5.14",
+    "@types/node": "^26.6.4",
+    "@types/react": "~19.2.2",
+    "babel-preset-expo": "^57.0.13",
+    "jest": "^29.7.0",
+    "jest-expo": "^57.0.5",
+    "ts-jest": "^29.4.14",
+    "typescript": "~6.0.3"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|satellite.js))",
+      "/node_modules/react-native-reanimated/plugin/",
+      "/node_modules/@react-native/babel-preset/"
+    ],
+    "moduleNameMapper": {
+      "^satellite\\.js$": "<rootDir>/node_modules/satellite.js/dist/index.js"
+    }
   },
   "private": true
 }
