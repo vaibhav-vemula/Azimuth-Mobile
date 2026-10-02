@@ -20,6 +20,7 @@ import { Reminders } from '../../notifications/reminders';
 import { useAppStore } from '../../state/useAppStore';
 import { findPassById } from '../../state/passId';
 import { useCapture } from '../../capture/useCapture';
+import { canCapture as isCaptureOpen, captureWindow } from '../../capture/window';
 import { colors, typography } from '../../theme';
 import {
   formatAzimuth,
@@ -37,7 +38,6 @@ import { SkyPlot } from './components/SkyPlot';
 type Nav = NativeStackNavigationProp<SatellitesStackParamList, 'PassDetail'>;
 type Route = RouteProp<SatellitesStackParamList, 'PassDetail'>;
 
-const CAPTURE_OPENS_BEFORE_MS = 5 * 60_000;
 const SCRUB_STEP_MS = 60_000;
 
 export default function PassDetailScreen() {
@@ -134,9 +134,9 @@ export default function PassDetailScreen() {
 
   const quality = classifyPass(pass.maxElevationDeg);
   const frequencyHz = settings.frequencyHzBySatellite[pass.noradId] ?? satellite.defaultFrequencyHz;
-  const ended = now >= setMs;
-  const opensIn = riseMs - CAPTURE_OPENS_BEFORE_MS - now;
-  const canCapture = !ended && opensIn <= 0;
+  const window = captureWindow(riseMs, setMs, now);
+  const ended = window.state === 'ended';
+  const canCapture = isCaptureOpen(window);
   const recorderBusy = capturePhase === 'recording' || capturePhase === 'preparing' || capturePhase === 'finishing';
   const recorderIsForThisPass = recorderBusy && captureOptions?.pass.id === pass.id;
 
@@ -263,7 +263,7 @@ export default function PassDetailScreen() {
           <Button label="Capture this pass" icon="radio-button-on" onPress={openRecorder} />
         ) : (
           <Button
-            label={ended ? 'Pass ended' : `Capture opens in ${formatCountdown(opensIn)}`}
+            label={ended ? 'Pass ended' : `Capture opens in ${formatCountdown(window.opensInMs)}`}
             icon="time-outline"
             variant="secondary"
             disabled

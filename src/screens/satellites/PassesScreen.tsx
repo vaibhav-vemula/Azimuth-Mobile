@@ -15,6 +15,7 @@ import { SatellitesStackParamList } from '../../navigation/types';
 import { Reminders } from '../../notifications/reminders';
 import { SatellitePass, selectUpcomingPasses, useAppStore } from '../../state/useAppStore';
 import { useCapture } from '../../capture/useCapture';
+import { captureWindow } from '../../capture/window';
 import { colors, typography } from '../../theme';
 import { formatClock, formatCountdown, formatDay } from '../../utils/format';
 import { PassCard, QUALITY_COLOR } from './components/PassCard';
@@ -244,6 +245,7 @@ function NextPassHero({ pass, now, onOpen }: { pass: SatellitePass; now: number;
   const rise = pass.riseTime.getTime();
   const set = pass.setTime.getTime();
   const live = now >= rise;
+  const capture = captureWindow(rise, set, now);
 
   return (
     <GlassCard style={styles.hero}>
@@ -258,6 +260,20 @@ function NextPassHero({ pass, now, onOpen }: { pass: SatellitePass; now: number;
       <Text style={styles.heroCaption}>
         {live ? 'until loss of signal' : `until rise at ${formatClock(pass.riseTime)}`}
       </Text>
+      <View style={styles.captureInfo}>
+        <Ionicons
+          name={capture.state === 'upcoming' ? 'time-outline' : 'radio-button-on'}
+          size={16}
+          color={capture.state === 'upcoming' ? colors.textSecondary : colors.success}
+        />
+        <Text style={[styles.captureInfoText, capture.state !== 'upcoming' && { color: colors.success }]}>
+          {capture.state === 'upcoming'
+            ? `Capture opens in ${formatCountdown(capture.opensInMs)}`
+            : capture.state === 'open'
+              ? 'Capture is open now'
+              : 'Capture is open: pass in progress'}
+        </Text>
+      </View>
       <Button label="Pass details" icon="map-outline" variant="secondary" onPress={onOpen} />
     </GlassCard>
   );
@@ -274,7 +290,9 @@ const styles = StyleSheet.create({
   hero: { gap: 6, borderColor: colors.accentMuted },
   heroName: { ...typography.subheading, color: colors.textSecondary },
   heroCountdown: { ...typography.display, fontSize: 46, color: colors.accent, fontVariant: ['tabular-nums'] },
-  heroCaption: { ...typography.caption, color: colors.textSecondary, marginBottom: 8 },
+  heroCaption: { ...typography.caption, color: colors.textSecondary },
+  captureInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  captureInfoText: { ...typography.caption, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
   filterNote: { ...typography.caption, color: colors.textTertiary },
   recordingBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderColor: colors.record },
   recordingText: { ...typography.subheading, fontSize: 14, color: colors.textPrimary, flex: 1 },
