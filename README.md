@@ -9,7 +9,7 @@ Everything is computed on the phone. There are no accounts and no servers of our
 
 ## Status
 
-Built and verified without hardware in the loop: the full app compiles for Android (debug APK builds), the JavaScript bundles with Hermes, 70+ unit tests and 450 native DSP checks pass, and the pass predictor matches an independent implementation (Skyfield) to under a second on all 12 passes in a 48 hour comparison.
+Built and verified without hardware in the loop: the full app compiles for Android (debug APK builds), the JavaScript bundles with Hermes, 180+ unit tests and 450 native DSP checks pass, and the pass predictor matches an independent implementation (Skyfield) to under a second on all 12 passes in a 48 hour comparison.
 
 **Not yet verified on a real satellite pass.** FM reception, the spectrum and the USB driver were confirmed on a real V4. Satellite capture needs a real overhead pass and a suitable antenna. See [Known limitations](#known-limitations).
 
@@ -52,15 +52,38 @@ Logs: `adb logcat -s RtlSdrJni librtlsdr RtlSdrModule`.
 
 1. Open **Satellites**, tap a pass, and check the sky plot and quality. Passes above about 30 degrees decode best.
 2. The **Capture** button becomes available 5 minutes before the pass. Open it.
-3. Choose the downlink frequency (137.100 or 137.900 MHz; see below), gain (auto is a fine start) and bias-tee.
-4. Optional but recommended: **Monitor signal first** to confirm the antenna works and see which frequency the satellite is on.
-5. Tap **Start recording**. It runs as an Android foreground service, so it continues with the screen off, and it stops itself shortly after the satellite sets. You can stop earlier; the part recorded is saved.
+3. If the receiver is not connected, the big button at the top says **Connect receiver**. Plug the dongle in with the OTG cable and tap it.
+4. The app now sets itself up (see below). You do not choose a frequency, gain or bias-tee.
+5. Tap **Start recording**, ideally a minute or two before the satellite rises. It runs as an Android foreground service, so it continues with the screen off, and it stops itself shortly after the satellite sets. You can stop earlier; the part recorded is saved.
 
-Manual capture only for now: nothing starts by itself.
+Capture is manual: nothing starts by itself.
+
+### Automatic set-up
+
+As soon as the receiver is connected the capture screen runs a short calibration, shown as a checklist, and then keeps watching:
+
+1. **Frequency.** The receiver is tuned between 137.1 and 137.9 MHz, which puts both downlinks in view at once, and an LRPT-shaped block (a flat-topped signal about 140 kHz wide with a clear drop on both sides) is looked for on each. If one shows it, that frequency is used. Otherwise the app uses the one SatNOGS observations say is working (see below), then 137.900 MHz.
+2. **Gain.** About eight manual gain steps between 20 and 44 dB are tried, measuring the raw sample level, overload (clipping) and the signal at each. The app picks the best signal if one is visible, otherwise the **lowest gain at which the 8-bit converter's rounding noise is negligible**, never one that clips, and never the maximum. When a real signal later appears, the gain is fine-tuned on it once.
+3. **During the recording** the gain is only ever *lowered*, one step at a time, if the receiver starts to overload. Any change is written to the metadata.
+
+The tuner's own automatic gain is deliberately **not** used: experienced operators report that it distorts the narrow LRPT signal, so the app always applies a fixed manual gain.
+
+**Antenna power (bias-tee)** is the one thing that is not automatic, for safety. The RTL-SDR Blog V4 supplies 4.5 V at 180 mA, and its maker warns against enabling it with a DC-shorted antenna, which many V-dipole, QFH and loop designs are. It stays **off** unless you turn on "My antenna has a powered LNA" in Settings; the capture screen only shows its state.
 
 ### Which frequency?
 
-SatNOGS lists both 137.100 and 137.900 MHz for each of M2-3 and M2-4, and operators switch between them, so the app does not guess. Use the signal monitor: LRPT shows up as a flat-topped block about 140 kHz wide at one of the two marked frequencies. The choice is remembered per satellite.
+Meteor-M2 3 and M2-4 can broadcast LRPT on 137.100 or 137.900 MHz, and the frequency in use can change. Before a pass, the app looks at the last 72 hours of SatNOGS observations for the satellite, counts the ones vetted as good at each frequency, and uses the one with the most evidence. Once the receiver is running, the live check described above takes over and follows the signal if it is on the other frequency. The answer is cached for 6 hours; if SatNOGS is unreachable the last answer, then 137.900 MHz, is used.
+
+### Practices the app follows
+
+These come from published guidance for receiving Meteor LRPT with an RTL-SDR ([RTL-SDR.com tutorial](https://www.rtl-sdr.com/rtl-sdr-tutorial-receiving-meteor-m-n2-lrpt-weather-satellite-images-rtl-sdr/), [SDRstore SatDump guide](https://www.sdrstore.eu/satdump-v2-rtl-sdr-complete-beginner-setup-guide/), [Meteor M2-4 reception notes](https://gdamdam.github.io/meteor-satellite-reception/meteor-m2-4-2026-09-23.html)):
+
+- manual gain, not AGC, kept moderate rather than at maximum;
+- 137.900 MHz as the primary frequency and 137.100 MHz as the backup;
+- sampling at 2.304 MS/s (never the problematic 250 kS/s mode), recorded at 288 kS/s;
+- DC blocking applied to the recording;
+- a raw recording kept so it can be re-processed;
+- advice shown in the app about antenna placement (V-dipole arms of 53.4 cm at 120 degrees, level, clear of electronics), keeping the phone and chargers away, choosing high passes (at least 10 to 15 degrees, ideally 30 or more), and starting a little early.
 
 ## What is stored
 
@@ -72,8 +95,8 @@ Meteor-M2-4_20261002T191930Z/
 └── baseband.sigmf-meta     metadata (SigMF 1.0.0 JSON)
 ```
 
-- **`baseband.cs8`**: interleaved signed 8-bit I/Q at **288 kS/s** centred on the downlink frequency (SigMF datatype `ci8`). The dongle runs at 2.304 MS/s; the app low-pass filters and decimates by 8 on the fly, with a slow automatic gain so the weak signal is not lost in 8-bit rounding. About **0.58 MB per second, roughly 350 MB for a 10 minute pass.**
-- **`baseband.sigmf-meta`**: satellite, NORAD ID, frequency, sample rate, gain, bias-tee, receiver, pass times and peak elevation, the orbital elements used, your location rounded to about 1 km, and at the end the byte count, duration and number of lost USB blocks (**0 means a gap-free capture**). It is written when recording starts and finalised when it stops, so a crash still leaves a usable file.
+- **`baseband.cs8`**: interleaved signed 8-bit I/Q at **288 kS/s** centred on the downlink frequency (SigMF datatype `ci8`). The dongle runs at 2.304 MS/s; the app low-pass filters and decimates by 8 on the fly, removes the DC offset, and applies a slow level adjustment so the weak signal is not lost in 8-bit rounding. About **0.58 MB per second, roughly 350 MB for a 10 minute pass.**
+- **`baseband.sigmf-meta`**: satellite, NORAD ID, frequency, sample rate, gain and how it was chosen, any gain steps made during the pass, bias-tee, receiver, pass times and peak elevation, the orbital elements used, your location rounded to about 1 km, and at the end the byte count, duration and number of lost USB blocks (**0 means a gap-free capture**). It is written when recording starts and finalised when it stops, so a crash still leaves a usable file.
 
 **Share** sends the data file through Android's share sheet. **Export** copies the whole folder to `Downloads/Azimuth/<name>/` so a computer can reach it.
 

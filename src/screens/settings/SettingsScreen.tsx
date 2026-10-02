@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { GlassCard } from '../../components/GlassCard';
 import { ManualLocationPrompt } from '../../components/ManualLocationPrompt';
@@ -114,6 +114,39 @@ export default function SettingsScreen() {
         ) : null}
       </GlassCard>
 
+      <GlassCard style={{ gap: 10 }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <SectionLabel>Antenna power (bias-tee)</SectionLabel>
+            <Text style={styles.label}>My antenna has a powered LNA</Text>
+            <Text style={styles.hint}>
+              Sends 4.5 V (up to 180 mA) up the coax to power an LNA or active antenna. Leave this off for a plain antenna. Never turn
+              it on with a DC-shorted antenna (many QFH, loop and some V-dipole designs): it can damage the receiver.
+            </Text>
+          </View>
+          <Switch
+            value={settings.biasTee}
+            onValueChange={(enabled) => {
+              if (!enabled) {
+                update({ biasTee: false });
+                return;
+              }
+              Alert.alert(
+                'Turn on antenna power?',
+                'Only do this if your LNA or active antenna needs power from the receiver and you know the antenna is not DC-shorted. A short circuit can damage the receiver.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Turn on', style: 'destructive', onPress: () => update({ biasTee: true }) },
+                ]
+              );
+            }}
+            trackColor={{ true: colors.accentMuted, false: colors.surfaceBorder }}
+            thumbColor={settings.biasTee ? colors.accent : colors.textSecondary}
+          />
+        </Row>
+        <Text style={styles.hint}>Gain and frequency are always chosen automatically during capture.</Text>
+      </GlassCard>
+
       <GlassCard style={{ gap: 12 }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <SectionLabel>Orbital data</SectionLabel>
@@ -141,6 +174,25 @@ export default function SettingsScreen() {
           );
         })}
         {tleError ? <Text style={[styles.hint, { color: colors.danger }]}>{tleError}</Text> : null}
+      </GlassCard>
+
+      <GlassCard style={{ gap: 10 }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <SectionLabel>Testing</SectionLabel>
+            <Text style={styles.label}>Unlock capture for any pass</Text>
+            <Text style={styles.hint}>
+              Lets you start a 2 minute test recording at any time, to check the dongle, storage and export. Test recordings
+              are flagged in their metadata. During a real pass the normal behaviour applies either way.
+            </Text>
+          </View>
+          <Switch
+            value={settings.captureTestMode}
+            onValueChange={(enabled) => update({ captureTestMode: enabled })}
+            trackColor={{ true: colors.accentMuted, false: colors.surfaceBorder }}
+            thumbColor={settings.captureTestMode ? colors.accent : colors.textSecondary}
+          />
+        </Row>
       </GlassCard>
 
       <GlassCard style={{ gap: 10 }}>

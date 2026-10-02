@@ -8,6 +8,10 @@ export type RtlSdrStatus =
 export interface SignalDataEvent {
   /** 64 normalized (0..1) FFT power bins, low frequency to high. */
   bins: number[];
+  /** RMS level of the raw samples as a fraction of the converter's full scale (0..1). */
+  rms: number;
+  /** Fraction of raw samples sitting on the converter's rails; above ~0.1% the front end is overloaded. */
+  clip: number;
 }
 
 export interface StatusChangeEvent {

@@ -42,14 +42,8 @@ export function Button({ label, onPress, variant = 'primary', icon, disabled, lo
         style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={textColor} />
-      ) : (
-        <>
-          {icon ? <Ionicons name={icon} size={compact ? 16 : 18} color={textColor} /> : null}
-          <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
-        </>
-      )}
+      {loading ? <ActivityIndicator size="small" color={textColor} /> : icon ? <Ionicons name={icon} size={compact ? 16 : 18} color={textColor} /> : null}
+      {label ? <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text> : null}
     </Pressable>
   );
 }

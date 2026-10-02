@@ -2,11 +2,13 @@
 #include <jni.h>
 
 #include <atomic>
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <deque>
 #include <memory>
@@ -40,6 +42,8 @@ constexpr int kMaxAudioSamples = kBlockBytes / 2 / 50;
 constexpr uint32_t kAsyncTransferCount = 16;
 constexpr size_t kMaxQueuedBlocks = 24;
 constexpr std::chrono::milliseconds kReadTimeout(500);
+// A healthy reader exits within a few USB blocks (~14 ms each). If it has not after this long it is stuck.
+constexpr std::chrono::milliseconds kReaderStopDeadline(3000);
 
 struct Session {
   rtlsdr_dev_t* dev = nullptr;
@@ -59,6 +63,8 @@ struct Session {
   std::thread reader;
   std::atomic<bool> readerExited{true};
   std::atomic<bool> stopRequested{false};
+  // Set when the reader thread could not be stopped in time. rtlsdr_close() would wait for it forever.
+  std::atomic<bool> readerStuck{false};
 
   std::mutex queueMutex;
   std::condition_variable queueCv;
@@ -70,6 +76,10 @@ struct Session {
 
 // Handles are small positive ids rather than raw pointers: arm64 heap pointers can carry a tag in
 // the top byte, which makes them look negative as a signed jlong and collide with error codes.
+// Sessions whose reader thread is stuck are kept alive on purpose: that thread still points into them.
+std::mutex gStuckMutex;
+std::vector<std::shared_ptr<Session>> gStuckSessions;
+
 std::mutex gRegistryMutex;
 std::unordered_map<jlong, std::shared_ptr<Session>> gSessions;
 jlong gNextHandle = 1;
@@ -130,6 +140,7 @@ void onAsyncData(unsigned char* buf, uint32_t len, void* ctx) {
 
 int startReader(const std::shared_ptr<Session>& session) {
   std::lock_guard<std::mutex> control(session->readerControlMutex);
+  if (session->readerStuck.load()) return -EBUSY;
   if (!session->readerExited.load()) return 0;
   if (session->reader.joinable()) session->reader.join();
 
@@ -169,6 +180,7 @@ void stopReader(const std::shared_ptr<Session>& session) {
   std::lock_guard<std::mutex> control(session->readerControlMutex);
   if (!session->reader.joinable()) return;
 
+  const auto startedAt = std::chrono::steady_clock::now();
   session->stopRequested = true;
   // rtlsdr_cancel_async is ignored until the async loop has actually started, so retry.
   while (!session->readerExited.load()) {
@@ -177,6 +189,21 @@ void stopReader(const std::shared_ptr<Session>& session) {
       if (session->dev != nullptr) rtlsdr_cancel_async(session->dev);
     }
     session->queueCv.notify_all();
+
+    if (std::chrono::steady_clock::now() - startedAt > kReaderStopDeadline) {
+      LOGE("USB reader did not stop within %lld ms; abandoning it so the app stays responsive",
+           static_cast<long long>(kReaderStopDeadline.count()));
+      session->readerStuck = true;
+      session->reader.detach();
+      {
+        std::lock_guard<std::mutex> queue(session->queueMutex);
+        session->readerRunning = false;
+      }
+      session->queueCv.notify_all();
+      std::lock_guard<std::mutex> stuck(gStuckMutex);
+      gStuckSessions.push_back(session);
+      return;
+    }
     usleep(5000);
   }
   session->reader.join();
@@ -188,7 +215,9 @@ void stopReader(const std::shared_ptr<Session>& session) {
     dropped = session->droppedBlocks;
   }
   session->queueCv.notify_all();
-  LOGI("Reader stopped (%llu blocks dropped to overflow)", static_cast<unsigned long long>(dropped));
+  LOGI("Reader stopped in %lld ms (%llu blocks dropped to overflow)",
+       static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startedAt).count()),
+       static_cast<unsigned long long>(dropped));
 }
 
 }  // namespace
@@ -227,6 +256,13 @@ JNIEXPORT void JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeClose(JNIEnv*
   stopReader(session);
 
   std::lock_guard<std::mutex> guard(session->devMutex);
+  if (session->readerStuck.load()) {
+    // rtlsdr_close() waits for the async reader to finish, which would hang the caller forever. Leak the
+    // device instead; the USB connection is closed by the Kotlin side and the dongle can be replugged.
+    LOGE("Skipping rtlsdr_close because the USB reader is stuck");
+    session->dev = nullptr;
+    return;
+  }
   if (session->dev != nullptr) {
     rtlsdr_close(session->dev);
     session->dev = nullptr;
@@ -410,11 +446,12 @@ JNIEXPORT void JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeStopReader(JN
 }
 
 JNIEXPORT jint JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeReadBlock(
-    JNIEnv* env, jobject, jlong handle, jfloatArray bins, jfloat floorDb, jfloat ceilDb,
+    JNIEnv* env, jobject, jlong handle, jfloatArray bins, jfloatArray stats, jfloat floorDb, jfloat ceilDb,
     jshortArray audio, jboolean demodulate) {
   std::shared_ptr<Session> session = fromHandle(handle);
   if (session == nullptr || bins == nullptr) return -EINVAL;
   if (env->GetArrayLength(bins) < azimuth::SpectrumAnalyzer::kOutputBins) return -EINVAL;
+  if (stats == nullptr || env->GetArrayLength(stats) < 2) return -EINVAL;
   if (demodulate && (audio == nullptr || env->GetArrayLength(audio) < kMaxAudioSamples)) {
     return -EINVAL;
   }
@@ -428,6 +465,25 @@ JNIEXPORT jint JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeReadBlock(
     if (session->queue.empty()) return session->readerFailed ? -EIO : -ECANCELED;
     block = std::move(session->queue.front());
     session->queue.pop_front();
+  }
+
+  // ADC loading for the auto gain control: RMS level (0..1 of full scale) and the fraction of samples that
+  // sit on the converter's rails, which means the front end is overloaded.
+  float adc[2] = {0.0f, 0.0f};
+  {
+    const uint8_t* p = block.data();
+    const size_t n = block.size();
+    double sum = 0.0;
+    size_t railed = 0;
+    for (size_t i = 0; i < n; ++i) {
+      const float d = static_cast<float>(p[i]) - 127.5f;
+      sum += static_cast<double>(d) * d;
+      if (p[i] == 0 || p[i] == 255) ++railed;
+    }
+    if (n > 0) {
+      adc[0] = static_cast<float>(std::sqrt(sum / static_cast<double>(n)) / 127.5);
+      adc[1] = static_cast<float>(railed) / static_cast<float>(n);
+    }
   }
 
   // Recording happens before any display work so a slow UI can never cost recorded samples.
@@ -451,6 +507,7 @@ JNIEXPORT jint JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeReadBlock(
   }
 
   env->SetFloatArrayRegion(bins, 0, azimuth::SpectrumAnalyzer::kOutputBins, spectrum);
+  env->SetFloatArrayRegion(stats, 0, 2, adc);
   if (pcmCount > 0) {
     env->SetShortArrayRegion(audio, 0, static_cast<jsize>(pcmCount), pcm);
   }

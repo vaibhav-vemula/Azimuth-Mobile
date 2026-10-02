@@ -1,6 +1,8 @@
 import React, { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { colors, typography } from '../theme';
+import { SPECTRUM_VIEW_WIDTH, buildBarsPath } from '../utils/spectrumPath';
 import { formatFrequencyMHz } from '../utils/format';
 
 export interface SpectrumMarker {
@@ -18,91 +20,88 @@ export interface SpectrumVisualizerProps {
   height?: number;
 }
 
-const BIN_COUNT = 64;
-const MIN_BAR_HEIGHT = 2;
-const COLOR_STEPS = 64;
+const GRID_FRACTIONS = [0.25, 0.5, 0.75];
 
-const CYAN: [number, number, number] = [0x00, 0xe5, 0xff];
-const RED: [number, number, number] = [0xff, 0x45, 0x00];
+/** Everything that does not change from frame to frame, so only the bars are redrawn. */
+const Backdrop = memo(function Backdrop({ height }: { height: number }) {
+  return (
+    <>
+      <Defs>
+        <LinearGradient id="spectrumGradient" gradientUnits="userSpaceOnUse" x1="0" y1={height} x2="0" y2="0">
+          <Stop offset="0" stopColor={colors.spectrumLow} />
+          <Stop offset="1" stopColor={colors.spectrumHigh} />
+        </LinearGradient>
+      </Defs>
+      {GRID_FRACTIONS.map((f) => (
+        <Line
+          key={f}
+          x1="0"
+          x2={SPECTRUM_VIEW_WIDTH}
+          y1={height * f}
+          y2={height * f}
+          stroke="rgba(255,255,255,0.07)"
+          strokeWidth={1}
+        />
+      ))}
+    </>
+  );
+});
 
-function toHex(value: number): string {
-  return Math.round(value).toString(16).padStart(2, '0');
-}
-
-const GRADIENT: string[] = (() => {
-  const out: string[] = [];
-  for (let i = 0; i <= COLOR_STEPS; i += 1) {
-    const t = i / COLOR_STEPS;
-    out.push(
-      `#${toHex(CYAN[0] + (RED[0] - CYAN[0]) * t)}${toHex(CYAN[1] + (RED[1] - CYAN[1]) * t)}${toHex(CYAN[2] + (RED[2] - CYAN[2]) * t)}`
-    );
-  }
-  return out;
-})();
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(1, Math.max(0, value));
-}
-
-function SpectrumVisualizerComponent({ bins, frequencyHz, sampleRateHz, isStreaming, markers, height = 150 }: SpectrumVisualizerProps) {
-  const bars = useMemo(() => {
-    const items: { height: number; color: string }[] = [];
-    for (let i = 0; i < BIN_COUNT; i += 1) {
-      const power = clamp01(bins[i] ?? 0);
-      items.push({
-        height: Math.max(MIN_BAR_HEIGHT, power * height),
-        color: GRADIENT[Math.round(power * COLOR_STEPS)],
-      });
-    }
-    return items;
-  }, [bins, height]);
-
-  const halfSpanMHz = sampleRateHz / 2 / 1e6;
-  const visibleMarkers = (markers ?? [])
+const Markers = memo(function Markers({ markers, frequencyHz, sampleRateHz }: { markers: SpectrumMarker[]; frequencyHz: number; sampleRateHz: number }) {
+  const visible = markers
     .map((m) => ({ ...m, position: 0.5 + (m.frequencyHz - frequencyHz) / sampleRateHz }))
     .filter((m) => m.position >= 0.02 && m.position <= 0.98);
+  return (
+    <>
+      {visible.map((m) => (
+        <View key={m.label} pointerEvents="none" style={[styles.marker, { left: `${m.position * 100}%` }]}>
+          <View style={[styles.markerLine, { backgroundColor: m.color ?? colors.warning }]} />
+          <Text style={[styles.markerLabel, { color: m.color ?? colors.warning }]}>{m.label}</Text>
+        </View>
+      ))}
+    </>
+  );
+});
+
+const Axis = memo(function Axis({ frequencyHz, sampleRateHz }: { frequencyHz: number; sampleRateHz: number }) {
+  const halfSpanMHz = sampleRateHz / 2 / 1e6;
+  return (
+    <View style={styles.axis}>
+      <Text style={styles.axisText}>−{halfSpanMHz.toFixed(2)} MHz</Text>
+      <Text style={styles.axisText}>{formatFrequencyMHz(frequencyHz)} MHz</Text>
+      <Text style={styles.axisText}>+{halfSpanMHz.toFixed(2)} MHz</Text>
+    </View>
+  );
+});
+
+function SpectrumVisualizerComponent({ bins, frequencyHz, sampleRateHz, isStreaming, markers, height = 150 }: SpectrumVisualizerProps) {
+  const path = useMemo(() => buildBarsPath(bins, height), [bins, height]);
 
   return (
     <View>
       <View style={[styles.chart, { height }]}>
-        {bars.map((bar, index) => (
-          <View key={index} style={[styles.barSlot, { height }]}>
-            <View style={[styles.bar, { height: bar.height, backgroundColor: bar.color }]} />
-          </View>
-        ))}
-        {visibleMarkers.map((m) => (
-          <View key={m.label} pointerEvents="none" style={[styles.marker, { left: `${m.position * 100}%` }]}>
-            <View style={[styles.markerLine, { backgroundColor: m.color ?? colors.warning }]} />
-            <Text style={[styles.markerLabel, { color: m.color ?? colors.warning }]}>{m.label}</Text>
-          </View>
-        ))}
+        <Svg width="100%" height={height} viewBox={`0 0 ${SPECTRUM_VIEW_WIDTH} ${height}`} preserveAspectRatio="none">
+          <Backdrop height={height} />
+          <Path d={path} fill="url(#spectrumGradient)" />
+        </Svg>
+        {markers && markers.length > 0 ? <Markers markers={markers} frequencyHz={frequencyHz} sampleRateHz={sampleRateHz} /> : null}
         {!isStreaming && (
           <View style={styles.idle} pointerEvents="none">
             <Text style={styles.idleText}>No signal stream</Text>
           </View>
         )}
       </View>
-      <View style={styles.axis}>
-        <Text style={styles.axisText}>−{halfSpanMHz.toFixed(2)} MHz</Text>
-        <Text style={styles.axisText}>{formatFrequencyMHz(frequencyHz)} MHz</Text>
-        <Text style={styles.axisText}>+{halfSpanMHz.toFixed(2)} MHz</Text>
-      </View>
+      <Axis frequencyHz={frequencyHz} sampleRateHz={sampleRateHz} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   chart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
     backgroundColor: '#03050A',
     borderRadius: 10,
-    paddingHorizontal: 4,
     overflow: 'hidden',
   },
-  barSlot: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 0.75 },
-  bar: { width: '100%', borderTopLeftRadius: 1.5, borderTopRightRadius: 1.5 },
   marker: { position: 'absolute', top: 0, bottom: 0, width: 1 },
   markerLine: { flex: 1, width: 1, opacity: 0.8 },
   markerLabel: { ...typography.caption, fontSize: 10, position: 'absolute', top: 2, left: 4, width: 70 },

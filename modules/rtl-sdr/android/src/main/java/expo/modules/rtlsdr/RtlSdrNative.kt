@@ -60,6 +60,8 @@ internal object RtlSdrNative {
   external fun nativeReadBlock(
     handle: Long,
     bins: FloatArray,
+    /** [rmsOfFullScale, fractionOfSamplesOnTheConverterRails], measured on the raw IQ block. */
+    stats: FloatArray,
     floorDb: Float,
     ceilDb: Float,
     audio: ShortArray,

@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Keyboard, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { GlassCard } from '../../components/GlassCard';
+import { LiveSpectrum } from '../../components/LiveSpectrum';
 import { Screen } from '../../components/Screen';
-import { SpectrumVisualizer } from '../../components/SpectrumVisualizer';
 import { Badge, Button, Row, SectionLabel } from '../../components/ui';
-import { MAX_FREQUENCY_HZ, MIN_FREQUENCY_HZ } from '../../../modules/rtl-sdr';
 import { errorMessage, useReceiver } from '../../receiver/useReceiver';
 import { colors, typography } from '../../theme';
 import { formatFrequencyMHz } from '../../utils/format';
 import { useCapture } from '../../capture/useCapture';
+import { FrequencyTuner } from './components/FrequencyTuner';
 
 const STATUS_COLORS = {
   disconnected: colors.textTertiary,
@@ -28,37 +28,28 @@ const STATUS_LABELS = {
   error: 'Error',
 } as const;
 
-const PRESETS = [
-  { label: '88.5', hz: 88_500_000 },
-  { label: '93.9', hz: 93_900_000 },
-  { label: '98.7', hz: 98_700_000 },
-  { label: '103.5', hz: 103_500_000 },
-];
-
 export default function RadioScreen() {
   const focused = useIsFocused();
+  // Note: this screen deliberately does not read `bins`. The spectrum stream updates 20+ times a second and
+  // only <LiveSpectrum> listens to it.
   const status = useReceiver((s) => s.status);
   const deviceName = useReceiver((s) => s.deviceName);
   const frequencyHz = useReceiver((s) => s.frequencyHz);
   const sampleRate = useReceiver((s) => s.sampleRate);
-  const bins = useReceiver((s) => s.bins);
   const listening = useReceiver((s) => s.listening);
   const volume = useReceiver((s) => s.volume);
   const busy = useReceiver((s) => s.busy);
+  const streamAction = useReceiver((s) => s.streamAction);
   const receiverError = useReceiver((s) => s.error);
   const capturePhase = useCapture((s) => s.phase);
 
-  const [input, setInput] = useState(formatFrequencyMHz(frequencyHz));
   const [localError, setLocalError] = useState<string | null>(null);
+  const [listenBusy, setListenBusy] = useState(false);
 
   const isConnected = status === 'connected' || status === 'streaming';
   const isStreaming = status === 'streaming';
   const recording = capturePhase === 'recording' || capturePhase === 'preparing' || capturePhase === 'finishing';
   const error = localError ?? receiverError;
-
-  useEffect(() => {
-    setInput(formatFrequencyMHz(frequencyHz));
-  }, [frequencyHz]);
 
   // Returning from the satellite tools: put the dongle back into its general-purpose mode.
   useEffect(() => {
@@ -77,20 +68,6 @@ export default function RadioScreen() {
     }
   }, []);
 
-  const tuneTo = useCallback(
-    (hz: number) => run(() => useReceiver.getState().tuneTo(hz)),
-    [run]
-  );
-
-  const handleTune = useCallback(() => {
-    Keyboard.dismiss();
-    const mhz = Number.parseFloat(input.replace(',', '.'));
-    void run(async () => {
-      if (!Number.isFinite(mhz)) throw new Error('Enter a frequency in MHz.');
-      await useReceiver.getState().tuneTo(mhz * 1e6);
-    });
-  }, [input, run]);
-
   const handleConnect = useCallback(
     () =>
       run(async () => {
@@ -106,7 +83,7 @@ export default function RadioScreen() {
       run(async () => {
         const receiver = useReceiver.getState();
         if (isStreaming) {
-          await receiver.setListening(false);
+          if (receiver.listening) await receiver.setListening(false);
           await receiver.stopReceiving();
         } else {
           await receiver.startReceiving();
@@ -115,12 +92,21 @@ export default function RadioScreen() {
     [isStreaming, run]
   );
 
-  const handleListen = useCallback(
-    () => run(() => useReceiver.getState().setListening(!listening)),
-    [listening, run]
+  const handleListen = useCallback(async () => {
+    setListenBusy(true);
+    await run(() => useReceiver.getState().setListening(!useReceiver.getState().listening));
+    setListenBusy(false);
+  }, [run]);
+
+  const changeVolume = useCallback(
+    (delta: number) => void run(() => useReceiver.getState().changeVolume(useReceiver.getState().volume + delta)),
+    [run]
   );
 
   const statusColor = STATUS_COLORS[status];
+  const controlsLocked = !isConnected || recording;
+  const streamLabel =
+    streamAction === 'starting' ? 'Starting…' : streamAction === 'stopping' ? 'Stopping…' : isStreaming ? 'Stop stream' : 'Start stream';
 
   return (
     <Screen>
@@ -144,9 +130,7 @@ export default function RadioScreen() {
               <Text style={styles.deviceName} numberOfLines={1}>
                 {deviceName ?? 'No receiver attached'}
               </Text>
-              <Text style={styles.deviceHint}>
-                {isConnected ? 'RTL-SDR ready' : 'Plug the dongle in via USB-OTG, then connect'}
-              </Text>
+              <Text style={styles.deviceHint}>{isConnected ? 'RTL-SDR ready' : 'Plug the dongle in via USB-OTG, then connect'}</Text>
             </View>
             <Button
               compact
@@ -154,7 +138,7 @@ export default function RadioScreen() {
               label={isConnected ? 'Disconnect' : 'Connect'}
               icon={isConnected ? 'power' : 'flash'}
               loading={busy}
-              disabled={recording}
+              disabled={recording || !!streamAction}
               onPress={handleConnect}
             />
           </GlassCard>
@@ -170,45 +154,10 @@ export default function RadioScreen() {
               </View>
               <Badge label={isStreaming ? 'LIVE' : 'IDLE'} color={isStreaming ? colors.success : colors.textTertiary} />
             </Row>
-            <SpectrumVisualizer bins={bins} frequencyHz={frequencyHz} sampleRateHz={sampleRate} isStreaming={isStreaming} />
+            <LiveSpectrum frequencyHz={frequencyHz} sampleRateHz={sampleRate} isStreaming={isStreaming} />
           </GlassCard>
 
-          <GlassCard style={{ gap: 12 }}>
-            <SectionLabel>Tune</SectionLabel>
-            <Row>
-              <View style={styles.inputWrap}>
-                <TextInput
-                  style={styles.input}
-                  value={input}
-                  onChangeText={setInput}
-                  keyboardType="decimal-pad"
-                  placeholder="100.000"
-                  placeholderTextColor={colors.textTertiary}
-                  selectionColor={colors.accent}
-                  editable={isConnected && !recording}
-                  returnKeyType="done"
-                  onSubmitEditing={handleTune}
-                />
-                <Text style={styles.inputUnit}>MHz</Text>
-              </View>
-              <Button label="Tune" onPress={handleTune} disabled={!isConnected || recording} />
-            </Row>
-            <Row style={{ flexWrap: 'wrap' }}>
-              {PRESETS.map((preset) => (
-                <Button
-                  key={preset.label}
-                  compact
-                  variant="secondary"
-                  label={preset.label}
-                  disabled={!isConnected || recording}
-                  onPress={() => tuneTo(preset.hz)}
-                />
-              ))}
-            </Row>
-            <Text style={styles.hint}>
-              Range {(MIN_FREQUENCY_HZ / 1e6).toFixed(1)} to {(MAX_FREQUENCY_HZ / 1e6).toFixed(0)} MHz. Below 28.8 MHz the V4 upconverter is used.
-            </Text>
-          </GlassCard>
+          <FrequencyTuner disabled={controlsLocked} />
 
           <GlassCard style={{ gap: 12 }}>
             <SectionLabel>Audio · wideband FM</SectionLabel>
@@ -218,30 +167,26 @@ export default function RadioScreen() {
                 variant={listening ? 'primary' : 'secondary'}
                 icon={listening ? 'volume-high' : 'headset'}
                 label={listening ? 'Listening' : 'Listen'}
-                disabled={!isConnected || recording}
+                loading={listenBusy}
+                disabled={controlsLocked || !!streamAction}
                 onPress={handleListen}
               />
               <View style={styles.volumeBox}>
-                <Ionicons
-                  name="remove-circle-outline"
-                  size={28}
-                  color={colors.accent}
-                  onPress={() => run(() => useReceiver.getState().changeVolume(volume - 0.1))}
-                />
+                <Pressable hitSlop={10} onPress={() => changeVolume(-0.1)} accessibilityLabel="Volume down" disabled={controlsLocked}>
+                  <Ionicons name="remove-circle-outline" size={28} color={colors.accent} />
+                </Pressable>
                 <Text style={styles.volumeValue}>{Math.round(volume * 100)}%</Text>
-                <Ionicons
-                  name="add-circle-outline"
-                  size={28}
-                  color={colors.accent}
-                  onPress={() => run(() => useReceiver.getState().changeVolume(volume + 0.1))}
-                />
+                <Pressable hitSlop={10} onPress={() => changeVolume(0.1)} accessibilityLabel="Volume up" disabled={controlsLocked}>
+                  <Ionicons name="add-circle-outline" size={28} color={colors.accent} />
+                </Pressable>
               </View>
             </Row>
             <Button
               variant={isStreaming ? 'danger' : 'secondary'}
               icon={isStreaming ? 'stop' : 'play'}
-              label={isStreaming ? 'Stop stream' : 'Start stream'}
-              disabled={!isConnected || recording}
+              label={streamLabel}
+              loading={!!streamAction}
+              disabled={controlsLocked}
               onPress={handleStream}
             />
           </GlassCard>
@@ -277,19 +222,6 @@ const styles = StyleSheet.create({
   frequencyHeader: { justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   frequency: { ...typography.display, color: colors.accent, fontVariant: ['tabular-nums'] },
   unit: { ...typography.subheading, color: colors.textSecondary },
-  inputWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
-    paddingHorizontal: 14,
-  },
-  input: { flex: 1, ...typography.subheading, fontSize: 20, color: colors.textPrimary, paddingVertical: 11, fontVariant: ['tabular-nums'] },
-  inputUnit: { ...typography.caption, color: colors.textSecondary, marginLeft: 8 },
-  hint: { ...typography.caption, color: colors.textTertiary },
   volumeBox: {
     flex: 1,
     flexDirection: 'row',

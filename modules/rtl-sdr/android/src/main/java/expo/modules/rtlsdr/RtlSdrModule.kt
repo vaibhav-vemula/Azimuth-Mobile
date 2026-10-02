@@ -462,6 +462,7 @@ class RtlSdrModule : Module() {
 
   private fun streamLoop() {
     val bins = FloatArray(BIN_COUNT)
+    val adcStats = FloatArray(2)
     val pcm = ShortArray(RtlSdrNative.MAX_AUDIO_SAMPLES)
     val frameNanos = 1_000_000_000L / TARGET_FPS
     var lastEmit = 0L
@@ -492,7 +493,7 @@ class RtlSdrModule : Module() {
           return
         }
         val result = RtlSdrNative.nativeReadBlock(
-          handle, bins, DISPLAY_FLOOR_DB, DISPLAY_CEIL_DB, pcm, track != null
+          handle, bins, adcStats, DISPLAY_FLOOR_DB, DISPLAY_CEIL_DB, pcm, track != null
         )
 
         if (result < 0) {
@@ -524,7 +525,7 @@ class RtlSdrModule : Module() {
         val now = System.nanoTime()
         if (now - lastEmit >= frameNanos) {
           lastEmit = now
-          sendEvent(EVENT_SIGNAL_DATA, mapOf("bins" to bins.toList()))
+          sendEvent(EVENT_SIGNAL_DATA, mapOf("bins" to bins.toList(), "rms" to adcStats[0], "clip" to adcStats[1]))
         }
 
         if (recordingActive && now - lastRecordingEmit >= RECORDING_EVENT_INTERVAL_NANOS) {

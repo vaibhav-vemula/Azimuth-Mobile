@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
-import { MONITORED_SATELLITES } from '../data/satellites';
+import { LRPT_FREQUENCIES_HZ, MONITORED_SATELLITES } from '../data/satellites';
+import { AutoFrequency, loadAutoFrequency } from '../data/transmitters';
 import { loadTle, TleResult } from '../data/tle/fetchTle';
 import { predictPasses } from '../data/propagation/passes';
 import { Observer, Pass } from '../types/satellite';
@@ -20,6 +21,7 @@ interface AppState {
   location: Observer | null;
   locationStatus: LocationStatus;
   tles: Record<string, TleResult>;
+  autoFrequencies: Record<string, AutoFrequency>;
   tleLoading: boolean;
   tleError: string | null;
   passes: SatellitePass[];
@@ -29,6 +31,9 @@ interface AppState {
 
   updateSettings: (patch: Partial<Settings>) => void;
   setSatelliteFrequency: (noradId: string, frequencyHz: number) => void;
+  /** Choose a fixed downlink frequency, or 'auto' to follow recent SatNOGS observations. */
+  selectFrequency: (noradId: string, choice: number | 'auto') => void;
+  refreshAutoFrequencies: (force?: boolean) => Promise<void>;
   setUnits: (units: Units) => void;
   requestLocation: () => Promise<void>;
   setManualLocation: (lat: number, lon: number) => void;
@@ -53,6 +58,7 @@ export const useAppStore = create<AppState>((set, get) => {
     location: savedLocation ? toObserver(savedLocation) : null,
     locationStatus: savedLocation ? (savedLocation.manual ? 'manual' : 'granted') : 'loading',
     tles: {},
+    autoFrequencies: {},
     tleLoading: false,
     tleError: null,
     passes: [],
@@ -72,6 +78,31 @@ export const useAppStore = create<AppState>((set, get) => {
       get().updateSettings({
         frequencyHzBySatellite: { ...current.frequencyHzBySatellite, [noradId]: frequencyHz },
       });
+    },
+
+    selectFrequency: (noradId, choice) => {
+      if (choice === 'auto') {
+        get().updateSettings({ autoFrequency: true });
+        void get().refreshAutoFrequencies();
+        return;
+      }
+      const current = get().settings;
+      get().updateSettings({
+        autoFrequency: false,
+        frequencyHzBySatellite: { ...current.frequencyHzBySatellite, [noradId]: choice },
+      });
+    },
+
+    refreshAutoFrequencies: async (force = false) => {
+      const results = await Promise.all(
+        MONITORED_SATELLITES.map(async (sat) => ({
+          noradId: sat.noradId,
+          value: await loadAutoFrequency(sat.noradId, LRPT_FREQUENCIES_HZ, sat.defaultFrequencyHz, { force }),
+        }))
+      );
+      const autoFrequencies = { ...get().autoFrequencies };
+      for (const { noradId, value } of results) autoFrequencies[noradId] = value;
+      set({ autoFrequencies });
     },
 
     setUnits: (units) => get().updateSettings({ units }),
@@ -120,6 +151,7 @@ export const useAppStore = create<AppState>((set, get) => {
       });
       set({ tles, tleLoading: false, tleError: errors.length ? errors.join('\n') : null });
       get().recomputePasses();
+      void get().refreshAutoFrequencies(force);
     },
 
     recomputePasses: () => {

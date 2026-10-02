@@ -1,4 +1,4 @@
-import { CAPTURE_OPENS_BEFORE_MS, canCapture, captureWindow } from './window';
+import { CAPTURE_OPENS_BEFORE_MS, canCapture, captureWindow, isTestRun } from './window';
 
 const RISE = Date.parse('2026-10-02T19:20:00Z');
 const SET = Date.parse('2026-10-02T19:29:00Z');
@@ -23,5 +23,23 @@ describe('captureWindow', () => {
     const ended = captureWindow(RISE, SET, SET);
     expect(ended.state).toBe('ended');
     expect(canCapture(ended)).toBe(false);
+  });
+});
+
+describe('testing mode', () => {
+  it('unlocks capture outside the window but not by default', () => {
+    const early = captureWindow(RISE, SET, RISE - 3600_000);
+    const late = captureWindow(RISE, SET, SET + 1000);
+    expect(canCapture(early)).toBe(false);
+    expect(canCapture(early, true)).toBe(true);
+    expect(canCapture(late, true)).toBe(true);
+  });
+
+  it('only treats a capture as a test run when it is outside the real window', () => {
+    expect(isTestRun(captureWindow(RISE, SET, RISE - 3600_000), true)).toBe(true);
+    expect(isTestRun(captureWindow(RISE, SET, SET + 1), true)).toBe(true);
+    expect(isTestRun(captureWindow(RISE, SET, RISE - 60_000), true)).toBe(false);
+    expect(isTestRun(captureWindow(RISE, SET, RISE + 60_000), true)).toBe(false);
+    expect(isTestRun(captureWindow(RISE, SET, RISE - 3600_000), false)).toBe(false);
   });
 });

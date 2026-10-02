@@ -144,7 +144,10 @@ export default function RecordingsScreen() {
                   {meta.frequencyHz ? ` · ${formatFrequencyMHz(meta.frequencyHz)} MHz` : ''}
                 </Text>
               </View>
-              <Badge label={statusBadge.label} color={statusBadge.color} />
+              <Row>
+                {meta.testRecording ? <Badge label="Test" color={colors.warning} /> : null}
+                <Badge label={statusBadge.label} color={statusBadge.color} />
+              </Row>
             </Row>
 
             <Row>

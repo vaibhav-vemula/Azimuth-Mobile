@@ -5,7 +5,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GlassCard } from '../../components/GlassCard';
 import { Screen } from '../../components/Screen';
-import { Badge, Button, Chip, EmptyState, Row, SectionLabel, Stat } from '../../components/ui';
+import { Badge, Button, EmptyState, Row, SectionLabel, Stat } from '../../components/ui';
 import {
   PASS_QUALITY_LABEL,
   classifyPass,
@@ -13,14 +13,15 @@ import {
   sampleGroundTrack,
   sampleTrack,
 } from '../../data/propagation/passes';
-import { LRPT_FREQUENCIES_HZ, getMonitoredSatellite } from '../../data/satellites';
+import { getMonitoredSatellite } from '../../data/satellites';
 import { useNow } from '../../hooks/useNow';
 import { SatellitesStackParamList } from '../../navigation/types';
 import { Reminders } from '../../notifications/reminders';
 import { useAppStore } from '../../state/useAppStore';
 import { findPassById } from '../../state/passId';
 import { useCapture } from '../../capture/useCapture';
-import { canCapture as isCaptureOpen, captureWindow } from '../../capture/window';
+import { prepareCaptureFor } from '../../capture/prepareCapture';
+import { canCapture as isCaptureOpen, captureWindow, isTestRun } from '../../capture/window';
 import { colors, typography } from '../../theme';
 import {
   formatAzimuth,
@@ -29,8 +30,8 @@ import {
   formatCountdown,
   formatDay,
   formatDuration,
-  formatFrequencyMHz,
 } from '../../utils/format';
+import { DownlinkInfo } from './components/DownlinkInfo';
 import { GroundTrackMap, MapMarker } from './components/GroundTrackMap';
 import { QUALITY_COLOR } from './components/PassCard';
 import { SkyPlot } from './components/SkyPlot';
@@ -133,24 +134,15 @@ export default function PassDetailScreen() {
   }
 
   const quality = classifyPass(pass.maxElevationDeg);
-  const frequencyHz = settings.frequencyHzBySatellite[pass.noradId] ?? satellite.defaultFrequencyHz;
   const window = captureWindow(riseMs, setMs, now);
   const ended = window.state === 'ended';
-  const canCapture = isCaptureOpen(window);
+  const canCapture = isCaptureOpen(window, settings.captureTestMode);
+  const testRun = isTestRun(window, settings.captureTestMode);
   const recorderBusy = capturePhase === 'recording' || capturePhase === 'preparing' || capturePhase === 'finishing';
   const recorderIsForThisPass = recorderBusy && captureOptions?.pass.id === pass.id;
 
   const openRecorder = () => {
-    if (!recorderIsForThisPass) {
-      useCapture.getState().prepare({
-        pass,
-        satellite,
-        frequencyHz,
-        gainDb: settings.satelliteGainDb,
-        biasTee: settings.biasTee,
-        tle,
-      });
-    }
+    if (!recorderIsForThisPass) prepareCaptureFor(pass);
     navigation.navigate('Capture');
   };
 
@@ -238,20 +230,7 @@ export default function PassDetailScreen() {
 
       <GlassCard style={{ gap: 10 }}>
         <SectionLabel>Downlink frequency</SectionLabel>
-        <Row style={{ flexWrap: 'wrap' }}>
-          {LRPT_FREQUENCIES_HZ.map((hz) => (
-            <Chip
-              key={hz}
-              label={`${formatFrequencyMHz(hz)} MHz`}
-              selected={frequencyHz === hz}
-              onPress={() => useAppStore.getState().setSatelliteFrequency(pass.noradId, hz)}
-            />
-          ))}
-        </Row>
-        <Text style={styles.note}>
-          Meteor-M satellites broadcast LRPT on 137.100 or 137.900 MHz and operators switch between them. If you see
-          no signal bump at one, try the other.
-        </Text>
+        <DownlinkInfo noradId={pass.noradId} />
       </GlassCard>
 
       <View style={{ gap: 10 }}>
@@ -260,7 +239,7 @@ export default function PassDetailScreen() {
         ) : recorderBusy ? (
           <Button label="Another capture is running" icon="lock-closed" variant="secondary" disabled onPress={() => undefined} />
         ) : canCapture ? (
-          <Button label="Capture this pass" icon="radio-button-on" onPress={openRecorder} />
+          <Button label={testRun ? 'Test capture (2 min)' : 'Capture this pass'} icon="radio-button-on" onPress={openRecorder} />
         ) : (
           <Button
             label={ended ? 'Pass ended' : `Capture opens in ${formatCountdown(window.opensInMs)}`}

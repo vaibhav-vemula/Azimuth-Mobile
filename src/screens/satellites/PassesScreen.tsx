@@ -15,7 +15,9 @@ import { SatellitesStackParamList } from '../../navigation/types';
 import { Reminders } from '../../notifications/reminders';
 import { SatellitePass, selectUpcomingPasses, useAppStore } from '../../state/useAppStore';
 import { useCapture } from '../../capture/useCapture';
-import { captureWindow } from '../../capture/window';
+import type { RecorderState } from '../../capture/prepareCapture';
+import { prepareCaptureFor, recorderStateFor } from '../../capture/prepareCapture';
+import { canCapture, captureWindow, isTestRun } from '../../capture/window';
 import { colors, typography } from '../../theme';
 import { formatClock, formatCountdown, formatDay } from '../../utils/format';
 import { PassCard, QUALITY_COLOR } from './components/PassCard';
@@ -145,7 +147,16 @@ export default function PassesScreen() {
     body = (
       <>
         {next ? (
-          <NextPassHero pass={next} now={now} onOpen={() => navigation.navigate('PassDetail', { passId: next.id })} />
+          <NextPassHero
+            pass={next}
+            now={now}
+            recorder={recorderStateFor(next.id)}
+            testMode={settings.captureTestMode}
+            onOpen={() => navigation.navigate('PassDetail', { passId: next.id })}
+            onCapture={() => {
+              if (prepareCaptureFor(next)) navigation.navigate('Capture');
+            }}
+          />
         ) : null}
 
         <Row style={{ flexWrap: 'wrap' }}>
@@ -239,13 +250,48 @@ export default function PassesScreen() {
   );
 }
 
-function NextPassHero({ pass, now, onOpen }: { pass: SatellitePass; now: number; onOpen: () => void }) {
+function NextPassHero({
+  pass,
+  now,
+  recorder,
+  testMode,
+  onOpen,
+  onCapture,
+}: {
+  pass: SatellitePass;
+  now: number;
+  recorder: RecorderState;
+  testMode: boolean;
+  onOpen: () => void;
+  onCapture: () => void;
+}) {
   const satellite = getMonitoredSatellite(pass.noradId);
   const quality = classifyPass(pass.maxElevationDeg);
   const rise = pass.riseTime.getTime();
   const set = pass.setTime.getTime();
   const live = now >= rise;
   const capture = captureWindow(rise, set, now);
+  const testRun = isTestRun(capture, testMode);
+
+  let infoText: string;
+  let infoIcon: keyof typeof Ionicons.glyphMap;
+  let infoColor: string;
+  if (testRun) {
+    infoText =
+      capture.state === 'upcoming'
+        ? `Test mode: capture unlocked (real window opens in ${formatCountdown(capture.opensInMs)})`
+        : 'Test mode: capture unlocked';
+    infoIcon = 'flask-outline';
+    infoColor = colors.warning;
+  } else if (capture.state === 'upcoming') {
+    infoText = `Capture opens in ${formatCountdown(capture.opensInMs)}`;
+    infoIcon = 'time-outline';
+    infoColor = colors.textSecondary;
+  } else {
+    infoText = capture.state === 'open' ? 'Capture is open now' : 'Capture is open: pass in progress';
+    infoIcon = 'radio-button-on';
+    infoColor = colors.success;
+  }
 
   return (
     <GlassCard style={styles.hero}>
@@ -261,20 +307,33 @@ function NextPassHero({ pass, now, onOpen }: { pass: SatellitePass; now: number;
         {live ? 'until loss of signal' : `until rise at ${formatClock(pass.riseTime)}`}
       </Text>
       <View style={styles.captureInfo}>
-        <Ionicons
-          name={capture.state === 'upcoming' ? 'time-outline' : 'radio-button-on'}
-          size={16}
-          color={capture.state === 'upcoming' ? colors.textSecondary : colors.success}
-        />
-        <Text style={[styles.captureInfoText, capture.state !== 'upcoming' && { color: colors.success }]}>
-          {capture.state === 'upcoming'
-            ? `Capture opens in ${formatCountdown(capture.opensInMs)}`
-            : capture.state === 'open'
-              ? 'Capture is open now'
-              : 'Capture is open: pass in progress'}
-        </Text>
+        <Ionicons name={infoIcon} size={16} color={infoColor} />
+        <Text style={[styles.captureInfoText, { color: infoColor }]}>{infoText}</Text>
       </View>
-      <Button label="Pass details" icon="map-outline" variant="secondary" onPress={onOpen} />
+      <Row>
+        {recorder === 'this-pass' ? (
+          <Button style={styles.heroPrimary} label="Open recorder" icon="radio-button-on" onPress={onCapture} />
+        ) : recorder === 'other-pass' ? (
+          <Button style={styles.heroPrimary} label="Another capture running" icon="lock-closed" variant="secondary" disabled onPress={onCapture} />
+        ) : canCapture(capture, testMode) ? (
+          <Button
+            style={styles.heroPrimary}
+            label={testRun ? 'Test capture (2 min)' : 'Capture pass'}
+            icon="radio-button-on"
+            onPress={onCapture}
+          />
+        ) : (
+          <Button
+            style={styles.heroPrimary}
+            label={capture.state === 'ended' ? 'Pass ended' : 'Capture locked'}
+            icon="lock-closed-outline"
+            variant="secondary"
+            disabled
+            onPress={onCapture}
+          />
+        )}
+        <Button label="Details" icon="map-outline" variant="secondary" onPress={onOpen} />
+      </Row>
     </GlassCard>
   );
 }
@@ -291,6 +350,7 @@ const styles = StyleSheet.create({
   heroName: { ...typography.subheading, color: colors.textSecondary },
   heroCountdown: { ...typography.display, fontSize: 46, color: colors.accent, fontVariant: ['tabular-nums'] },
   heroCaption: { ...typography.caption, color: colors.textSecondary },
+  heroPrimary: { flex: 1 },
   captureInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   captureInfoText: { ...typography.caption, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
   filterNote: { ...typography.caption, color: colors.textTertiary },

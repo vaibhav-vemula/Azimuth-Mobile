@@ -77,7 +77,7 @@ describe('SigMF metadata', () => {
     expect(meta.global['azimuth:pass'].max_elevation_deg).toBe(84.9);
     expect(meta.global['azimuth:tle']).toEqual(['1 59051U', '2 59051']);
     expect(meta.global['azimuth:gain_mode']).toBe('manual');
-    expect(buildSigmfMetadata({ ...input, gainDb: null, status: 'recording' }).global['azimuth:gain_mode']).toBe('auto');
+    expect(buildSigmfMetadata({ ...input, gainDb: null, status: 'recording' }).global['azimuth:gain_mode']).toBe('tuner-agc');
     expect(meta.global['azimuth:bias_tee']).toBe(true);
   });
 
@@ -113,6 +113,27 @@ describe('SigMF metadata', () => {
     expect(parsed.maxElevationDeg).toBe(84.9);
     expect(parsed.status).toBe('complete');
     expect(parsed.startedAt?.toISOString()).toBe('2026-10-02T19:19:30.000Z');
+  });
+
+  it('flags test recordings so they are not mistaken for real passes', () => {
+    const real = buildSigmfMetadata({ ...input, status: 'recording' });
+    const test = buildSigmfMetadata({ ...input, status: 'complete', testRecording: true });
+    expect(real.global['azimuth:test_recording']).toBe(false);
+    expect(test.global['azimuth:test_recording']).toBe(true);
+    expect(parseRecordingMetadata(JSON.stringify(test)).testRecording).toBe(true);
+    expect(parseRecordingMetadata(JSON.stringify(real)).testRecording).toBe(false);
+  });
+
+  it('records how the automatic set-up chose the settings, and any gain steps during the pass', () => {
+    const meta = buildSigmfMetadata({
+      ...input,
+      status: 'complete',
+      autoSetup: { frequencySource: 'signal', gainReason: 'signal', signalSnrDb: 9.46 },
+      gainChanges: [{ atSec: 123.456, gainDb: 32.8, reason: 'clipping' }],
+    });
+    expect(meta.global['azimuth:auto_setup']).toEqual({ frequency_source: 'signal', gain_reason: 'signal', signal_snr_db: 9.5 });
+    expect(meta.global['azimuth:gain_changes']).toEqual([{ at_sec: 123.5, gain_db: 32.8, reason: 'clipping' }]);
+    expect(buildSigmfMetadata({ ...input, status: 'recording' }).global['azimuth:gain_changes']).toEqual([]);
   });
 
   it('tolerates missing or corrupt metadata', () => {

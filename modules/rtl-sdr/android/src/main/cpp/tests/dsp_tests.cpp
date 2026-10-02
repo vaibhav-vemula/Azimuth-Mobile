@@ -242,6 +242,34 @@ static void testRecorder() {
   }
 
   {
+    // DC blocking: a constant offset in the input must not appear in the recording, and the signal must survive.
+    azimuth::IqRecorder recorder;
+    recorder.open(path);
+    long t = 0;
+    const double fs = 2304000.0;
+    std::normal_distribution<double> noise(0.0, 0.02);
+    for (int b = 0; b < 400; ++b) {
+      std::vector<uint8_t> iq(32000 * 2);
+      for (int i = 0; i < 32000; ++i, ++t) {
+        const double ph = 2.0 * M_PI * 50000.0 * t / fs;
+        iq[2 * i] = quantize(0.20 + 0.05 * std::cos(ph) + noise(gen));      // +0.20 DC offset on I
+        iq[2 * i + 1] = quantize(-0.15 + 0.05 * std::sin(ph) + noise(gen));  // -0.15 DC offset on Q
+      }
+      recorder.process(iq.data(), iq.size());
+    }
+    recorder.close();
+    auto data = readFile(path);
+    double meanI = 0, meanQ = 0;
+    size_t count = 0;
+    for (size_t i = data.size() / 4; i < data.size() / 2; ++i, ++count) { meanI += data[2 * i]; meanQ += data[2 * i + 1]; }
+    meanI /= count; meanQ /= count;
+    const double tone = recordedToneAmp(data, 50000, data.size() / 4);
+    const double rms = recordedRms(data, data.size() / 4);
+    CHECK(std::fabs(meanI) < 0.05 * rms && std::fabs(meanQ) < 0.05 * rms, "DC offset leaked: mean I %.2f Q %.2f vs rms %.1f", meanI, meanQ, rms);
+    CHECK(tone > 0.5 * rms, "tone lost after DC blocking (%.1f of rms %.1f)", tone, rms);
+  }
+
+  {
     azimuth::IqRecorder recorder;
     CHECK(!recorder.open("/nonexistent_dir/x.cs8"), "opened a path in a missing directory");
     CHECK(recorder.lastError() != 0, "no error recorded");

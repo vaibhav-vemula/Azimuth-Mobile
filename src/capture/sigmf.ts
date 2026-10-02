@@ -12,6 +12,19 @@ export const POST_PASS_MARGIN_SEC = 45;
 
 export type RecordingStatus = 'recording' | 'complete' | 'interrupted' | 'failed';
 
+export interface GainChange {
+  /** Seconds into the recording when the gain was changed. */
+  atSec: number;
+  gainDb: number;
+  reason: 'clipping';
+}
+
+export interface AutoSetupInfo {
+  frequencySource: 'signal' | 'satnogs' | 'default';
+  gainReason: 'signal' | 'noise-floor' | 'quiet' | 'overload';
+  signalSnrDb: number;
+}
+
 export interface CaptureMetadataInput {
   satellite: MonitoredSatellite;
   frequencyHz: number;
@@ -27,6 +40,11 @@ export interface CaptureMetadataInput {
   status: RecordingStatus;
   error?: string | null;
   appVersion: string;
+  /** True for recordings made with testing mode outside a real pass. */
+  testRecording?: boolean;
+  /** How the frequency and gain were chosen by the automatic set-up. */
+  autoSetup?: AutoSetupInfo;
+  gainChanges?: GainChange[];
 }
 
 /** Folder name for a recording, for example Meteor-M2-4_20261002T154200Z. */
@@ -69,11 +87,20 @@ export function buildSigmfMetadata(input: CaptureMetadataInput) {
         type: 'Point',
         coordinates: [coarsen(observer.longitudeDeg), coarsen(observer.latitudeDeg)],
       },
+      'azimuth:test_recording': input.testRecording ?? false,
       'azimuth:status': input.status,
       'azimuth:error': input.error ?? null,
       'azimuth:satellite': { name: satellite.name, noradId: satellite.noradId },
       'azimuth:gain_db': input.gainDb,
-      'azimuth:gain_mode': input.gainDb === null ? 'auto' : 'manual',
+      'azimuth:gain_mode': input.gainDb === null ? 'tuner-agc' : 'manual',
+      'azimuth:auto_setup': input.autoSetup
+        ? {
+            frequency_source: input.autoSetup.frequencySource,
+            gain_reason: input.autoSetup.gainReason,
+            signal_snr_db: Math.round(input.autoSetup.signalSnrDb * 10) / 10,
+          }
+        : null,
+      'azimuth:gain_changes': (input.gainChanges ?? []).map((c) => ({ at_sec: Math.round(c.atSec * 10) / 10, gain_db: c.gainDb, reason: c.reason })),
       'azimuth:bias_tee': input.biasTee,
       'azimuth:decimation': { input_rate: 2_304_000, factor: 8, agc: true },
       'azimuth:pass': {
@@ -112,6 +139,7 @@ export interface ParsedRecording {
   droppedBlocks: number | null;
   status: RecordingStatus | null;
   error: string | null;
+  testRecording: boolean;
 }
 
 /** Reads back what the Recordings list needs; tolerant of missing or foreign metadata. */
@@ -126,6 +154,7 @@ export function parseRecordingMetadata(json: string | null): ParsedRecording {
     droppedBlocks: null,
     status: null,
     error: null,
+    testRecording: false,
   };
   if (!json) return empty;
   try {
@@ -143,6 +172,7 @@ export function parseRecordingMetadata(json: string | null): ParsedRecording {
       droppedBlocks: typeof global['azimuth:dropped_blocks'] === 'number' ? global['azimuth:dropped_blocks'] : null,
       status: global['azimuth:status'] ?? null,
       error: global['azimuth:error'] ?? null,
+      testRecording: global['azimuth:test_recording'] === true,
     };
   } catch {
     return empty;

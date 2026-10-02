@@ -15,7 +15,8 @@ namespace azimuth {
  * Input is the dongle's native unsigned 8-bit IQ at 2.304 MS/s. A 129-tap low-pass (125 kHz) and
  * a decimation by 8 bring it to 288 kS/s, which still comfortably contains a 72 kbaud LRPT signal
  * (about 140 kHz wide) and Doppler. Weak satellite signals sit at noise level, so the filtered
- * samples are scaled by a slow automatic gain (about 1 s time constant) before rounding to 8 bits;
+ * samples have their DC offset removed (the dongle's centre spur sits right on an LRPT signal tuned to
+ * the middle of the band) and are scaled by a slow automatic gain (about 1 s time constant) before rounding to 8 bits;
  * without it the quantisation would remove most of the signal. Decoders such as SatDump apply
  * their own AGC, so a slowly varying overall level is harmless.
  */
@@ -63,6 +64,8 @@ class IqRecorder {
   std::vector<int8_t> out_;
   size_t phase_;
   float gain_;
+  float dcI_;
+  float dcQ_;
   uint64_t bytesWritten_;
   uint64_t samplesWritten_;
   uint32_t blocksSinceFlush_;

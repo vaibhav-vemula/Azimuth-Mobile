@@ -19,10 +19,19 @@ import {
   tune,
 } from '../../modules/rtl-sdr';
 import type { RtlSdrStatus } from '../../modules/rtl-sdr';
+import { withTimeout } from '../utils/async';
+import { createFrameGate } from '../utils/frameGate';
+import { frameCollector } from './frameCollector';
 
 const EMPTY_BINS: number[] = new Array(64).fill(0);
 const DEFAULT_FM_HZ = 100_000_000;
 const DEFAULT_VOLUME = 0.8;
+/** The UI redraws the spectrum at most this often; a slow phone drops frames rather than falling behind. */
+const UI_FRAME_INTERVAL_MS = 45;
+const STREAM_START_TIMEOUT_MS = 10_000;
+const STREAM_STOP_TIMEOUT_MS = 8_000;
+
+export type StreamAction = 'starting' | 'stopping' | null;
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -34,11 +43,16 @@ interface ReceiverState {
   frequencyHz: number;
   sampleRate: number;
   bins: number[];
+  /** Latest raw-sample level and clipping (fractions of full scale), for display. */
+  rms: number;
+  clip: number;
   gains: number[];
   listening: boolean;
   volume: number;
   error: string | null;
   busy: boolean;
+  /** Set while a start or stop is in flight so buttons can show progress and ignore repeat taps. */
+  streamAction: StreamAction;
 
   init: () => void;
   connect: () => Promise<boolean>;
@@ -66,16 +80,28 @@ export const useReceiver = create<ReceiverState>((set, get) => ({
   frequencyHz: DEFAULT_FM_HZ,
   sampleRate: FM_SAMPLE_RATE_HZ,
   bins: EMPTY_BINS,
+  rms: 0,
+  clip: 0,
   gains: [],
   listening: false,
   volume: DEFAULT_VOLUME,
   error: null,
   busy: false,
+  streamAction: null,
 
   init: () => {
     if (initialized) return;
     initialized = true;
-    addSignalListener((event) => set({ bins: event.bins }));
+    const frameGate = createFrameGate(UI_FRAME_INTERVAL_MS);
+    addSignalListener((event) => {
+      const rms = event.rms ?? 0;
+      const clip = event.clip ?? 0;
+      // The auto-tuner averages every frame; only the redraw below is rate-limited.
+      frameCollector.push({ bins: event.bins, rms, clip });
+      // Skip frames while a stop is in flight and cap the redraw rate.
+      if (get().streamAction === 'stopping' || !frameGate()) return;
+      set({ bins: event.bins, rms, clip });
+    });
     addStatusListener((event) =>
       set((state) => ({
         status: event.status,
@@ -133,11 +159,23 @@ export const useReceiver = create<ReceiverState>((set, get) => ({
   },
 
   startReceiving: async () => {
-    await startStream();
+    if (get().streamAction) return;
+    set({ streamAction: 'starting' });
+    try {
+      await withTimeout(startStream(), STREAM_START_TIMEOUT_MS, 'Starting the stream timed out. Unplug and replug the receiver, then reconnect.');
+    } finally {
+      set({ streamAction: null });
+    }
   },
 
   stopReceiving: async () => {
-    await stopStream();
+    if (get().streamAction) return;
+    set({ streamAction: 'stopping' });
+    try {
+      await withTimeout(stopStream(), STREAM_STOP_TIMEOUT_MS, 'Stopping the stream timed out. Disconnect and reconnect the receiver.');
+    } finally {
+      set({ streamAction: null, bins: EMPTY_BINS });
+    }
   },
 
   setListening: async (listening) => {

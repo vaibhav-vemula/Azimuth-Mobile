@@ -21,6 +21,9 @@ constexpr float kMaxGain = 256.0f;
 constexpr float kTargetRmsCounts = 24.0f;
 // One block is ~14 ms; alpha of 0.014 gives a gain time constant of about one second.
 constexpr float kGainSmoothing = 0.014f;
+// Single-pole DC blocker, about 300 Hz corner at 288 kS/s. An LRPT signal is ~115 kHz wide, so this removes
+// well under 1% of its power while flattening the receiver's centre spike.
+constexpr float kDcBlockAlpha = 0.00654f;
 constexpr uint32_t kFlushEveryBlocks = 16;
 constexpr size_t kFileBufferBytes = 256 * 1024;
 
@@ -33,6 +36,8 @@ IqRecorder::IqRecorder()
       histQ_(kTapCount - 1, 0.0f),
       phase_(0),
       gain_(kInitialGain),
+      dcI_(0.0f),
+      dcQ_(0.0f),
       bytesWritten_(0),
       samplesWritten_(0),
       blocksSinceFlush_(0),
@@ -70,6 +75,8 @@ bool IqRecorder::open(const char* path) {
   std::fill(histQ_.begin(), histQ_.end(), 0.0f);
   phase_ = 0;
   gain_ = kInitialGain;
+  dcI_ = 0.0f;
+  dcQ_ = 0.0f;
   bytesWritten_ = 0;
   samplesWritten_ = 0;
   blocksSinceFlush_ = 0;
@@ -122,8 +129,10 @@ bool IqRecorder::process(const uint8_t* iq, size_t byteCount) {
       accI += taps[k] * pi[k];
       accQ += taps[k] * pq[k];
     }
-    outI_.push_back(accI);
-    outQ_.push_back(accQ);
+    dcI_ += kDcBlockAlpha * (accI - dcI_);
+    dcQ_ += kDcBlockAlpha * (accQ - dcQ_);
+    outI_.push_back(accI - dcI_);
+    outQ_.push_back(accQ - dcQ_);
   }
   phase_ = m - n;
 

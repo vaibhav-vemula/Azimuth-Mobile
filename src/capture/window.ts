@@ -17,7 +17,15 @@ export function captureWindow(riseMs: number, setMs: number, nowMs: number): Cap
   return opensInMs > 0 ? { state: 'upcoming', opensInMs } : { state: 'open', opensInMs: 0 };
 }
 
-/** True when the Capture button should be enabled. */
-export function canCapture(window: CaptureWindowState): boolean {
-  return window.state === 'open' || window.state === 'live';
+/** A test recording outside the pass window lasts this long, regardless of the pass times. */
+export const TEST_RECORDING_SEC = 120;
+
+/** True when the Capture button should be enabled. Test mode unlocks it for any pass at any time. */
+export function canCapture(window: CaptureWindowState, testMode = false): boolean {
+  return testMode || window.state === 'open' || window.state === 'live';
+}
+
+/** True when a capture started now is a test run rather than a recording of the real pass. */
+export function isTestRun(window: CaptureWindowState, testMode: boolean): boolean {
+  return testMode && !canCapture(window, false);
 }

@@ -17,9 +17,12 @@ export interface Settings {
   minElevationDeg: number;
   notificationsEnabled: boolean;
   reminderMinutes: number;
-  /** null = tuner AGC */
-  satelliteGainDb: number | null;
+  /** The antenna or LNA needs power from the receiver (bias-tee). Off unless the user turns it on in Settings. */
   biasTee: boolean;
+  /** Testing aid: unlock Capture outside the pass window; such recordings last 2 minutes and are flagged as tests. */
+  captureTestMode: boolean;
+  /** Pick the LRPT downlink automatically from recent SatNOGS observations. */
+  autoFrequency: boolean;
   /** LRPT downlink frequency per NORAD id. */
   frequencyHzBySatellite: Record<string, number>;
 }
@@ -32,8 +35,9 @@ export function defaultSettings(): Settings {
     minElevationDeg: 15,
     notificationsEnabled: true,
     reminderMinutes: 10,
-    satelliteGainDb: null,
     biasTee: false,
+    captureTestMode: true,
+    autoFrequency: true,
     frequencyHzBySatellite,
   };
 }
