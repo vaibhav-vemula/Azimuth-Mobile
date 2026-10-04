@@ -9,7 +9,7 @@ import { Badge, Button, EmptyState, Row, SectionLabel, Stat } from '../../compon
 import { SATELLITE_SAMPLE_RATE_HZ, exportRecording } from '../../../modules/rtl-sdr';
 import { SCAN_CENTER_HZ } from '../../capture/autoSetup';
 import { useAutoSetup } from '../../capture/autoSetupStore';
-import { DATA_FILE_NAME, estimateRecordingBytes } from '../../capture/sigmf';
+import { RECORDING_FORMATS, RecordingFormat, estimateRecordingBytes } from '../../capture/sigmf';
 import { setupInputFor } from '../../capture/setupInput';
 import { useCapture } from '../../capture/useCapture';
 import { TEST_RECORDING_SEC, captureWindow, isTestRun } from '../../capture/window';
@@ -31,6 +31,7 @@ import { LiveSignalCard } from './components/LiveSignalCard';
 import { ReceiverCard } from './components/capture/ReceiverCard';
 import { SetupChecklist } from './components/capture/SetupChecklist';
 import { TipsCard } from './components/capture/TipsCard';
+import { PassReceiptCard } from './components/capture/PassReceiptCard';
 
 export default function CaptureScreen() {
   const navigation = useNavigation();
@@ -44,6 +45,7 @@ export default function CaptureScreen() {
   const recordingPlan = useCapture((s) => s.plan);
   const currentGainDb = useCapture((s) => s.currentGainDb);
   const runIsTest = useCapture((s) => s.testRun);
+  const activeFormat = useCapture((s) => s.format);
 
   const receiverStatus = useReceiver((s) => s.status);
   const sampleRate = useReceiver((s) => s.sampleRate);
@@ -122,7 +124,7 @@ export default function CaptureScreen() {
     setActionError(null);
     try {
       if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device.');
-      await Sharing.shareAsync(`file://${result.directory}/${DATA_FILE_NAME}`, {
+      await Sharing.shareAsync(`file://${result.dataPath}`, {
         mimeType: 'application/octet-stream',
         dialogTitle: 'Share baseband recording',
       });
@@ -166,6 +168,8 @@ export default function CaptureScreen() {
   const testRunNow = isTestRun(window, testMode);
   const isTest = phase === 'idle' || phase === 'preparing' ? testRunNow : runIsTest;
   const passEnded = window.state === 'ended';
+  const format: RecordingFormat = phase === 'idle' || phase === 'preparing' ? settings.recordingFormat : activeFormat;
+  const formatSpec = RECORDING_FORMATS[format];
   const timelineProgress = Math.max(0, Math.min(1, (now - riseMs) / (setMs - riseMs)));
 
   const tleRecord = tles[noradId ?? '']?.record ?? options.tle;
@@ -182,7 +186,7 @@ export default function CaptureScreen() {
   const dropped = progress?.droppedBlocks ?? 0;
   const elapsedSec = (progress?.elapsedMs ?? 0) / 1000;
   const remainingSec = isTest ? TEST_RECORDING_SEC : Math.max(0, (setMs - now) / 1000) + 45;
-  const expectedBytes = estimateRecordingBytes(isTest ? TEST_RECORDING_SEC : recording ? remainingSec + elapsedSec : remainingSec);
+  const expectedBytes = estimateRecordingBytes(isTest ? TEST_RECORDING_SEC : recording ? remainingSec + elapsedSec : remainingSec, format);
 
   const stateBadge =
     phase === 'recording'
@@ -298,7 +302,7 @@ export default function CaptureScreen() {
           <Ionicons name="flask-outline" size={18} color={colors.warning} />
           <Text style={styles.testText}>
             Test recording: the satellite is not in its pass window, so this records {TEST_RECORDING_SEC / 60} minutes starting when you
-            press Start (about {formatBytes(estimateRecordingBytes(TEST_RECORDING_SEC))}). It checks the receiver, storage, file and export
+            press Start (about {formatBytes(estimateRecordingBytes(TEST_RECORDING_SEC, format))}). It checks the receiver, storage, file and export
             end to end, but will not contain a satellite image. It is flagged as a test in the saved metadata.
           </Text>
         </GlassCard>
@@ -314,7 +318,7 @@ export default function CaptureScreen() {
           </Row>
           <Row>
             <Stat label="Gain" value={gainDb === null ? '–' : gainDb.toFixed(1)} unit="dB" />
-            <Stat label="Format" value="288 kS/s · ci8" />
+            <Stat label="Format" value={`${formatSpec.rateLabel} · cs8`} />
             <Stat label="Gaps" value={dropped === 0 ? 'None' : `${dropped} blocks`} color={dropped === 0 ? colors.success : colors.warning} />
           </Row>
           {recordingPlan && currentGainDb !== null && currentGainDb < recordingPlan.gainDb - 0.05 ? (
@@ -350,8 +354,9 @@ export default function CaptureScreen() {
             <Button style={{ flex: 1 }} variant="secondary" icon="share-social" label="Share" onPress={() => void share()} />
             <Button style={{ flex: 1 }} variant="secondary" icon="download" label="Export" loading={exporting} onPress={() => void exportToDownloads()} />
           </Row>
+          <PassReceiptCard />
           <Button variant="ghost" icon={showHelp ? 'chevron-up' : 'help-circle-outline'} label={showHelp ? 'Hide decoding steps' : 'How do I turn this into an image?'} onPress={() => setShowHelp((v) => !v)} />
-          {showHelp ? <DecodingHelp frequencyHz={recordingPlan?.frequencyHz ?? targetHz} /> : null}
+          {showHelp ? <DecodingHelp frequencyHz={recordingPlan?.frequencyHz ?? targetHz} format={result.format} /> : null}
         </GlassCard>
       ) : null}
 
@@ -377,12 +382,14 @@ export default function CaptureScreen() {
   );
 }
 
-function DecodingHelp({ frequencyHz }: { frequencyHz: number }) {
+function DecodingHelp({ frequencyHz, format }: { frequencyHz: number; format: RecordingFormat }) {
+  const spec = RECORDING_FORMATS[format];
   const steps = [
     'Share or Export the recording to your computer (the file is baseband.cs8).',
     'Install SatDump (free, satdump.org) and open Offline processing.',
     'Pipeline: "METEOR M2-X LRPT 72k" (meteor_m2-x_lrpt). If it finds no frames, try "METEOR M2-x LRPT 80k".',
-    'Input level: Baseband. Baseband format: cs8 (signed 8-bit I/Q). Sample rate: 288000. Select baseband.cs8.',
+    `Input level: Baseband. Baseband format: cs8 (signed 8-bit I/Q). Sample rate: ${spec.sampleRateHz}. Select baseband.cs8.`,
+    'Tick DC blocking if SatDump offers it. No frequency shift is needed: the recording is centred on the downlink.',
     'Press Start. When it finishes, the images (channels and composites) appear in the output folder.',
   ];
   return (
@@ -393,7 +400,10 @@ function DecodingHelp({ frequencyHz }: { frequencyHz: number }) {
           <Text style={styles.helpText}>{step}</Text>
         </Row>
       ))}
-      <Text style={styles.note}>Recorded at {formatFrequencyMHz(frequencyHz)} MHz.</Text>
+      <Text style={styles.note}>
+        Recorded at {formatFrequencyMHz(frequencyHz)} MHz, {spec.label.toLowerCase()} ({spec.rateLabel}, about {spec.coverageLabel} of spectrum).
+        {format === 'fullband' ? ' Both Meteor downlinks are in the file.' : ''}
+      </Text>
     </View>
   );
 }

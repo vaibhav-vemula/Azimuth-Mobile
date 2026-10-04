@@ -39,7 +39,8 @@
           "locationWhenInUsePermission": "Azimuth uses your location to predict when satellites pass overhead."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "@maplibre/maplibre-react-native"
     ]
   }
 }

@@ -18,11 +18,10 @@ export const BIN_COUNT = 64;
 
 /** Sample rate used for FM listening and general spectrum viewing. */
 export const FM_SAMPLE_RATE_HZ = 2_400_000;
-/** Sample rate used while recording satellite passes (recordings are decimated by 8 to 288 kS/s). */
+/** Sample rate used while recording satellite passes. */
 export const SATELLITE_SAMPLE_RATE_HZ = 2_304_000;
-export const RECORDING_SAMPLE_RATE_HZ = SATELLITE_SAMPLE_RATE_HZ / 8;
-/** Bytes per second written to a baseband.cs8 file. */
-export const RECORDING_BYTES_PER_SECOND = RECORDING_SAMPLE_RATE_HZ * 2;
+/** Compact recordings are decimated by 8; full-band recordings keep the whole 2.304 MS/s. */
+export const COMPACT_RECORDING_SAMPLE_RATE_HZ = SATELLITE_SAMPLE_RATE_HZ / 8;
 
 export function connect(): Promise<StatusChangeEvent> {
   return RtlSdrModule.connect();
@@ -68,8 +67,8 @@ export function setBiasTee(enabled: boolean): Promise<void> {
   return RtlSdrModule.setBiasTee(enabled);
 }
 
-export function startRecording(name: string, label: string, maxDurationMs: number): Promise<RecordingStart> {
-  return RtlSdrModule.startRecording(name, label, maxDurationMs);
+export function startRecording(name: string, label: string, maxDurationMs: number, fullBand: boolean): Promise<RecordingStart> {
+  return RtlSdrModule.startRecording(name, label, maxDurationMs, fullBand);
 }
 
 export function stopRecording(): Promise<RecordingStatusEvent> {

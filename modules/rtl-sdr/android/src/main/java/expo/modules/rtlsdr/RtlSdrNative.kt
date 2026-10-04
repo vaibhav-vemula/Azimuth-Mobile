@@ -34,8 +34,11 @@ internal object RtlSdrNative {
 
   external fun nativeSetBiasTee(handle: Long, on: Boolean): Int
 
-  /** Starts writing a decimated .cs8 recording (needs the 2.304 MS/s rate). Returns 0 or a negative errno. */
-  external fun nativeStartRecording(handle: Long, path: String): Int
+  /**
+   * Starts writing a .cs8 recording (needs the 2.304 MS/s rate): the full-rate stream when [fullBand], otherwise a
+   * filtered 288 kS/s version. Returns 0 or a negative errno.
+   */
+  external fun nativeStartRecording(handle: Long, path: String, fullBand: Boolean): Int
 
   /** [bytesWritten, samplesWritten, droppedBlocks, lastErrno] for the current or last recording. */
   external fun nativeGetRecordingStats(handle: Long): LongArray?

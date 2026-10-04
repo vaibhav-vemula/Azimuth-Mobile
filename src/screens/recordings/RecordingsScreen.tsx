@@ -7,7 +7,7 @@ import { GlassCard } from '../../components/GlassCard';
 import { Screen } from '../../components/Screen';
 import { Badge, Button, EmptyState, Row, SectionLabel, Stat } from '../../components/ui';
 import { RecordingInfo, deleteRecording, exportRecording, getFreeStorageBytes, listRecordings } from '../../../modules/rtl-sdr';
-import { DATA_FILE_NAME, parseRecordingMetadata } from '../../capture/sigmf';
+import { DATA_FILE_NAME, RECORDING_FORMATS, parseRecordingMetadata } from '../../capture/sigmf';
 import { useCapture } from '../../capture/useCapture';
 import { colors, typography } from '../../theme';
 import { formatBytes, formatClock, formatDay, formatDuration, formatFrequencyMHz } from '../../utils/format';
@@ -91,9 +91,8 @@ export default function RecordingsScreen() {
   const totalBytes = (recordings ?? []).reduce((sum, r) => sum + r.dataBytes, 0);
 
   return (
-    <Screen>
+    <Screen topInset={false}>
       <View>
-        <Text style={styles.title}>Recordings</Text>
         <Text style={styles.subtitle}>Raw baseband captures of satellite passes</Text>
       </View>
 
@@ -146,6 +145,7 @@ export default function RecordingsScreen() {
               </View>
               <Row>
                 {meta.testRecording ? <Badge label="Test" color={colors.warning} /> : null}
+                {meta.format ? <Badge label={RECORDING_FORMATS[meta.format].label} color={colors.textSecondary} /> : null}
                 <Badge label={statusBadge.label} color={statusBadge.color} />
               </Row>
             </Row>
@@ -179,7 +179,8 @@ export default function RecordingsScreen() {
           <SectionLabel>Turning a recording into an image</SectionLabel>
           <Text style={styles.help}>
             Export or share the recording to a computer and open it in SatDump (satdump.org): Offline processing, pipeline
-            "METEOR M2-X LRPT 72k" (or the 80k variant), input level Baseband, format cs8 (signed 8-bit I/Q), sample rate 288000.
+            "METEOR M2-X LRPT 72k" (or the 80k variant), input level Baseband, format cs8 (signed 8-bit I/Q), and the sample rate shown
+            in the recording's metadata (2304000 for Full band, 288000 for Compact).
           </Text>
         </GlassCard>
       ) : null}

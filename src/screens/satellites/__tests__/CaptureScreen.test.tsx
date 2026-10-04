@@ -148,13 +148,15 @@ describe('Capture screen', () => {
     expect(all).toContain('Recording');
     expect(all).toContain('5.49 MB');
     expect(all).toContain('The gain was lowered from 33.8 dB to 32.8 dB');
+    expect(all).toContain('2.304 MS/s · cs8'); // the whole stream, as SatDump records it
   });
 
   it('shows the result with Done, Share and Export after a recording', async () => {
     useCapture.setState({
       phase: 'complete',
       plan,
-      result: { name: 'Meteor-M2-4_20261002T190000Z', directory: '/x', bytes: 5_760_000, samples: 2_880_000, droppedBlocks: 0, durationSec: 10, interrupted: false, error: null },
+      format: 'fullband',
+      result: { name: 'Meteor-M2-4_20261002T190000Z', directory: '/x', dataPath: '/x/baseband.cs8', format: 'fullband', bytes: 46_080_000, samples: 23_040_000, droppedBlocks: 0, durationSec: 10, interrupted: false, error: null },
     });
     const all = texts(await render()).join(' | ');
     expect(all).toContain('Done');
@@ -162,6 +164,27 @@ describe('Capture screen', () => {
     expect(all).toContain('Share');
     expect(all).toContain('Export');
     expect(all).toContain('Recorded at 137.900 MHz with 33.8 dB gain, chosen automatically.');
+  });
+
+  it('tells the user the right SatDump settings for a full-band recording', async () => {
+    useCapture.setState({
+      phase: 'complete',
+      plan,
+      format: 'fullband',
+      result: { name: 'x', directory: '/x', dataPath: '/x/baseband.cs8', format: 'fullband', bytes: 1, samples: 1, droppedBlocks: 0, durationSec: 1, interrupted: false, error: null },
+    });
+    const tree = await render();
+    const help = tree.root.findAllByType(Text).find((t) => flat(t.props.children) === 'How do I turn this into an image?')!;
+    let node: renderer.ReactTestInstance | null = help;
+    while (node && !node.props.onPress) node = node.parent;
+    await act(async () => {
+      node!.props.onPress();
+    });
+    const all = texts(tree).join(' | ');
+    expect(all).toContain('Sample rate: 2304000');
+    expect(all).toContain('cs8');
+    expect(all).toContain('No frequency shift is needed');
+    expect(all).toContain('Both Meteor downlinks are in the file.');
   });
 
   it('shows a failure clearly and still offers Done', async () => {

@@ -122,7 +122,8 @@ describe('starting a capture', () => {
     expect(rtl.setGain).toHaveBeenLastCalledWith(33.8); // a number: manual gain, never the tuner's AGC
     expect(rtl.setBiasTee).toHaveBeenLastCalledWith(true); // from Settings, not chosen per capture
     expect(rtl.startRecording).toHaveBeenCalledTimes(1);
-    const [name, label, maxMs] = rtl.startRecording.mock.calls[0];
+    const [name, label, maxMs, fullBand] = rtl.startRecording.mock.calls[0];
+    expect(fullBand).toBe(true); // full band by default, the way SatDump records
     expect(name).toMatch(/^Meteor-M2-4_\d{8}T\d{6}Z$/);
     expect(label).toBe('Meteor-M2 4 pass');
     expect(maxMs).toBeGreaterThan(10 * 60_000); // runs to the end of the pass plus the margin
@@ -138,6 +139,8 @@ describe('starting a capture', () => {
     expect(first['azimuth:bias_tee']).toBe(true);
     expect(first['azimuth:auto_setup']).toEqual({ frequency_source: 'signal', gain_reason: 'signal', signal_snr_db: 9.2 });
     expect(first['azimuth:test_recording']).toBe(false);
+    expect(first['core:sample_rate']).toBe(2_304_000);
+    expect(first['azimuth:recording_format']).toBe('fullband');
     expect(metadataWrites()[0].captures[0]['core:frequency']).toBe(137_900_000);
   });
 
@@ -162,6 +165,24 @@ describe('starting a capture', () => {
     expect(rtl.startRecording).not.toHaveBeenCalled();
   });
 
+  it('records the compact format when chosen, and needs far less free space for it', async () => {
+    useAppStore.setState({ settings: { ...defaultSettings(), captureTestMode: false, recordingFormat: 'compact' } });
+    rtl.getFreeStorageBytes.mockResolvedValue(1_500_000_000); // plenty for compact, not for full band
+    await useCapture.getState().start(options());
+    expect(useCapture.getState().phase).toBe('recording');
+    expect(rtl.startRecording.mock.calls[0][3]).toBe(false);
+    expect(metadataWrites()[0].global['core:sample_rate']).toBe(288_000);
+    expect(metadataWrites()[0].global['azimuth:recording_format']).toBe('compact');
+  });
+
+  it('refuses a full-band recording when only compact would fit', async () => {
+    rtl.getFreeStorageBytes.mockResolvedValue(1_500_000_000);
+    await useCapture.getState().start(options());
+    expect(useCapture.getState().phase).toBe('error');
+    expect(useCapture.getState().error).toMatch(/Not enough free storage/);
+    expect(rtl.startRecording).not.toHaveBeenCalled();
+  });
+
   it('reports a failed set-up and leaves the receiver in normal mode', async () => {
     calibrateMock.mockRejectedValue(new Error('The receiver is not delivering data.'));
     await useCapture.getState().start(options());
@@ -175,6 +196,7 @@ describe('starting a capture', () => {
     useAppStore.setState({ settings: { ...defaultSettings(), captureTestMode: true } });
     await useCapture.getState().start(options(passAt(180)));
     expect(rtl.startRecording.mock.calls[0][2]).toBe(135_000); // 2 minutes + 15 s safety
+    expect(rtl.startRecording.mock.calls[0][3]).toBe(true);
     expect(metadataWrites()[0].global['azimuth:test_recording']).toBe(true);
     expect(useCapture.getState().testRun).toBe(true);
   });
@@ -214,7 +236,9 @@ describe('during and after the recording', () => {
     const state = useCapture.getState();
     expect(state.phase).toBe('complete');
     expect(state.result).toMatchObject({ bytes: 5_760_000, droppedBlocks: 0, interrupted: true });
-    expect(state.result!.durationSec).toBeCloseTo(10, 5);
+    expect(state.result!.format).toBe('fullband');
+    expect(state.result!.dataPath).toBe('/data/captures/x/baseband.cs8');
+    expect(state.result!.durationSec).toBeCloseTo(1.25, 5); // 2.88 M samples at the 2.304 MS/s full-band rate
 
     const final = metadataWrites().pop().global;
     expect(final['azimuth:status']).toBe('interrupted'); // stopped before the pass ended

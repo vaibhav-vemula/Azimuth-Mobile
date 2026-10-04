@@ -2,8 +2,24 @@ import { MonitoredSatellite } from '../data/satellites';
 import { Observer, Pass, TleRecord } from '../types/satellite';
 import { compactUtc } from '../utils/format';
 
-export const RECORDING_SAMPLE_RATE_HZ = 288_000;
-export const RECORDING_BYTES_PER_SECOND = RECORDING_SAMPLE_RATE_HZ * 2;
+/**
+ * How a pass is stored.
+ *  - fullband: the dongle's whole 2.304 MS/s stream, centred on the downlink, exactly as SatDump records it.
+ *    About 4.6 MB/s (roughly 2.8 GB for a 10 minute pass). Covers 2.3 MHz, so both Meteor downlinks are in the file.
+ *  - compact: filtered and decimated to 288 kS/s around the downlink. About 0.58 MB/s, but only that slice survives.
+ * Both are signed 8-bit I/Q ("cs8" in SatDump, "ci8" in SigMF).
+ */
+export type RecordingFormat = 'fullband' | 'compact';
+
+export const RECORDING_FORMATS: Record<
+  RecordingFormat,
+  { sampleRateHz: number; bytesPerSecond: number; label: string; rateLabel: string; coverageLabel: string }
+> = {
+  fullband: { sampleRateHz: 2_304_000, bytesPerSecond: 4_608_000, label: 'Full band', rateLabel: '2.304 MS/s', coverageLabel: '2.3 MHz' },
+  compact: { sampleRateHz: 288_000, bytesPerSecond: 576_000, label: 'Compact', rateLabel: '288 kS/s', coverageLabel: '0.29 MHz' },
+};
+
+export const DEFAULT_RECORDING_FORMAT: RecordingFormat = 'fullband';
 export const DATA_FILE_NAME = 'baseband.cs8';
 
 /** Seconds of recording kept before AOS-triggered start and after LOS. */
@@ -45,6 +61,8 @@ export interface CaptureMetadataInput {
   /** How the frequency and gain were chosen by the automatic set-up. */
   autoSetup?: AutoSetupInfo;
   gainChanges?: GainChange[];
+  /** Defaults to full band. */
+  format?: RecordingFormat;
 }
 
 /** Folder name for a recording, for example Meteor-M2-4_20261002T154200Z. */
@@ -52,13 +70,13 @@ export function recordingName(satellite: MonitoredSatellite, startedAt: Date): s
   return `${satellite.name.replace(/[^A-Za-z0-9]+/g, '-')}_${compactUtc(startedAt)}`;
 }
 
-export function estimateRecordingBytes(durationSec: number): number {
-  return Math.ceil(Math.max(0, durationSec) * RECORDING_BYTES_PER_SECOND);
+export function estimateRecordingBytes(durationSec: number, format: RecordingFormat = DEFAULT_RECORDING_FORMAT): number {
+  return Math.ceil(Math.max(0, durationSec) * RECORDING_FORMATS[format].bytesPerSecond);
 }
 
 /** Free space needed to start: the expected file plus headroom for slack and the OS. */
-export function requiredFreeBytes(durationSec: number): number {
-  return Math.ceil(estimateRecordingBytes(durationSec) * 1.25) + 200 * 1024 * 1024;
+export function requiredFreeBytes(durationSec: number, format: RecordingFormat = DEFAULT_RECORDING_FORMAT): number {
+  return Math.ceil(estimateRecordingBytes(durationSec, format) * 1.25) + 200 * 1024 * 1024;
 }
 
 /** Rounds to 0.01 degrees (about 1 km): enough for context, not a precise home address. */
@@ -73,11 +91,13 @@ export function coarsen(valueDeg: number): number {
 export function buildSigmfMetadata(input: CaptureMetadataInput) {
   const { satellite, pass, tle, observer } = input;
   const samples = input.stats?.samples;
+  const format = input.format ?? DEFAULT_RECORDING_FORMAT;
+  const spec = RECORDING_FORMATS[format];
 
   return {
     global: {
       'core:datatype': 'ci8',
-      'core:sample_rate': RECORDING_SAMPLE_RATE_HZ,
+      'core:sample_rate': spec.sampleRateHz,
       'core:version': '1.0.0',
       'core:dataset': DATA_FILE_NAME,
       'core:recorder': `Azimuth ${input.appVersion}`,
@@ -102,7 +122,9 @@ export function buildSigmfMetadata(input: CaptureMetadataInput) {
         : null,
       'azimuth:gain_changes': (input.gainChanges ?? []).map((c) => ({ at_sec: Math.round(c.atSec * 10) / 10, gain_db: c.gainDb, reason: c.reason })),
       'azimuth:bias_tee': input.biasTee,
-      'azimuth:decimation': { input_rate: 2_304_000, factor: 8, agc: true },
+      'azimuth:recording_format': format,
+      'azimuth:decimation': format === 'compact' ? { input_rate: 2_304_000, factor: 8, dc_block: true, level_adjust: true } : null,
+      'azimuth:coverage_hz': [input.frequencyHz - spec.sampleRateHz / 2, input.frequencyHz + spec.sampleRateHz / 2],
       'azimuth:pass': {
         aos: pass.riseTime.toISOString(),
         tca: pass.maxElevationTime.toISOString(),
@@ -116,7 +138,7 @@ export function buildSigmfMetadata(input: CaptureMetadataInput) {
       'azimuth:bytes': input.stats?.bytes ?? null,
       'azimuth:samples': samples ?? null,
       'azimuth:dropped_blocks': input.stats?.droppedBlocks ?? null,
-      'azimuth:duration_sec': samples !== undefined ? Math.round((samples / RECORDING_SAMPLE_RATE_HZ) * 10) / 10 : null,
+      'azimuth:duration_sec': samples !== undefined ? Math.round((samples / spec.sampleRateHz) * 10) / 10 : null,
     },
     captures: [
       {
@@ -140,6 +162,8 @@ export interface ParsedRecording {
   status: RecordingStatus | null;
   error: string | null;
   testRecording: boolean;
+  format: RecordingFormat | null;
+  sampleRateHz: number | null;
 }
 
 /** Reads back what the Recordings list needs; tolerant of missing or foreign metadata. */
@@ -155,6 +179,8 @@ export function parseRecordingMetadata(json: string | null): ParsedRecording {
     status: null,
     error: null,
     testRecording: false,
+    format: null,
+    sampleRateHz: null,
   };
   if (!json) return empty;
   try {
@@ -173,6 +199,8 @@ export function parseRecordingMetadata(json: string | null): ParsedRecording {
       status: global['azimuth:status'] ?? null,
       error: global['azimuth:error'] ?? null,
       testRecording: global['azimuth:test_recording'] === true,
+      format: global['azimuth:recording_format'] === 'compact' ? 'compact' : global['azimuth:recording_format'] === 'fullband' ? 'fullband' : null,
+      sampleRateHz: typeof global['core:sample_rate'] === 'number' ? global['core:sample_rate'] : null,
     };
   } catch {
     return empty;

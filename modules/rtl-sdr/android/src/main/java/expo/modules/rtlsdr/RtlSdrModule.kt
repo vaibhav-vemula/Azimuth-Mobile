@@ -113,8 +113,8 @@ class RtlSdrModule : Module() {
       setBiasTee(enabled)
     }
 
-    AsyncFunction("startRecording") { name: String, label: String, maxDurationMs: Double ->
-      startRecording(name, label, maxDurationMs.toLong())
+    AsyncFunction("startRecording") { name: String, label: String, maxDurationMs: Double, fullBand: Boolean ->
+      startRecording(name, label, maxDurationMs.toLong(), fullBand)
     }
 
     AsyncFunction("stopRecording") {
@@ -560,7 +560,7 @@ class RtlSdrModule : Module() {
     return File(storageRoot(), name)
   }
 
-  private fun startRecording(name: String, label: String, maxDurationMs: Long): Map<String, Any?> {
+  private fun startRecording(name: String, label: String, maxDurationMs: Long, fullBand: Boolean): Map<String, Any?> {
     val handle = requireHandle()
     if (sampleRateHz != SATELLITE_SAMPLE_RATE_HZ) {
       throw CodedException(ERR_SAMPLE_RATE, "Switch the receiver to satellite mode (2.304 MS/s) before recording", null)
@@ -581,7 +581,7 @@ class RtlSdrModule : Module() {
     RecordingService.start(context, label)
 
     val dataFile = File(directory, DATA_FILE_NAME)
-    val result = RtlSdrNative.nativeStartRecording(handle, dataFile.path)
+    val result = RtlSdrNative.nativeStartRecording(handle, dataFile.path, fullBand)
     if (result < 0) {
       RecordingService.stop(context)
       throw CodedException(ERR_STORAGE, "Unable to open the recording file (error $result)", null)

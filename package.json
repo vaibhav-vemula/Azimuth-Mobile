@@ -7,17 +7,28 @@
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "server": "npm --prefix server start",
+    "test:server": "npm --prefix server test",
+    "verify-report": "node server/lib/verify-report.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
+    "@maplibre/maplibre-react-native": "^11.5.0",
+    "@noble/hashes": "^2.4.0",
     "@react-navigation/bottom-tabs": "^7.20.0",
     "@react-navigation/native": "^7.5.0",
     "@react-navigation/native-stack": "^7.5.0",
+    "@solana-mobile/mobile-wallet-adapter-protocol": "^2.3.0",
+    "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "^2.3.0",
+    "@solana/web3.js": "^1.99.0",
+    "bs58": "^4.0.1",
+    "buffer": "^6.0.3",
     "expo": "~57.0.26",
     "expo-asset": "~57.0.18",
     "expo-blur": "~57.0.3",
+    "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.0",
     "expo-dev-client": "~57.0.19",
     "expo-font": "~57.0.4",
@@ -29,6 +40,7 @@
     "expo-system-ui": "~57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-get-random-values": "^2.0.0",
     "react-native-mmkv": "^4.3.2",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
@@ -37,6 +49,8 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@types/bs58": "^4.0.4",
+    "@types/geojson": "^7946.0.16",
     "@types/jest": "29.5.14",
     "@types/node": "^26.6.4",
     "@types/react": "~19.2.2",
@@ -51,13 +65,20 @@
   "jest": {
     "preset": "jest-expo",
     "transformIgnorePatterns": [
-      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|satellite.js))",
+      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|satellite.js|@solana|@solana-mobile|@noble))",
       "/node_modules/react-native-reanimated/plugin/",
       "/node_modules/@react-native/babel-preset/"
     ],
     "moduleNameMapper": {
       "^satellite\\.js$": "<rootDir>/node_modules/satellite.js/dist/index.js"
-    }
+    },
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/server/"
+    ],
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ]
   },
   "private": true
 }

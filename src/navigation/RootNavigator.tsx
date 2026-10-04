@@ -9,18 +9,21 @@ import PassesScreen from '../screens/satellites/PassesScreen';
 import PassDetailScreen from '../screens/satellites/PassDetailScreen';
 import CaptureScreen from '../screens/satellites/CaptureScreen';
 import RecordingsScreen from '../screens/recordings/RecordingsScreen';
+import ProfileScreen from '../screens/profile/ProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import { colors, typography } from '../theme';
-import { RootTabParamList, SatellitesStackParamList } from './types';
+import MapScreen from '../screens/map/MapScreen';
+import { ProfileStackParamList, RootTabParamList, SatellitesStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator<SatellitesStackParamList>();
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 
 const TAB_ICONS: Record<keyof RootTabParamList, { active: keyof typeof Ionicons.glyphMap; idle: keyof typeof Ionicons.glyphMap }> = {
+  Map: { active: 'map', idle: 'map-outline' },
   Radio: { active: 'radio', idle: 'radio-outline' },
   Satellites: { active: 'planet', idle: 'planet-outline' },
-  Recordings: { active: 'albums', idle: 'albums-outline' },
-  Settings: { active: 'settings', idle: 'settings-outline' },
+  Profile: { active: 'person', idle: 'person-outline' },
 };
 
 const navTheme = {
@@ -53,6 +56,8 @@ const GuardedPasses = guarded(PassesScreen);
 const GuardedPassDetail = guarded(PassDetailScreen);
 const GuardedCapture = guarded(CaptureScreen);
 const GuardedRecordings = guarded(RecordingsScreen);
+const GuardedProfile = guarded(ProfileScreen);
+const GuardedMap = guarded(MapScreen);
 const GuardedSettings = guarded(SettingsScreen);
 
 function SatellitesStack() {
@@ -73,6 +78,24 @@ function SatellitesStack() {
   );
 }
 
+const stackScreenOptions = {
+  headerStyle: { backgroundColor: colors.backgroundElevated },
+  headerTintColor: colors.accent,
+  headerTitleStyle: { ...typography.subheading, color: colors.textPrimary },
+  contentStyle: { backgroundColor: colors.background },
+  headerShadowVisible: false,
+};
+
+function ProfileStackNavigator() {
+  return (
+    <ProfileStack.Navigator screenOptions={stackScreenOptions}>
+      <ProfileStack.Screen name="ProfileHome" component={GuardedProfile} options={{ headerShown: false }} />
+      <ProfileStack.Screen name="Recordings" component={GuardedRecordings} options={{ title: 'Recordings' }} />
+      <ProfileStack.Screen name="Settings" component={GuardedSettings} options={{ title: 'Settings' }} />
+    </ProfileStack.Navigator>
+  );
+}
+
 export function RootNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
@@ -88,10 +111,10 @@ export function RootNavigator() {
           ),
         })}
       >
+        <Tab.Screen name="Map" component={GuardedMap} />
         <Tab.Screen name="Radio" component={GuardedRadio} />
         <Tab.Screen name="Satellites" component={SatellitesStack} />
-        <Tab.Screen name="Recordings" component={GuardedRecordings} />
-        <Tab.Screen name="Settings" component={GuardedSettings} />
+        <Tab.Screen name="Profile" component={ProfileStackNavigator} />
       </Tab.Navigator>
     </NavigationContainer>
   );

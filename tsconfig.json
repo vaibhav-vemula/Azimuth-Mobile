@@ -2,15 +2,22 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "types": ["jest", "node"]
+    "types": [
+      "jest",
+      "node",
+      "geojson"
+    ]
   },
   "exclude": [
-    "node_modules",
-    "babel.config.js",
-    "metro.config.js",
-    "jest.config.js",
     "android",
+    "babel.config.js",
     "ios",
-    "modules/rtl-sdr/plugin"
+    "jest.config.js",
+    "metro.config.js",
+    "modules/rtl-sdr/plugin",
+    "node_modules",
+    "onchain",
+    "server",
+    "tools"
   ]
 }

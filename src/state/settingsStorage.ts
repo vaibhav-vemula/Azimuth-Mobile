@@ -1,4 +1,5 @@
 import { createMMKV } from 'react-native-mmkv';
+import { RecordingFormat } from '../capture/sigmf';
 import { MONITORED_SATELLITES } from '../data/satellites';
 
 const storage = createMMKV({ id: 'azimuth-settings' });
@@ -21,6 +22,8 @@ export interface Settings {
   biasTee: boolean;
   /** Testing aid: unlock Capture outside the pass window; such recordings last 2 minutes and are flagged as tests. */
   captureTestMode: boolean;
+  /** Full band = the whole dongle stream, as SatDump records it; compact = a filtered 288 kS/s slice. */
+  recordingFormat: RecordingFormat;
   /** Pick the LRPT downlink automatically from recent SatNOGS observations. */
   autoFrequency: boolean;
   /** LRPT downlink frequency per NORAD id. */
@@ -37,6 +40,7 @@ export function defaultSettings(): Settings {
     reminderMinutes: 10,
     biasTee: false,
     captureTestMode: true,
+    recordingFormat: 'fullband',
     autoFrequency: true,
     frequencyHzBySatellite,
   };

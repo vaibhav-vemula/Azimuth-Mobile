@@ -270,6 +270,61 @@ static void testRecorder() {
   }
 
   {
+    // Full-band mode is a straight copy of the dongle's stream, as SatDump records it: no filtering, no level
+    // changes, no dropped samples; only the unsigned samples become signed (value - 128).
+    azimuth::IqRecorder recorder;
+    CHECK(recorder.open(path, azimuth::RecordingMode::kRaw), "raw open failed");
+    std::vector<uint8_t> all(64000 * 7 + 4000);
+    std::mt19937 bytes(11);
+    for (auto& b : all) b = static_cast<uint8_t>(bytes() & 0xFF);
+    all[0] = 0; all[1] = 255; all[2] = 128; all[3] = 127;  // the extremes and the mid-point
+    const size_t chunks[] = {64000, 2, 12346, 64000, 30000, 4};
+    size_t pos = 0;
+    int c = 0;
+    while (pos < all.size()) {
+      const size_t n = std::min(chunks[c++ % 6], all.size() - pos);
+      CHECK(recorder.process(all.data() + pos, n), "raw process failed");
+      pos += n;
+    }
+    recorder.close();
+    auto data = readFile(path);
+    CHECK(data.size() == all.size(), "raw file is %zu bytes, input was %zu", data.size(), all.size());
+    size_t wrong = 0;
+    for (size_t i = 0; i < std::min(data.size(), all.size()); ++i) {
+      if (data[i] != static_cast<int8_t>(static_cast<int>(all[i]) - 128)) ++wrong;
+    }
+    CHECK(wrong == 0, "%zu raw samples differ from input - 128", wrong);
+    CHECK(data[0] == -128 && data[1] == 127 && data[2] == 0 && data[3] == -1, "extremes map wrongly: %d %d %d %d", data[0], data[1], data[2], data[3]);
+    CHECK(recorder.bytesWritten() == all.size(), "bytesWritten() = %llu", (unsigned long long)recorder.bytesWritten());
+    CHECK(recorder.samplesWritten() == all.size() / 2, "samplesWritten() = %llu (a sample is one I/Q pair)", (unsigned long long)recorder.samplesWritten());
+  }
+
+  {
+    // The raw stream keeps the whole 2.3 MHz of spectrum: a tone 800 kHz from the centre (the other Meteor
+    // downlink) must still be there, unlike the filtered 288 kS/s file.
+    azimuth::IqRecorder recorder;
+    recorder.open(path, azimuth::RecordingMode::kRaw);
+    long t = 0;
+    for (int b = 0; b < 100; ++b) {
+      auto iq = recorderBlock(-800000, 0.2, 0, 0, 0.02, t, gen);
+      recorder.process(iq.data(), iq.size());
+    }
+    recorder.close();
+    auto data = readFile(path);
+    const double fs = 2304000.0;
+    double cr = 0, ci = 0;
+    size_t count = 0;
+    for (size_t i = 5000; i < data.size() / 2; ++i, ++count) {
+      const double ph = 2.0 * M_PI * 800000.0 * i / fs;  // mix the -800 kHz tone to DC
+      const double I = data[2 * i], Q = data[2 * i + 1];
+      cr += I * std::cos(ph) - Q * std::sin(ph);
+      ci += I * std::sin(ph) + Q * std::cos(ph);
+    }
+    const double amp = std::sqrt(cr * cr + ci * ci) / count;
+    CHECK(amp > 20.0, "tone 800 kHz off-centre is missing from the full-band file (%.1f)", amp);
+  }
+
+  {
     azimuth::IqRecorder recorder;
     CHECK(!recorder.open("/nonexistent_dir/x.cs8"), "opened a path in a missing directory");
     CHECK(recorder.lastError() != 0, "no error recorded");

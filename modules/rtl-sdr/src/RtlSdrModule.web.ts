@@ -46,7 +46,7 @@ const RtlSdrWebModule: RtlSdrNativeModule = {
   async setBiasTee(_enabled: boolean) {
     return unsupported('setBiasTee');
   },
-  async startRecording(_name: string, _label: string, _maxDurationMs: number) {
+  async startRecording(_name: string, _label: string, _maxDurationMs: number, _fullBand: boolean) {
     return unsupported('startRecording');
   },
   async stopRecording() {

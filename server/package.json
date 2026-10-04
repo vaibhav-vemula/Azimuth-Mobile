@@ -1,0 +1,24 @@
+{
+  "name": "azimuth-verifier",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Azimuth verifier: checks signed reports, runs chest and reward rules, serves the requester console.",
+  "license": "GPL-3.0-or-later",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test/*.test.js",
+    "update-tles": "node tools/update-tles.js",
+    "verify-report": "node lib/verify-report.cjs",
+    "review": "node --env-file=.env tools/review.js",
+    "create-chest": "node --env-file=.env tools/create-chest.js",
+    "admin": "node --env-file=.env admin/index.js"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "satellite.js": "^7.1.0"
+  }
+}

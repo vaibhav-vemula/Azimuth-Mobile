@@ -4,9 +4,15 @@ export type SatellitesStackParamList = {
   Capture: undefined;
 };
 
-export type RootTabParamList = {
-  Radio: undefined;
-  Satellites: undefined;
+export type ProfileStackParamList = {
+  ProfileHome: undefined;
   Recordings: undefined;
   Settings: undefined;
+};
+
+export type RootTabParamList = {
+  Map: undefined;
+  Radio: undefined;
+  Satellites: undefined;
+  Profile: undefined;
 };

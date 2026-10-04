@@ -31,6 +31,7 @@ constexpr size_t kFileBufferBytes = 256 * 1024;
 
 IqRecorder::IqRecorder()
     : file_(nullptr),
+      mode_(RecordingMode::kDecimated),
       taps_(kTapCount),
       histI_(kTapCount - 1, 0.0f),
       histQ_(kTapCount - 1, 0.0f),
@@ -57,7 +58,7 @@ IqRecorder::IqRecorder()
 
 IqRecorder::~IqRecorder() { close(); }
 
-bool IqRecorder::open(const char* path) {
+bool IqRecorder::open(const char* path, RecordingMode mode) {
   std::lock_guard<std::mutex> guard(mutex_);
   if (file_ != nullptr) {
     std::fclose(file_);
@@ -71,6 +72,7 @@ bool IqRecorder::open(const char* path) {
   }
   std::setvbuf(file_, nullptr, _IOFBF, kFileBufferBytes);
 
+  mode_ = mode;
   std::fill(histI_.begin(), histI_.end(), 0.0f);
   std::fill(histQ_.begin(), histQ_.end(), 0.0f);
   phase_ = 0;
@@ -101,6 +103,15 @@ bool IqRecorder::isOpen() const {
 bool IqRecorder::process(const uint8_t* iq, size_t byteCount) {
   std::lock_guard<std::mutex> guard(mutex_);
   if (file_ == nullptr) return false;
+
+  if (mode_ == RecordingMode::kRaw) {
+    // Whole I/Q pairs only. XOR with 0x80 turns the dongle's unsigned samples into signed ones (value - 128).
+    const size_t bytes = byteCount & ~static_cast<size_t>(1);
+    if (bytes == 0) return true;
+    out_.resize(bytes);
+    for (size_t i = 0; i < bytes; ++i) out_[i] = static_cast<int8_t>(iq[i] ^ 0x80);
+    return writeBlock(bytes, bytes / 2);
+  }
 
   const size_t n = byteCount / 2;
   if (n == 0) return true;
@@ -160,7 +171,10 @@ bool IqRecorder::process(const uint8_t* iq, size_t byteCount) {
     gain_ += (desired - gain_) * kGainSmoothing;
   }
 
-  const size_t bytes = out_.size();
+  return writeBlock(out_.size(), count);
+}
+
+bool IqRecorder::writeBlock(size_t bytes, size_t samples) {
   if (std::fwrite(out_.data(), 1, bytes, file_) != bytes) {
     lastError_ = errno != 0 ? errno : EIO;
     std::fclose(file_);
@@ -168,7 +182,7 @@ bool IqRecorder::process(const uint8_t* iq, size_t byteCount) {
     return false;
   }
   bytesWritten_ += bytes;
-  samplesWritten_ += count;
+  samplesWritten_ += samples;
 
   if (++blocksSinceFlush_ >= kFlushEveryBlocks) {
     blocksSinceFlush_ = 0;

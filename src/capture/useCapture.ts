@@ -20,6 +20,8 @@ import { useAutoSetup } from './autoSetupStore';
 import {
   GainChange,
   POST_PASS_MARGIN_SEC,
+  RECORDING_FORMATS,
+  RecordingFormat,
   buildSigmfMetadata,
   recordingName,
   requiredFreeBytes,
@@ -33,6 +35,9 @@ export type CapturePhase = 'idle' | 'preparing' | 'recording' | 'finishing' | 'c
 export interface CaptureResult {
   name: string;
   directory: string;
+  /** Full path of the baseband file, for sharing. */
+  dataPath: string;
+  format: RecordingFormat;
   bytes: number;
   samples: number;
   droppedBlocks: number;
@@ -63,6 +68,9 @@ interface CaptureState {
   error: string | null;
   /** True when this capture is a testing-mode run rather than a recording of the real pass. */
   testRun: boolean;
+  /** How this recording is being stored. */
+  format: RecordingFormat;
+  dataPath: string | null;
 
   init: () => void;
   /** Remembers which pass the recorder screen is set up for, without starting anything. */
@@ -93,6 +101,7 @@ function metadataFor(
   startedAt: Date,
   status: 'recording' | 'complete' | 'interrupted' | 'failed',
   testRun: boolean,
+  format: RecordingFormat,
   extra: { endedAt?: Date; stats?: { bytes: number; samples: number; droppedBlocks: number }; error?: string | null } = {}
 ) {
   const location = useAppStore.getState().location ?? { latitudeDeg: 0, longitudeDeg: 0, heightKm: 0 };
@@ -110,6 +119,7 @@ function metadataFor(
       status,
       appVersion,
       testRecording: testRun,
+      format,
       autoSetup: { frequencySource: plan.frequencySource, gainReason: plan.gainReason, signalSnrDb: plan.signalSnrDb },
       gainChanges: gainLog,
       ...extra,
@@ -152,6 +162,8 @@ export const useCapture = create<CaptureState>((set, get) => ({
   result: null,
   error: null,
   testRun: false,
+  format: 'fullband',
+  dataPath: null,
 
   init: () => {
     if (listening) return;
@@ -171,7 +183,7 @@ export const useCapture = create<CaptureState>((set, get) => ({
     const { phase } = get();
     if (phase === 'preparing' || phase === 'recording' || phase === 'finishing') return;
     clearTimers();
-    set({ phase: 'idle', options, plan: null, currentGainDb: null, name: null, directory: null, startedAt: null, progress: null, result: null, error: null, testRun: false });
+    set({ phase: 'idle', options, plan: null, currentGainDb: null, name: null, directory: null, startedAt: null, progress: null, result: null, error: null, testRun: false, dataPath: null });
   },
 
   start: async (options) => {
@@ -194,7 +206,8 @@ export const useCapture = create<CaptureState>((set, get) => ({
       const remainingSec = testRun
         ? TEST_RECORDING_SEC
         : Math.max(0, (options.pass.setTime.getTime() - now) / 1000) + POST_PASS_MARGIN_SEC;
-      const needed = requiredFreeBytes(remainingSec);
+      const format = useAppStore.getState().settings.recordingFormat;
+      const needed = requiredFreeBytes(remainingSec, format);
       const free = await getFreeStorageBytes();
       if (free < needed) {
         throw new Error(
@@ -223,10 +236,10 @@ export const useCapture = create<CaptureState>((set, get) => ({
       const startedAt = new Date();
       const name = recordingName(options.satellite, startedAt);
       const maxDurationMs = remainingSec * 1000 + 15_000;
-      const started = await startRecording(name, `${options.satellite.name} pass`, maxDurationMs);
-      await writeRecordingMetadata(name, metadataFor(options, plan, startedAt, 'recording', testRun));
+      const started = await startRecording(name, `${options.satellite.name} pass`, maxDurationMs, format === 'fullband');
+      await writeRecordingMetadata(name, metadataFor(options, plan, startedAt, 'recording', testRun, format));
 
-      set({ phase: 'recording', plan, currentGainDb: plan.gainDb, name, directory: started.directory, startedAt, testRun });
+      set({ phase: 'recording', plan, currentGainDb: plan.gainDb, name, directory: started.directory, dataPath: started.dataPath, startedAt, testRun, format });
 
       clearTimers();
       startClipGuard(() => (Date.now() - startedAt.getTime()) / 1000, set, get);
@@ -241,7 +254,7 @@ export const useCapture = create<CaptureState>((set, get) => ({
   },
 
   stop: async (reason = 'user') => {
-    const { phase, options, plan, name, directory, startedAt, testRun } = get();
+    const { phase, options, plan, name, directory, dataPath, startedAt, testRun, format } = get();
     if (phase !== 'recording' || !options || !plan || !name || !startedAt) return;
 
     clearTimers();
@@ -255,7 +268,7 @@ export const useCapture = create<CaptureState>((set, get) => ({
       const failed = !!summary.error;
       await writeRecordingMetadata(
         name,
-        metadataFor(options, plan, startedAt, failed ? 'failed' : interrupted ? 'interrupted' : 'complete', testRun, {
+        metadataFor(options, plan, startedAt, failed ? 'failed' : interrupted ? 'interrupted' : 'complete', testRun, format, {
           endedAt,
           stats,
           error: summary.error,
@@ -266,10 +279,12 @@ export const useCapture = create<CaptureState>((set, get) => ({
         result: {
           name,
           directory: directory ?? '',
+          dataPath: dataPath ?? `${directory ?? ''}/baseband.cs8`,
+          format,
           bytes: summary.bytes,
           samples: summary.samples,
           droppedBlocks: summary.droppedBlocks,
-          durationSec: summary.samples / 288_000,
+          durationSec: summary.samples / RECORDING_FORMATS[format].sampleRateHz,
           interrupted,
           error: summary.error,
         },
@@ -285,6 +300,6 @@ export const useCapture = create<CaptureState>((set, get) => ({
     const { phase } = get();
     if (phase === 'recording' || phase === 'preparing' || phase === 'finishing') return;
     clearTimers();
-    set({ phase: 'idle', options: null, plan: null, currentGainDb: null, name: null, directory: null, startedAt: null, progress: null, result: null, error: null, testRun: false });
+    set({ phase: 'idle', options: null, plan: null, currentGainDb: null, name: null, directory: null, startedAt: null, progress: null, result: null, error: null, testRun: false, dataPath: null });
   },
 }));

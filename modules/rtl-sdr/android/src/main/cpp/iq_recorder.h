@@ -20,6 +20,17 @@ namespace azimuth {
  * without it the quantisation would remove most of the signal. Decoders such as SatDump apply
  * their own AGC, so a slowly varying overall level is harmless.
  */
+/** How [IqRecorder] stores the stream. */
+enum class RecordingMode {
+  /** 129-tap low-pass, /8 decimation to 288 kS/s, DC blocking and slow level adjustment. Small files. */
+  kDecimated,
+  /**
+   * The dongle's full 2.304 MS/s stream, only converted from unsigned to signed 8-bit. This is what SatDump
+   * itself records ("cs8"): every sample, the whole 2.3 MHz of spectrum, nothing filtered or altered.
+   */
+  kRaw,
+};
+
 class IqRecorder {
  public:
   static constexpr int kDecimation = 8;
@@ -33,7 +44,7 @@ class IqRecorder {
   IqRecorder& operator=(const IqRecorder&) = delete;
 
   /** Creates (truncating) the output file. Returns false and sets lastError() on failure. */
-  bool open(const char* path);
+  bool open(const char* path, RecordingMode mode = RecordingMode::kDecimated);
 
   /** Flushes, syncs and closes. Safe to call when not open. */
   void close();
@@ -52,8 +63,12 @@ class IqRecorder {
   float gain() const;
 
  private:
+  /** Writes out_ and updates the counters and flush schedule. Closes the file and returns false on error. */
+  bool writeBlock(size_t bytes, size_t samples);
+
   mutable std::mutex mutex_;
   std::FILE* file_;
+  RecordingMode mode_;
   std::vector<float> taps_;
   std::vector<float> histI_;
   std::vector<float> histQ_;

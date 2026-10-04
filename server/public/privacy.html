@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azimuth privacy policy (draft)</title>
+<style>
+  body { margin:0; background:#05070d; color:#f5f7fa; font:16px/1.6 system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; } h2 { font-size: 18px; margin-top: 28px; }
+  .draft { border:1px solid #ffb74d; color:#ffb74d; border-radius:12px; padding:12px 14px; }
+  a { color:#4dd0e1; } li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Azimuth privacy policy</h1>
+  <p class="draft"><strong>Draft.</strong> This text describes what the software does. It has not been reviewed by a lawyer, and the contact details and legal sections below must be completed before publication.</p>
+
+  <h2>What Azimuth collects</h2>
+  <p>Azimuth collects signal measurements only while you have started a mapping session, a satellite recording, or opened a chest. While mapping, a notification is shown. Separately, while the Map is open the app shows your position and remembers on your phone, and only on your phone, the ground you have walked so that the fog stays cleared, and a local signal map of what your phone measured where. Neither is ever sent anywhere.</p>
+  <ul>
+    <li><strong>Signal measurements</strong>: how many Wi-Fi networks and Bluetooth devices are nearby and how strong they are, the strength and type of cellular signal and the cell tower identifier, GPS signal quality, and, if you plug in a radio dongle, the strength of certain radio signals.</li>
+    <li><strong>Place</strong>: your position is converted on your phone into a map cell about 100 metres across. Only the cell, rounded to a 15-minute window, is sent. Your exact position and trail are not sent.</li>
+    <li><strong>Wallet address</strong>, to sign in, sign reports and pay rewards.</li>
+    <li><strong>Phone model</strong>, because phones measure signal strength differently.</li>
+    <li>For satellite recordings: the satellite, the time window, and the size and settings of the recording. The recording file itself stays on your phone.</li>
+  </ul>
+
+  <h2>What Azimuth does not collect</h2>
+  <ul>
+    <li>Wi-Fi network names or hardware addresses, or Bluetooth device names or addresses of other people's devices. They are used on your phone only to avoid counting a device twice, then discarded. (A venue tag name is checked on your phone only when a venue asked for it, and only whether it was heard is sent.)</li>
+    <li>The content of any radio transmission. Azimuth only measures signal strength, and it never transmits.</li>
+    <li>Your contacts, photos, or advertising identifiers.</li>
+  </ul>
+
+  <h2>Where it is stored</h2>
+  <p>Your fog map and trail are stored only on your phone. Reports are sent to the Azimuth verifier, which stores them to check them, to pay rewards and to build a coverage map in which places are shown at cell level. Reward payments are public on the Solana blockchain.</p>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>Mapping is off until you start it. You can stop at any time.</li>
+    <li>Set a home exclusion zone so nothing is recorded near your home.</li>
+    <li>In Profile, <strong>Erase fog map on this phone</strong> clears local history, and <strong>Delete my data from the network</strong> erases the readings and places held for your wallet. The request is signed by your wallet.</li>
+    <li>Information that is kept after deletion: report fingerprints (to stop replays), chest claim records, the link between a Seeker and a wallet (to stop one device acting as many), and the earnings ledger. These contain no readings or places. [Retention period to be stated.]</li>
+  </ul>
+
+  <h2>Sharing</h2>
+  <p>The coverage map may be published or sold to organisations that need to know where signals can be received. It is built from cell-level aggregates and does not identify individuals. [To be confirmed with the data licence decision.]</p>
+
+  <h2>Contact</h2>
+  <p>[Name, address and email of the operator.]</p>
+</main>
+</body>
+</html>

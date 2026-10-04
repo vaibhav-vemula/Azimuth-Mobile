@@ -1,0 +1,20 @@
+{
+  "name": "azimuth-onchain",
+  "private": true,
+  "scripts": {
+    "build": "anchor build",
+    "test": "anchor test -- --features short-grace"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.0",
+    "@solana/spl-token": "^0.4.9"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "chai": "^4.3.0",
+    "mocha": "^10.0.0",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^5.4.0"
+  }
+}

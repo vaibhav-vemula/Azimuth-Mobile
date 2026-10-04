@@ -5,11 +5,13 @@ An Android app for the **RTL-SDR Blog V4** (and other RTL2832U dongles) that doe
 - **Radio:** a live spectrum analyzer and wideband FM receiver.
 - **Satellites:** predicts the next **Meteor-M2 3 / M2-4** weather-satellite passes over your location, shows each pass N2YO-style (ground track on a map plus a sky plot), and **records the pass** to a file you can turn into a weather image with SatDump.
 
-Everything is computed on the phone. There are no accounts and no servers of ours; orbital data comes from CelesTrak and SatNOGS.
+Beyond the original two features, Azimuth is being built into a network for **Solana Seeker** phones: you map cellular, Wi-Fi, Bluetooth and (with a dongle) radio signals as you move, uncover a fog-of-war map, and take paid measurement requests called chests. Reports are signed by your wallet and checked by a verifier; rewards come from requester-funded escrow. Mapping, the fog map and the original Radio and Satellites features all work offline and without a wallet.
+
+The network parts are described in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) (what exists, how to run it, what is and is not verified) and [docs/DEPIN_DESIGN.md](docs/DEPIN_DESIGN.md) (the reasoning and plan). Orbital data comes from CelesTrak and SatNOGS.
 
 ## Status
 
-Built and verified without hardware in the loop: the full app compiles for Android (debug APK builds), the JavaScript bundles with Hermes, 180+ unit tests and 450 native DSP checks pass, and the pass predictor matches an independent implementation (Skyfield) to under a second on all 12 passes in a 48 hour comparison.
+Built and verified without hardware in the loop: the full app compiles for Android (debug APK builds), the JavaScript bundles with Hermes, 180+ unit tests and 470+ native DSP checks pass, and the pass predictor matches an independent implementation (Skyfield) to under a second on all 12 passes in a 48 hour comparison.
 
 **Not yet verified on a real satellite pass.** FM reception, the spectrum and the USB driver were confirmed on a real V4. Satellite capture needs a real overhead pass and a suitable antenna. See [Known limitations](#known-limitations).
 
@@ -17,10 +19,12 @@ Built and verified without hardware in the loop: the full app compiles for Andro
 
 | Tab | What it does |
 |-----|--------------|
+| **Map** (home) | A real street map covered in fog. Turn on mapping and walk: the fog clears where you go. Open chests appear on the map; the nearest one has an arrow and distance. Live readings, and sign and submit a session, are in the Mapping panel. |
+| **Profile** | Wallet, Seeker check, earnings, privacy and data deletion, plus links to Recordings and Settings. |
 | **Radio** | Connect the dongle, tune any frequency 0.5 MHz to 1.766 GHz (HF via the V4 upconverter), live spectrum, mono wideband-FM audio with volume. |
 | **Satellites** | Next passes for M2-3 and M2-4 (peak elevation, direction, quality, countdown), reminders, and per-pass detail: ground-track map with coverage footprint, polar sky plot, a time scrubber, and a **Capture** button. |
-| **Recordings** | Saved passes with size, duration, peak elevation and gap count. Share, export to Downloads, or delete. |
-| **Settings** | Location (GPS or manual), minimum pass elevation, reminders, orbital-data status, storage. |
+| **Recordings** (in Profile) | Saved passes with size, duration, peak elevation and gap count. Share, export to Downloads, or delete. |
+| **Settings** (in Profile) | Location (GPS or manual), minimum pass elevation, reminders, orbital-data status, storage. |
 
 ## Hardware
 
@@ -80,14 +84,14 @@ These come from published guidance for receiving Meteor LRPT with an RTL-SDR ([R
 
 - manual gain, not AGC, kept moderate rather than at maximum;
 - 137.900 MHz as the primary frequency and 137.100 MHz as the backup;
-- sampling at 2.304 MS/s (never the problematic 250 kS/s mode), recorded at 288 kS/s;
-- DC blocking applied to the recording;
+- sampling at 2.304 MS/s (never the problematic 250 kS/s mode), recorded full band like SatDump does;
+- DC blocking applied to compact recordings (SatDump offers it for full band);
 - a raw recording kept so it can be re-processed;
 - advice shown in the app about antenna placement (V-dipole arms of 53.4 cm at 120 degrees, level, clear of electronics), keeping the phone and chargers away, choosing high passes (at least 10 to 15 degrees, ideally 30 or more), and starting a little early.
 
 ## What is stored
 
-Each pass becomes a folder in the app's storage (`Android/data/<package>/files/captures/`):
+Each pass becomes its own folder in the app's storage (`Android/data/<package>/files/captures/`):
 
 ```
 Meteor-M2-4_20261002T191930Z/
@@ -95,8 +99,19 @@ Meteor-M2-4_20261002T191930Z/
 └── baseband.sigmf-meta     metadata (SigMF 1.0.0 JSON)
 ```
 
-- **`baseband.cs8`**: interleaved signed 8-bit I/Q at **288 kS/s** centred on the downlink frequency (SigMF datatype `ci8`). The dongle runs at 2.304 MS/s; the app low-pass filters and decimates by 8 on the fly, removes the DC offset, and applies a slow level adjustment so the weak signal is not lost in 8-bit rounding. About **0.58 MB per second, roughly 350 MB for a 10 minute pass.**
-- **`baseband.sigmf-meta`**: satellite, NORAD ID, frequency, sample rate, gain and how it was chosen, any gain steps made during the pass, bias-tee, receiver, pass times and peak elevation, the orbital elements used, your location rounded to about 1 km, and at the end the byte count, duration and number of lost USB blocks (**0 means a gap-free capture**). It is written when recording starts and finalised when it stops, so a crash still leaves a usable file.
+`baseband.cs8` is interleaved **signed 8-bit I/Q** (SigMF datatype `ci8`, SatDump format `cs8`), centred on the downlink the app chose. There are two ways to store it, chosen in **Settings > Recording format**:
+
+| | **Full band** (default) | **Compact** |
+|---|---|---|
+| What it is | The receiver's whole stream, the way SatDump records | A filtered slice around the downlink |
+| Sample rate | **2.304 MS/s** | 288 kS/s |
+| Spectrum covered | **2.3 MHz** (both Meteor downlinks, 137.1 and 137.9, are inside it) | 0.29 MHz (only the chosen downlink) |
+| Processing | None. Every sample is kept; only the unsigned samples are converted to signed | Low-pass filter, decimation by 8, DC removal, slow level adjustment |
+| Size | about 4.6 MB/s, **roughly 2.8 GB for a 10 minute pass** | about 0.58 MB/s, roughly 350 MB for 10 minutes |
+
+Full band is a byte-for-byte copy of the dongle's stream (verified by the native tests), so it is the same kind of file SatDump itself records and nothing is lost for re-processing later. It is large: the app checks free space before starting and refuses if there is not enough.
+
+`baseband.sigmf-meta` records the satellite, NORAD ID, frequency, sample rate, recording format and the spectrum range covered, gain and how it was chosen, any gain steps made during the pass, bias-tee, receiver, pass times and peak elevation, the orbital elements used, your location rounded to about 1 km, and at the end the byte count, duration and number of lost USB blocks (**0 means a gap-free capture**). It is written when recording starts and finalised when it stops, so a crash still leaves a usable file.
 
 **Share** sends the data file through Android's share sheet. **Export** copies the whole folder to `Downloads/Azimuth/<name>/` so a computer can reach it.
 
@@ -106,10 +121,10 @@ The app records; it does not yet decode. Use [SatDump](https://www.satdump.org/)
 
 1. Export or share `baseband.cs8` to the computer.
 2. In SatDump choose **Offline processing**, pipeline **METEOR M2-X LRPT 72k** (`meteor_m2-x_lrpt`), or the **80k** variant (`meteor_m2-x_lrpt_80k`) if no frames are found.
-3. Input level: **Baseband**. Baseband format: **cs8**. Sample rate: **288000**. Select the file and start.
-4. The channel images and composites appear in the output folder.
+3. Input level: **Baseband**. Baseband format: **cs8**. Sample rate: **2304000** for Full band (**288000** for Compact). Tick DC blocking if offered. No frequency shift is needed because the file is centred on the downlink.
+4. Select the file and start. The channel images and composites appear in the output folder.
 
-An in-app decoder (QPSK demodulation, Viterbi, Reed-Solomon, image assembly) is the planned next phase; the recording format above is exactly what it will read.
+An in-app decoder (QPSK demodulation, Viterbi, Reed-Solomon, image assembly) is the planned next phase; the recording formats above are exactly what it will read.
 
 ## Pass prediction
 
@@ -161,6 +176,7 @@ The native DSP test builds with any C++17 compiler and checks the spectrum place
 ## Known limitations
 
 - **No real-pass verification yet.** The capture path (decimation, file format, foreground service, storage) is tested synthetically and builds, but has not recorded a real LRPT signal.
+- **Full-band recordings are big** (about 2.8 GB for 10 minutes). Use Compact in Settings if storage is tight.
 - **Sharing a recording** uses `expo-sharing` on app-private storage, which some devices refuse. **Export to Downloads** (Android 10+) is the reliable route.
 - **Scheduled/automatic capture** is not implemented; you start each recording yourself.
 - **Android only.** No iOS or web support (the web build has stubs that throw).

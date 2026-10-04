@@ -1,7 +1,7 @@
 import { MONITORED_SATELLITES } from '../data/satellites';
 import { Pass } from '../types/satellite';
 import {
-  RECORDING_BYTES_PER_SECOND,
+  RECORDING_FORMATS,
   buildSigmfMetadata,
   coarsen,
   estimateRecordingBytes,
@@ -43,29 +43,59 @@ describe('recording names', () => {
   });
 });
 
+describe('recording formats', () => {
+  it('describes the two formats by their data rates', () => {
+    expect(RECORDING_FORMATS.fullband).toMatchObject({ sampleRateHz: 2_304_000, bytesPerSecond: 4_608_000 });
+    expect(RECORDING_FORMATS.compact).toMatchObject({ sampleRateHz: 288_000, bytesPerSecond: 576_000 });
+    // 2 bytes per complex sample in both.
+    for (const f of Object.values(RECORDING_FORMATS)) expect(f.bytesPerSecond).toBe(f.sampleRateHz * 2);
+  });
+});
+
 describe('size estimates', () => {
-  it('matches the 288 kS/s ci8 data rate', () => {
-    expect(RECORDING_BYTES_PER_SECOND).toBe(576_000);
-    expect(estimateRecordingBytes(600)).toBe(345_600_000);
+  it('defaults to the full-band rate, like SatDump', () => {
+    expect(estimateRecordingBytes(600)).toBe(2_764_800_000);
+    expect(estimateRecordingBytes(600, 'fullband')).toBe(2_764_800_000);
     expect(estimateRecordingBytes(-5)).toBe(0);
   });
 
+  it('is eight times smaller for the compact format', () => {
+    expect(estimateRecordingBytes(600, 'compact')).toBe(345_600_000);
+    expect(estimateRecordingBytes(600, 'fullband')).toBe(8 * estimateRecordingBytes(600, 'compact'));
+  });
+
   it('asks for headroom beyond the expected file size', () => {
-    expect(requiredFreeBytes(600)).toBeGreaterThan(estimateRecordingBytes(600) * 1.25);
+    for (const format of ['fullband', 'compact'] as const) {
+      expect(requiredFreeBytes(600, format)).toBeGreaterThan(estimateRecordingBytes(600, format) * 1.25);
+    }
+    expect(requiredFreeBytes(600, 'fullband')).toBeGreaterThan(3_600_000_000);
   });
 });
 
 describe('SigMF metadata', () => {
   const meta = buildSigmfMetadata({ ...input, status: 'recording' });
 
-  it('declares the sample format and rate that SatDump needs', () => {
+  it('declares the sample format and rate that SatDump needs (full band by default)', () => {
     expect(meta.global['core:datatype']).toBe('ci8');
-    expect(meta.global['core:sample_rate']).toBe(288_000);
+    expect(meta.global['core:sample_rate']).toBe(2_304_000);
+    expect(meta.global['azimuth:recording_format']).toBe('fullband');
+    expect(meta.global['azimuth:decimation']).toBeNull();
+    // Centred on the downlink, covering 2.3 MHz so both Meteor downlinks are inside it.
+    expect(meta.global['azimuth:coverage_hz']).toEqual([137_900_000 - 1_152_000, 137_900_000 + 1_152_000]);
     expect(meta.global['core:version']).toBe('1.0.0');
     expect(meta.global['core:dataset']).toBe('baseband.cs8');
     expect(meta.captures[0]['core:frequency']).toBe(137_900_000);
     expect(meta.captures[0]['core:sample_start']).toBe(0);
     expect(meta.captures[0]['core:datetime']).toBe('2026-10-02T19:19:30.000Z');
+  });
+
+  it('describes the compact format with its lower rate and the processing applied', () => {
+    const compact = buildSigmfMetadata({ ...input, status: 'recording', format: 'compact' });
+    expect(compact.global['core:sample_rate']).toBe(288_000);
+    expect(compact.global['azimuth:recording_format']).toBe('compact');
+    expect(compact.global['azimuth:decimation']).toEqual({ input_rate: 2_304_000, factor: 8, dc_block: true, level_adjust: true });
+    expect(compact.global['azimuth:coverage_hz']).toEqual([137_900_000 - 144_000, 137_900_000 + 144_000]);
+    expect(compact.global['core:dataset']).toBe('baseband.cs8');
   });
 
   it('keeps the observer location coarse', () => {
@@ -85,10 +115,13 @@ describe('SigMF metadata', () => {
     const done = buildSigmfMetadata({
       ...input,
       status: 'complete',
+      format: 'compact',
       endedAt: new Date('2026-10-02T19:30:00Z'),
       stats: { bytes: 5_760_000, samples: 2_880_000, droppedBlocks: 0 },
     });
     expect(done.global['azimuth:duration_sec']).toBe(10);
+    const full = buildSigmfMetadata({ ...input, status: 'complete', stats: { bytes: 46_080_000, samples: 23_040_000, droppedBlocks: 0 } });
+    expect(full.global['azimuth:duration_sec']).toBe(10); // same 10 s at the full-band rate
     expect(done.global['azimuth:bytes']).toBe(5_760_000);
     expect(done.global['azimuth:dropped_blocks']).toBe(0);
     expect(done.global['azimuth:status']).toBe('complete');
@@ -100,11 +133,14 @@ describe('SigMF metadata', () => {
         buildSigmfMetadata({
           ...input,
           status: 'complete',
+          format: 'compact',
           endedAt: new Date('2026-10-02T19:30:00Z'),
           stats: { bytes: 5_760_000, samples: 2_880_000, droppedBlocks: 3 },
         })
       )
     );
+    expect(parsed.format).toBe('compact');
+    expect(parsed.sampleRateHz).toBe(288_000);
     expect(parsed.satelliteName).toBe('Meteor-M2 4');
     expect(parsed.noradId).toBe('59051');
     expect(parsed.frequencyHz).toBe(137_900_000);

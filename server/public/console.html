@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azimuth requester console</title>
+<style>
+  :root { --bg:#05070d; --card:#0b0f1a; --line:rgba(255,255,255,.12); --text:#f5f7fa; --muted:#9aa5b1; --accent:#4dd0e1; --bad:#ef5350; --good:#66bb6a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 0 0 12px; }
+  p.sub { color: var(--muted); margin: 0 0 24px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:16px; }
+  label { display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:12px 0 4px; }
+  input, select { width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--line); background:#05070d; color:var(--text); font:inherit; }
+  .row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; } @media (max-width:520px){ .row{grid-template-columns:1fr;} }
+  button { margin-top:16px; padding:12px 18px; border:0; border-radius:12px; background:var(--accent); color:#05070d; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--accent); border:1px solid var(--line); margin-top:0; padding:8px 12px; }
+  .msg { margin-top:12px; font-size:14px; } .bad{color:var(--bad)} .good{color:var(--good)} .muted{color:var(--muted)}
+  code { background:#05070d; padding:2px 6px; border-radius:6px; }
+  .bounty { border-top:1px solid var(--line); padding:12px 0; display:flex; justify-content:space-between; gap:12px; }
+  .bounty:first-of-type { border-top:0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Requester console</h1>
+  <p class="sub">Ask for a measurement at a place and set what you will pay. Players walk there, take it, and the reward is released after verification.</p>
+
+  <section>
+    <h2>Connection</h2>
+    <label for="key">Requester API key</label>
+    <input id="key" type="password" autocomplete="off" placeholder="Leave empty if the server has none (development)">
+  </section>
+
+  <section>
+    <h2>New chest</h2>
+    <form id="form">
+      <label for="title">Title</label>
+      <input id="title" required maxlength="80" placeholder="e.g. Wi-Fi quality at Main Street Cafe">
+      <div class="row">
+        <div>
+          <label for="kind">What to measure</label>
+          <select id="kind">
+            <option value="wifi-quality">Wi-Fi quality (phone)</option>
+            <option value="dead-zone">Cellular dead zone (phone)</option>
+            <option value="gap">Fill a map gap (phone)</option>
+            <option value="visit">Visit (phone)</option>
+            <option value="weather-radio">Weather radio reception (dongle)</option>
+            <option value="noise">Radio noise (dongle)</option>
+            <option value="satellite-pass">Meteor-M satellite pass (dongle)</option>
+          </select>
+        </div>
+        <div>
+          <label for="requester">Your name</label>
+          <input id="requester" required maxlength="60" placeholder="e.g. Main Street Cafe">
+        </div>
+      </div>
+      <div class="row">
+        <div><label for="lat">Latitude</label><input id="lat" required inputmode="decimal" placeholder="38.9072"></div>
+        <div><label for="lon">Longitude</label><input id="lon" required inputmode="decimal" placeholder="-77.0369"></div>
+      </div>
+      <p class="muted" id="cell">Cell: enter a place</p>
+      <div class="row">
+        <div><label for="reward">Reward per player (USDC)</label><input id="reward" required inputmode="decimal" value="0.50"></div>
+        <div><label for="fills">How many players</label><input id="fills" required inputmode="numeric" value="5"></div>
+      </div>
+      <div class="row">
+        <div><label for="days">Open for (days)</label><input id="days" required inputmode="numeric" value="7"></div>
+        <div><label for="onchain">On-chain bounty address (optional)</label><input id="onchain" placeholder="Created with the escrow program"></div>
+      </div>
+      <div class="row" id="venueRow">
+        <div><label for="beacon">Venue tag name (Visit chests, optional)</label><input id="beacon" maxlength="32" placeholder="e.g. azm-maincafe"></div>
+        <div><label for="sat">Satellite (pass chests)</label>
+          <select id="sat"><option value="59051">Meteor-M2 4</option><option value="57166">Meteor-M2 3</option></select></div>
+      </div>
+      <p class="muted">A venue tag is any Bluetooth device you control that advertises this name. Players prove they were there by hearing it. It raises the bar but does not make fakery impossible.</p>
+      <p class="muted" id="total"></p>
+      <button type="submit">Create chest</button>
+      <div class="msg" id="msg" role="status"></div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Open chests <button class="secondary" id="reload" type="button">Refresh</button></h2>
+    <div id="list" class="muted">Loading…</div>
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    <p class="muted">Rewards are paid from escrow only when an on-chain bounty address is attached; otherwise they are recorded as owed. A chest is filled by readings taken within about 120 m of the pin. The verifier checks plausibility, not truth, and says so in every receipt.</p>
+  </section>
+</main>
+<script src="/console/hex.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var origin = location.origin;
+
+  function cell() {
+    var lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
+    if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 85 || Math.abs(lon) > 180) return null;
+    return AzimuthHex.cellIdAt(lat, lon);
+  }
+  function refreshForm() {
+    var c = cell();
+    $('cell').textContent = c ? 'Cell: ' + c : 'Cell: enter a place';
+    var r = parseFloat($('reward').value), n = parseInt($('fills').value, 10);
+    $('total').textContent = r > 0 && n > 0 ? 'Total to fund: ' + (r * n).toFixed(2) + ' USDC' : '';
+  }
+  ['lat', 'lon', 'reward', 'fills'].forEach(function (id) { $(id).addEventListener('input', refreshForm); });
+
+  function show(msg, cls) { $('msg').className = 'msg ' + cls; $('msg').textContent = msg; }
+
+  $('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var c = cell();
+    if (!c) return show('Enter a valid latitude and longitude.', 'bad');
+    var body = {
+      title: $('title').value.trim(), kind: $('kind').value, cellId: c, requester: $('requester').value.trim(),
+      rewardUsdc: parseFloat($('reward').value), maxFills: parseInt($('fills').value, 10),
+      expiresMs: Date.now() + parseFloat($('days').value) * 86400000
+    };
+    var spec = {};
+    if (body.kind === 'visit' && $('beacon').value.trim()) spec.beaconName = $('beacon').value.trim();
+    if (body.kind === 'satellite-pass') { spec.noradId = $('sat').value; spec.windowStartMs = Date.now(); spec.windowEndMs = body.expiresMs; }
+    if (Object.keys(spec).length) body.spec = spec;
+    if ($('onchain').value.trim()) body.onchainBounty = $('onchain').value.trim();
+    var headers = { 'content-type': 'application/json' };
+    if ($('key').value) headers['x-api-key'] = $('key').value;
+    fetch(origin + '/v1/bounties', { method: 'POST', headers: headers, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (r) {
+        if (r.ok) { show('Chest created: ' + r.body.id, 'good'); load(); }
+        else show((r.body.errors || [r.body.error || 'Could not create the chest.']).join('. '), 'bad');
+      })
+      .catch(function () { show('Could not reach the server.', 'bad'); });
+  });
+
+  function load() {
+    fetch(origin + '/v1/bounties').then(function (r) { return r.json(); }).then(function (j) {
+      var list = $('list');
+      list.textContent = '';
+      if (!j.bounties.length) { list.textContent = 'No open chests.'; return; }
+      j.bounties.forEach(function (b) {
+        var row = document.createElement('div'); row.className = 'bounty';
+        var left = document.createElement('div');
+        var t = document.createElement('div'); t.textContent = b.title;
+        var m = document.createElement('div'); m.className = 'muted';
+        m.textContent = b.kind + ' · ' + b.cellId + ' · ' + b.remaining + ' left · ' + b.requester;
+        left.appendChild(t); left.appendChild(m);
+        var right = document.createElement('div'); right.textContent = b.rewardUsdc + ' USDC';
+        row.appendChild(left); row.appendChild(right); list.appendChild(row);
+      });
+    }).catch(function () { $('list').textContent = 'Could not load chests.'; });
+  }
+  $('reload').addEventListener('click', load);
+  refreshForm(); load();
+})();
+</script>
+</body>
+</html>

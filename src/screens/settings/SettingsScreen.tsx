@@ -4,10 +4,12 @@ import Constants from 'expo-constants';
 import { GlassCard } from '../../components/GlassCard';
 import { ManualLocationPrompt } from '../../components/ManualLocationPrompt';
 import { Screen } from '../../components/Screen';
-import { Badge, Button, Row, SectionLabel } from '../../components/ui';
+import { Badge, Button, Chip, Row, SectionLabel } from '../../components/ui';
+import { RECORDING_FORMATS, RecordingFormat } from '../../capture/sigmf';
 import { getFreeStorageBytes } from '../../../modules/rtl-sdr';
 import { MONITORED_SATELLITES } from '../../data/satellites';
 import { useAppStore } from '../../state/useAppStore';
+import { useMapping } from '../../mapping/useMapping';
 import { colors, typography } from '../../theme';
 import { formatBytes } from '../../utils/format';
 
@@ -41,15 +43,25 @@ export default function SettingsScreen() {
   }, []);
 
   const update = useAppStore.getState().updateSettings;
+  const fogStyle = useMapping((s) => s.fogStyle);
+  const setFogStyle = useMapping((s) => s.setFogStyle);
   const locationLabel =
     locationStatus === 'manual' ? 'Entered manually' : locationStatus === 'granted' ? 'From GPS' : locationStatus === 'denied' ? 'Permission denied' : 'Locating…';
 
   return (
-    <Screen>
+    <Screen topInset={false}>
       <View>
-        <Text style={styles.title}>Settings</Text>
         <Text style={styles.subtitle}>Location, predictions and storage</Text>
       </View>
+
+      <GlassCard style={{ gap: 12 }}>
+        <SectionLabel>Unmapped ground</SectionLabel>
+        <Text style={styles.subtitle}>How the map looks where you have not been yet.</Text>
+        <Row style={{ flexWrap: 'wrap' }}>
+          <Chip label="Night sky" selected={fogStyle === 'sky'} onPress={() => setFogStyle('sky')} />
+          <Chip label="Terrain lines" selected={fogStyle === 'terrain'} onPress={() => setFogStyle('terrain')} />
+        </Row>
+      </GlassCard>
 
       <GlassCard style={{ gap: 12 }}>
         <Row style={{ justifyContent: 'space-between' }}>
@@ -112,6 +124,25 @@ export default function SettingsScreen() {
             onPlus={() => update({ reminderMinutes: step(REMINDER_MINUTES, settings.reminderMinutes, 1) })}
           />
         ) : null}
+      </GlassCard>
+
+      <GlassCard style={{ gap: 12 }}>
+        <SectionLabel>Recording format</SectionLabel>
+        <Row>
+          {(Object.keys(RECORDING_FORMATS) as RecordingFormat[]).map((key) => (
+            <Chip
+              key={key}
+              label={`${RECORDING_FORMATS[key].label} · ${RECORDING_FORMATS[key].rateLabel}`}
+              selected={settings.recordingFormat === key}
+              onPress={() => update({ recordingFormat: key })}
+            />
+          ))}
+        </Row>
+        <Text style={styles.hint}>
+          {settings.recordingFormat === 'fullband'
+            ? 'Records the receiver\'s whole stream the way SatDump does: 2.3 MHz of spectrum with both Meteor downlinks, nothing filtered. About 4.6 MB per second, so roughly 2.8 GB for a 10 minute pass.'
+            : 'Records only a 0.29 MHz slice around the downlink, filtered and with DC removed. About 0.58 MB per second, roughly 350 MB for a 10 minute pass, but the other downlink is not in the file.'}
+        </Text>
       </GlassCard>
 
       <GlassCard style={{ gap: 10 }}>
@@ -202,7 +233,7 @@ export default function SettingsScreen() {
           <Text style={styles.value}>{freeBytes === null ? '–' : formatBytes(freeBytes)}</Text>
         </Row>
         <Text style={styles.hint}>
-          A 10 minute pass records about 350 MB. Recordings are kept in the app's storage until you export or delete them.
+          A 10 minute pass records about 2.8 GB in Full band format, or about 350 MB in Compact. Recordings are kept in the app's storage until you export or delete them.
         </Text>
       </GlassCard>
 

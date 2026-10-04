@@ -371,7 +371,8 @@ JNIEXPORT jint JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeSetBiasTee(JN
 
 JNIEXPORT jint JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeStartRecording(JNIEnv* env, jobject,
                                                                                   jlong handle,
-                                                                                  jstring path) {
+                                                                                  jstring path,
+                                                                                  jboolean fullBand) {
   std::shared_ptr<Session> session = fromHandle(handle);
   if (session == nullptr || path == nullptr) return -EINVAL;
 
@@ -387,7 +388,8 @@ JNIEXPORT jint JNICALL Java_expo_modules_rtlsdr_RtlSdrNative_nativeStartRecordin
 
   const char* chars = env->GetStringUTFChars(path, nullptr);
   if (chars == nullptr) return -ENOMEM;
-  const bool opened = session->recorder.open(chars);
+  const bool opened = session->recorder.open(
+      chars, fullBand ? azimuth::RecordingMode::kRaw : azimuth::RecordingMode::kDecimated);
   const int error = session->recorder.lastError();
   env->ReleaseStringUTFChars(path, chars);
   if (!opened) return error != 0 ? -error : -EIO;

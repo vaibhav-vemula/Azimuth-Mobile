@@ -28,7 +28,7 @@ export interface RecordingStatusEvent {
   name: string | null;
   /** Bytes written to baseband.cs8 so far. */
   bytes: number;
-  /** Complex samples written (at 288 kS/s). */
+  /** Complex samples written (2.304 MS/s full band, or 288 kS/s compact). */
   samples: number;
   /** USB blocks lost to overflow since the recording began; 0 means a gap-free capture. */
   droppedBlocks: number;
@@ -85,8 +85,11 @@ export interface RtlSdrNativeModule {
   getGains(): Promise<number[]>;
   setBiasTee(enabled: boolean): Promise<void>;
   /** Begins writing a decimated .cs8 recording. Requires a running 2.304 MS/s stream. */
-  /** `maxDurationMs` is a hard native-side limit so a recording can never outlive its pass. */
-  startRecording(name: string, label: string, maxDurationMs: number): Promise<RecordingStart>;
+  /**
+   * `maxDurationMs` is a hard native-side limit so a recording can never outlive its pass. `fullBand` records the
+   * dongle's whole 2.304 MS/s stream like SatDump does; otherwise a filtered 288 kS/s version is written.
+   */
+  startRecording(name: string, label: string, maxDurationMs: number, fullBand: boolean): Promise<RecordingStart>;
   stopRecording(): Promise<RecordingStatusEvent>;
   writeRecordingMetadata(name: string, json: string): Promise<void>;
   listRecordings(): Promise<RecordingInfo[]>;
