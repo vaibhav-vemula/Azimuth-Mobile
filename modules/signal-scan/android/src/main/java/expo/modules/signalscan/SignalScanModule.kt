@@ -7,6 +7,11 @@ import android.bluetooth.le.ScanResult as BleResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.GeomagneticField
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.GnssStatus
 import android.location.LocationManager
 import android.net.wifi.WifiManager
@@ -25,6 +30,7 @@ import android.telephony.CellSignalStrengthNr
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.Promise
+import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -44,9 +50,14 @@ class SignalScanModule : Module() {
   private var gnssCallback: GnssStatus.Callback? = null
   private var bleBusy = false
   private var lastWifiScanRequestAtMs = 0L
+  private var orientationListener: SensorEventListener? = null
+  /** The map and the AR view both use the orientation stream; it runs while at least one of them wants it. */
+  private var orientationClients = 0
 
   override fun definition() = ModuleDefinition {
     Name("signal-scan")
+
+    Events(EVENT_ORIENTATION)
 
     AsyncFunction("getCapabilities") {
       val pm = context.packageManager
@@ -80,7 +91,22 @@ class SignalScanModule : Module() {
       }
     }
 
+    /**
+     * Streams the phone's orientation as a quaternion, from Android's rotation-vector sensor (accelerometer, gyroscope
+     * and magnetometer fused). It maps device axes (x right, y up the screen, z out of the screen) to the earth frame
+     * (x east, y north, z up), relative to MAGNETIC north; `declinationDeg` is what to add to get true north. This is
+     * what an AR view needs to hold a virtual object still in the world as the phone turns.
+     */
+    AsyncFunction("startOrientation") { latitude: Double, longitude: Double ->
+      startOrientation(latitude, longitude)
+    }
+
+    AsyncFunction("stopOrientation") {
+      stopOrientation()
+    }
+
     OnDestroy {
+      stopOrientation(force = true)
       stopGnss()
     }
   }
@@ -339,7 +365,62 @@ class SignalScanModule : Module() {
     gnss = emptyMap()
   }
 
+  private fun startOrientation(latitude: Double, longitude: Double) {
+    orientationClients += 1
+    if (orientationListener != null) return
+    val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    val rotation = sensors.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+    if (rotation == null) {
+      orientationClients = maxOf(0, orientationClients - 1)
+      throw CodedException("NO_ORIENTATION_SENSOR", "This phone has no rotation sensor.", null)
+    }
+
+    val declination = try {
+      GeomagneticField(latitude.toFloat(), longitude.toFloat(), 0f, System.currentTimeMillis()).declination.toDouble()
+    } catch (e: Exception) {
+      0.0
+    }
+    val quaternion = FloatArray(4)
+    var lastEmitMs = 0L
+
+    val listener = object : SensorEventListener {
+      override fun onSensorChanged(event: SensorEvent) {
+        val now = System.currentTimeMillis()
+        if (now - lastEmitMs < ORIENTATION_MIN_INTERVAL_MS) return
+        lastEmitMs = now
+        SensorManager.getQuaternionFromVector(quaternion, event.values)
+        val accuracy = if (event.values.size > 4 && event.values[4] >= 0f) event.values[4].toDouble() else null
+        sendEvent(
+          EVENT_ORIENTATION,
+          mapOf(
+            "w" to quaternion[0].toDouble(),
+            "x" to quaternion[1].toDouble(),
+            "y" to quaternion[2].toDouble(),
+            "z" to quaternion[3].toDouble(),
+            "declinationDeg" to declination,
+            "accuracyRad" to accuracy
+          )
+        )
+      }
+
+      override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+    orientationListener = listener
+    sensors.registerListener(listener, rotation, SensorManager.SENSOR_DELAY_GAME)
+  }
+
+  private fun stopOrientation(force: Boolean = false) {
+    orientationClients = if (force) 0 else maxOf(0, orientationClients - 1)
+    if (orientationClients > 0) return
+    val listener = orientationListener ?: return
+    val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    sensors.unregisterListener(listener)
+    orientationListener = null
+  }
+
   companion object {
+    private const val EVENT_ORIENTATION = "onOrientation"
+    private const val ORIENTATION_MIN_INTERVAL_MS = 16L
     private const val BLE_SCAN_MS = 2000L
     private const val MIN_WIFI_SCAN_INTERVAL_MS = 35_000L
   }

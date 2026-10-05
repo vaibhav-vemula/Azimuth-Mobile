@@ -22,7 +22,8 @@ const need = (k) => {
 };
 const kind = need('kind');
 const dongle = ['weather-radio', 'noise', 'satellite-pass'].includes(kind);
-const spec = {};
+// Exact coordinates, so the AR view can put the chest where it really is (the cell id alone is only accurate to about 100 m).
+const spec = { lat: Number(need('lat')), lon: Number(need('lon')) };
 if (args.beacon) spec.beaconName = args.beacon;
 if (args.norad) { spec.noradId = args.norad; spec.windowStartMs = Date.now(); spec.windowEndMs = Date.now() + Number(args.days || 7) * 86400000; }
 

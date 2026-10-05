@@ -1,5 +1,5 @@
 import SignalScanModule from './src/SignalScanModule';
-import type { ScanCapabilities, ScanResult } from './src/SignalScanModule.types';
+import type { OrientationListener, ScanCapabilities, ScanResult, SignalScanSubscription } from './src/SignalScanModule.types';
 
 export * from './src/SignalScanModule.types';
 
@@ -22,6 +22,19 @@ export function stopMapping(): Promise<void> {
  */
 export function scan(includeBluetooth: boolean, beaconPrefix: string | null = null): Promise<ScanResult> {
   return SignalScanModule.scan(includeBluetooth, beaconPrefix);
+}
+
+/** Starts streaming the phone's orientation (for AR). Rejects if the phone has no rotation sensor. */
+export function startOrientation(latitude: number, longitude: number): Promise<void> {
+  return SignalScanModule.startOrientation(latitude, longitude);
+}
+
+export function stopOrientation(): Promise<void> {
+  return SignalScanModule.stopOrientation();
+}
+
+export function addOrientationListener(listener: OrientationListener): SignalScanSubscription {
+  return SignalScanModule.addListener('onOrientation', listener);
 }
 
 export default SignalScanModule;

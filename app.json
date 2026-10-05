@@ -40,7 +40,14 @@
         }
       ],
       "expo-notifications",
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Azimuth uses the camera to show treasure chests in AR where they really are.",
+          "recordAudioAndroid": false
+        }
+      ]
     ]
   }
 }

@@ -71,9 +71,33 @@ export interface ScanCapabilities {
   model: string;
 }
 
+/**
+ * The phone's orientation as a quaternion mapping device axes (x right, y up the screen, z out of the screen) to the
+ * earth frame (x east, y north, z up), relative to magnetic north.
+ */
+export interface OrientationEvent {
+  w: number;
+  x: number;
+  y: number;
+  z: number;
+  /** Degrees to add to a magnetic heading to get a true heading. */
+  declinationDeg: number;
+  /** Estimated heading error in radians, when the sensor reports it. */
+  accuracyRad: number | null;
+}
+
+export type OrientationListener = (event: OrientationEvent) => void;
+
+export interface SignalScanSubscription {
+  remove: () => void;
+}
+
 export interface SignalScanNativeModule {
   getCapabilities(): Promise<ScanCapabilities>;
   startMapping(): Promise<void>;
   stopMapping(): Promise<void>;
   scan(includeBluetooth: boolean, beaconPrefix: string | null): Promise<ScanResult>;
+  startOrientation(latitude: number, longitude: number): Promise<void>;
+  stopOrientation(): Promise<void>;
+  addListener(eventName: 'onOrientation', listener: OrientationListener): SignalScanSubscription;
 }

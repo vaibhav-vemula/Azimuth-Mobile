@@ -1,43 +1,16 @@
-import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '../../components/GlassCard';
 import { Badge, Button } from '../../components/ui';
 import { colors, typography } from '../../theme';
 import { Chest } from '../../network/api';
-import { useSubmission } from '../../network/useSubmission';
-import { useMapping } from '../../mapping/useMapping';
-import { useWallet } from '../../wallet/useWallet';
+import { useChestClaim } from '../../ar/claim';
+import { AR_RANGE_M } from '../../ar/orientation';
 import { CHEST_KIND, formatDistance, timeLeft } from './chestInfo';
 
-const DEFAULT_MIN_SAMPLES = 3;
-
-export function ChestCard({ chest, distance, mappingRunning, scans }: { chest: Chest; distance: number | null; mappingRunning: boolean; scans: number }) {
+export function ChestCard({ chest, distance, mappingRunning, scans, onAr }: { chest: Chest; distance: number | null; mappingRunning: boolean; scans: number; onAr?: () => void }) {
   const kind = CHEST_KIND[chest.kind];
-  const readingsNear = useMapping((s) => s.readingsNear);
-  const radioReadingsNear = useMapping((s) => s.radioReadingsNear);
-  const sondeDetectionsNear = useMapping((s) => s.sondeDetectionsNear);
-  const buildChestReport = useMapping((s) => s.buildChestReport);
-  const address = useWallet((s) => s.address);
-  const { state, submit, reset } = useSubmission();
-
-  const needed = chest.spec.minSamples ?? DEFAULT_MIN_SAMPLES;
-  // `scans` is read so this recomputes whenever a new reading lands.
-  const have = useMemo(() => (mappingRunning ? readingsNear(chest.cellId) : 0), [mappingRunning, readingsNear, chest.cellId, scans]);
-  const dongleOnly = chest.requires === 'dongle';
-  const sonde = chest.kind === 'sonde';
-  const radioHave = useMemo(
-    () => (mappingRunning && dongleOnly ? (sonde ? sondeDetectionsNear(chest.cellId) : radioReadingsNear(chest.cellId)) : 0),
-    [mappingRunning, dongleOnly, sonde, radioReadingsNear, sondeDetectionsNear, chest.cellId, scans]
-  );
-  const passChest = chest.kind === 'satellite-pass';
-  const ready = !passChest && mappingRunning && have >= needed && (!dongleOnly || radioHave >= 1);
-
-  const open = async () => {
-    if (!address) return;
-    const report = await buildChestReport(address, { id: chest.id, cellId: chest.cellId });
-    if (report) await submit(report);
-  };
+  const { state, ready, hint, claim, passChest, dongleOnly } = useChestClaim(chest, mappingRunning, scans);
 
   return (
     <GlassCard style={styles.card}>
@@ -72,32 +45,22 @@ export function ChestCard({ chest, distance, mappingRunning, scans }: { chest: C
       ) : (
         <>
           {state.phase === 'error' ? <Text style={styles.error}>{state.message}</Text> : null}
-          {passChest ? (
-            <Text style={styles.hint}>Record the pass from the Satellites tab. The receipt you sign afterwards claims this chest.</Text>
-          ) : !address ? (
-            <Text style={styles.hint}>Connect a wallet in Profile to open chests.</Text>
-          ) : !mappingRunning ? (
-            <Text style={styles.hint}>Start mapping on the Map tab, then walk to this chest.</Text>
-          ) : (
-            <Text style={styles.hint}>
-              {have < needed
-                ? `Readings near the chest: ${have} of ${needed}. Keep walking toward it.`
-                : dongleOnly && radioHave < 1
-                  ? sonde
-                  ? `Listening for the sonde on ${((chest.spec.frequencyHz ?? 0) / 1e6).toFixed(3)} MHz. Walk toward the landing area with the antenna up.`
-                  : 'Waiting for a dongle reading. Plug in the RTL-SDR with an antenna and stay nearby.'
-                  : 'Ready to open.'}
-            </Text>
-          )}
+          <Text style={styles.hint}>{hint}</Text>
+          {onAr && !passChest ? (
+            <Button
+              label={distance !== null && distance <= AR_RANGE_M ? 'Find it in AR' : `AR opens within ${AR_RANGE_M} m`}
+              variant="secondary"
+              icon="camera-outline"
+              disabled={distance === null || distance > AR_RANGE_M}
+              onPress={onAr}
+            />
+          ) : null}
           {passChest ? null : <Button
             label={state.phase === 'signing' ? 'Waiting for wallet…' : state.phase === 'sending' ? 'Sending…' : 'Open chest'}
             icon="cube-outline"
             disabled={!ready}
             loading={state.phase === 'signing' || state.phase === 'sending'}
-            onPress={() => {
-              reset();
-              void open();
-            }}
+            onPress={() => void claim()}
           />}
         </>
       )}

@@ -122,7 +122,7 @@
       rewardUsdc: parseFloat($('reward').value), maxFills: parseInt($('fills').value, 10),
       expiresMs: Date.now() + parseFloat($('days').value) * 86400000
     };
-    var spec = {};
+    var spec = { lat: parseFloat($('lat').value), lon: parseFloat($('lon').value) };
     if (body.kind === 'visit' && $('beacon').value.trim()) spec.beaconName = $('beacon').value.trim();
     if (body.kind === 'satellite-pass') { spec.noradId = $('sat').value; spec.windowStartMs = Date.now(); spec.windowEndMs = body.expiresMs; }
     if (Object.keys(spec).length) body.spec = spec;

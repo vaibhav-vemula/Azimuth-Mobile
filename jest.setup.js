@@ -5,6 +5,9 @@ jest.mock('./modules/signal-scan/src/SignalScanModule', () => ({
     getCapabilities: jest.fn(async () => ({ telephony: true, wifi: true, bluetoothLe: true, sdk: 34, model: 'Test phone' })),
     startMapping: jest.fn(async () => undefined),
     stopMapping: jest.fn(async () => undefined),
+    startOrientation: jest.fn(async () => undefined),
+    stopOrientation: jest.fn(async () => undefined),
+    addListener: jest.fn(() => ({ remove: () => undefined })),
     scan: jest.fn(async () => ({
       atMs: Date.now(),
       cellular: { available: true, cells: [] },
@@ -38,4 +41,17 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     Layer: stub('Layer'),
     Marker: stub('Marker'),
   };
+});
+
+// Camera and GL are native; AR screens get plain stand-ins under Jest.
+jest.mock('expo-camera', () => {
+  const React = require('react');
+  return {
+    CameraView: ({ children }) => React.createElement(React.Fragment, null, children),
+    useCameraPermissions: () => [{ granted: true, canAskAgain: true }, jest.fn(async () => ({ granted: true }))],
+  };
+});
+jest.mock('expo-gl', () => {
+  const React = require('react');
+  return { GLView: () => React.createElement(React.Fragment, null) };
 });

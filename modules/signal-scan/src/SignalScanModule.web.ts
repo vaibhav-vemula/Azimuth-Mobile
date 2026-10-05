@@ -7,6 +7,9 @@ const stub: SignalScanNativeModule = {
   startMapping: unsupported,
   stopMapping: unsupported,
   scan: unsupported,
+  startOrientation: unsupported,
+  stopOrientation: unsupported,
+  addListener: () => ({ remove: () => undefined }),
 };
 
 export default stub;
