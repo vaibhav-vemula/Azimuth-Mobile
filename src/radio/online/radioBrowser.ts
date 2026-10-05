@@ -169,12 +169,15 @@ export async function searchByFrequency(mhz: number, { countryCode = null, here 
   return rankStations(dedupe(stations), countryCode, here);
 }
 
-/** Stations matching a name or word, best first. */
+/** Stations matching a name or word, best first. With a country, only that country's stations. */
 export async function searchByName(text: string, { countryCode = null, here = null, fetchImpl = fetch }: SearchOptions = {}): Promise<Station[]> {
   const term = text.trim();
   if (term.length < 2) return [];
-  const rows = await query(`${SEARCH}&name=${encodeURIComponent(term)}`, fetchImpl);
-  return rankStations(dedupe(rows.map(stationFromRow).filter((s): s is Station => s !== null)), countryCode, here);
+  const country = countryCode ? `&countrycode=${encodeURIComponent(countryCode.toUpperCase())}` : '';
+  const rows = await query(`${SEARCH}&name=${encodeURIComponent(term)}${country}`, fetchImpl);
+  const home = countryCode?.toUpperCase() ?? null;
+  const stations = rows.map(stationFromRow).filter((s): s is Station => s !== null && (!home || s.countryCode === home));
+  return rankStations(dedupe(stations), countryCode, here);
 }
 
 /** The same stream listed twice (different names for one address) is shown once. */

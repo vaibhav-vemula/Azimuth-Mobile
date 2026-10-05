@@ -33,7 +33,6 @@ export function OnlineRadio() {
   const volume = useOnlineRadio((s) => s.volume);
   const here = useOnlineRadio((s) => s.here);
   const scope = useOnlineRadio((s) => s.scope);
-  const widened = useOnlineRadio((s) => s.widened);
   const [text, setText] = useState(() => formatMHz(mhz));
   const [typing, setTyping] = useState(false);
   const [query, setQuery] = useState('');
@@ -160,12 +159,6 @@ export function OnlineRadio() {
         <GlassCard style={styles.errorCard}>
           <Ionicons name="alert-circle" size={18} color={colors.danger} />
           <Text style={styles.errorText}>{error}</Text>
-        </GlassCard>
-      ) : null}
-
-      {widened ? (
-        <GlassCard>
-          <Text style={styles.note}>Nothing on {formatMHz(mhz)} MHz in your country, so these are stations from other countries.</Text>
         </GlassCard>
       ) : null}
 

@@ -1,4 +1,4 @@
-import { useOnlineRadio } from '../useOnlineRadio';
+import { setLocator, useOnlineRadio } from '../useOnlineRadio';
 
 jest.mock('../../../../modules/rtl-sdr', () => ({
   FM_SAMPLE_RATE_HZ: 2_400_000,
@@ -19,6 +19,8 @@ const answer = (rows: unknown[]) => {
 };
 
 beforeEach(() => {
+  // Unless a test says otherwise, the listener is in the United States, where the test stations are.
+  setLocator(async () => ({ here: { latitudeDeg: 38.9072, longitudeDeg: -77.0369 }, countryCode: 'US' }));
   audio.__players.length = 0;
   audio.createAudioPlayer.mockClear();
   useOnlineRadio.getState().stop();
@@ -291,13 +293,6 @@ describe('local stations', () => {
     expect(useOnlineRadio.getState().here).toEqual(DC.here);
   });
 
-  it('still tunes, by votes, when the position is not known', async () => {
-    setLocator(async () => null);
-    answer([geo('la', 'KIIS 103.5', 34.05, -118.24, 900), geo('dc', 'WTOP 103.5', 38.95, -77.03, 5)]);
-    await useOnlineRadio.getState().tune(103.5);
-    expect(useOnlineRadio.getState().current?.id).toBe('la');
-  });
-
   it('finds the stations near you', async () => {
     setLocator(async () => DC);
     answer([geo('far', 'Far FM', 34.05, -118.24), geo('near', 'Near FM', 38.95, -77.03)]);
@@ -346,29 +341,46 @@ describe('your own country first', () => {
     expect(s.stations.map((x) => x.id)).toEqual(['dc', 'la']);
     expect(s.current?.id).toBe('dc');
     expect(s.scope).toBe('US');
-    expect(s.widened).toBe(false);
   });
 
-  it('shows stations from other countries, and says so, only when your country has none', async () => {
+  it('never shows stations from other countries, even when your country has none', async () => {
     setLocator(async () => US);
     global.fetch = jest.fn(async (url: string) => ({
       ok: true,
       status: 200,
-      json: async () => (String(url).includes('countrycode=US') ? [] : [r('mx', 'Radio 99.1', 'MX', 19.4, -99.1)]),
+      json: async () => [r('mx', 'Radio 99.1', 'MX', 19.4, -99.1)].filter((x) => !String(url).includes('countrycode=US') || x.countrycode === 'US'),
     })) as unknown as typeof fetch;
     await useOnlineRadio.getState().tune(99.1);
     const s = useOnlineRadio.getState();
-    expect(s.widened).toBe(true);
-    expect(s.scope).toBeNull();
-    expect(s.stations.map((x) => x.id)).toEqual(['mx']);
+    expect(s.stations).toEqual([]);
+    expect(s.status).toBe('nomatch');
+    expect(audio.createAudioPlayer).not.toHaveBeenCalled();
   });
 
-  it('says there is no station when nothing exists anywhere', async () => {
+  it('drops other countries even if the directory sends them anyway', async () => {
     setLocator(async () => US);
-    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => [] })) as unknown as typeof fetch;
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => [r('mx', 'Radio 99.1', 'MX'), r('us', 'WXYZ 99.1', 'US')] })) as unknown as typeof fetch;
     await useOnlineRadio.getState().tune(99.1);
-    expect(useOnlineRadio.getState().status).toBe('nomatch');
-    expect(useOnlineRadio.getState().widened).toBe(false);
+    expect(useOnlineRadio.getState().stations.map((x) => x.id)).toEqual(['us']);
+  });
+
+  it('does not tune at all when the country is not known, and says what to do', async () => {
+    setLocator(async () => null);
+    global.fetch = jest.fn() as unknown as typeof fetch;
+    await useOnlineRadio.getState().tune(99.1);
+    const s = useOnlineRadio.getState();
+    expect(s.status).toBe('error');
+    expect(s.error).toMatch(/which country/);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(audio.createAudioPlayer).not.toHaveBeenCalled();
+  });
+
+  it('searches by name inside your country only', async () => {
+    setLocator(async () => US);
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => [r('mx', 'Jazz MX', 'MX'), r('us', 'Jazz US', 'US')] })) as unknown as typeof fetch;
+    await useOnlineRadio.getState().search('jazz');
+    expect(useOnlineRadio.getState().stations.map((x) => x.id)).toEqual(['us']);
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toContain('countrycode=US');
   });
 
   it('works out the country from where the phone is when the phone cannot say', () => {

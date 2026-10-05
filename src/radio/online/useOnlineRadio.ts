@@ -86,6 +86,8 @@ async function locate(): Promise<Place | null> {
   return value;
 }
 
+const NO_COUNTRY = 'Azimuth could not tell which country you are in, so it cannot pick local stations. Turn on location for Azimuth and try again.';
+
 export type OnlineStatus = 'idle' | 'searching' | 'connecting' | 'playing' | 'nomatch' | 'error';
 
 interface OnlineRadioState {
@@ -95,10 +97,8 @@ interface OnlineRadioState {
   stations: Station[];
   /** Where the listener is, once known. */
   here: Here | null;
-  /** The country the stations were limited to, or null when tuning looked worldwide (no country known, or none had it). */
+  /** The country the stations are limited to. Stations from other countries are never shown. */
   scope: string | null;
-  /** The listener's country had no station on this frequency, so stations from other countries are shown. */
-  widened: boolean;
   /** Stations near the listener, nearest first, and how that search went. */
   nearby: Station[];
   nearbyStatus: 'idle' | 'loading' | 'ready' | 'empty' | 'no-location' | 'error';
@@ -232,7 +232,6 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
   stations: [],
   here: null,
   scope: null,
-  widened: false,
   nearby: [],
   nearbyStatus: 'idle',
   current: null,
@@ -264,22 +263,21 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     const mine = ++request;
     // The old station stops the moment you tune, not when the new one is found.
     releasePlayer();
-    set({ status: 'searching', error: null, stations: [], current: null, widened: false });
+    set({ status: 'searching', error: null, stations: [], current: null });
     try {
       const place = await locate();
       if (mine !== request) return;
       if (place) set({ here: place.here });
       const country = place?.countryCode ?? null;
-      let stations = await searchByFrequency(target, { countryCode: country, here: place?.here ?? null });
-      if (mine !== request) return;
-      let widened = false;
-      if (stations.length === 0 && country) {
-        // Nothing on this frequency in the listener's country: look worldwide rather than leave them with nothing.
-        stations = await searchByFrequency(target, { countryCode: null, here: place?.here ?? null });
-        if (mine !== request) return;
-        widened = stations.length > 0;
+      if (!country) {
+        // Without the country there is no way to leave other countries out, so nothing is tuned.
+        releasePlayer();
+        set({ status: 'error', error: NO_COUNTRY, stations: [], current: null, scope: null });
+        return;
       }
-      set({ stations, scope: widened ? null : country, widened });
+      const stations = await searchByFrequency(target, { countryCode: country, here: place?.here ?? null });
+      if (mine !== request) return;
+      set({ stations, scope: country });
       if (stations.length === 0) {
         releasePlayer();
         set({ status: 'nomatch', current: null, error: null });
@@ -298,7 +296,11 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     try {
       const place = await locate();
       if (mine !== request) return;
-      const stations = await searchByName(text, { countryCode: place?.countryCode ?? null, here: place?.here ?? null });
+      if (!place?.countryCode) {
+        set({ status: 'error', error: NO_COUNTRY, stations: [] });
+        return;
+      }
+      const stations = await searchByName(text, { countryCode: place.countryCode, here: place.here });
       if (mine !== request) return;
       set({ stations, status: stations.length === 0 ? 'nomatch' : 'idle' });
     } catch (e) {
