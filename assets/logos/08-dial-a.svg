@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img">
+<defs>
+<linearGradient id="bgf8" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A1020"/><stop offset="1" stop-color="#04070E"/></linearGradient>
+<linearGradient id="af8" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D7E6F5"/><stop offset="1" stop-color="#4DD0E1"/></linearGradient>
+</defs>
+<rect width="200" height="200" rx="46" fill="url(#bgf8)"/>
+<path d="M117.9 28.2 A74 74 0 1 1 82.1 28.2" fill="none" stroke="#243A57" stroke-width="6" stroke-linecap="round"/>
+<line x1="100" y1="28" x2="100" y2="36" stroke="#D7E6F5" stroke-opacity=".35" stroke-width="3" stroke-linecap="round" transform="rotate(90 100 100)"/><line x1="100" y1="28" x2="100" y2="36" stroke="#D7E6F5" stroke-opacity=".35" stroke-width="3" stroke-linecap="round" transform="rotate(180 100 100)"/><line x1="100" y1="28" x2="100" y2="36" stroke="#D7E6F5" stroke-opacity=".35" stroke-width="3" stroke-linecap="round" transform="rotate(270 100 100)"/>
+<circle cx="100" cy="26" r="9" fill="#FFB020"/>
+<path d="M68 142 L100 66 L132 142" fill="none" stroke="url(#af8)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="82" y1="120" x2="118" y2="120" stroke="url(#af8)" stroke-width="10" stroke-linecap="round"/>
+</svg>
