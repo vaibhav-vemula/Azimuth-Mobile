@@ -7,6 +7,7 @@ import {
   Vec3,
   cameraQuaternion,
   chestWorldPosition,
+  MIN_RENDER_M,
   headingOf,
   projectToScreen,
   relativeBearingDeg,
@@ -34,6 +35,8 @@ export interface FrameInput {
   /** Everything needed to open the chest is in place. */
   ready: boolean;
   screenAspect: number;
+  /** Which way to draw the chest while you stand closer than the nearest drawing distance, where GPS cannot give a direction. */
+  nearBearingDeg?: number | null;
 }
 
 export interface FrameOutput {
@@ -60,7 +63,8 @@ export function computeFrame(i: FrameInput): FrameOutput | null {
   const raw = toChest(i.user, i.target);
   const alpha = 1 - Math.exp(-Math.max(0, i.dtSec) / SMOOTHING_SECONDS);
   const distanceM = smoothValue(i.previous.distanceM, raw.distanceM, alpha);
-  const bearing = smoothAngleDeg(i.previous.bearingDeg, raw.bearingDeg, alpha);
+  const anchored = typeof i.nearBearingDeg === 'number' && raw.distanceM < MIN_RENDER_M;
+  const bearing = anchored ? (i.nearBearingDeg as number) : smoothAngleDeg(i.previous.bearingDeg, raw.bearingDeg, alpha);
 
   const oriented = i.device !== null;
   const camera = i.device ? cameraQuaternion(i.device, i.declinationDeg) : IDENTITY;

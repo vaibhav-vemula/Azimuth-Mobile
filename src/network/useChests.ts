@@ -11,13 +11,12 @@ interface ChestsState {
   loadedAtMs: number | null;
   refresh: () => Promise<void>;
   /** A chest that exists only on this phone, a few metres from `position`, for trying the opening without any network. */
-  addTestChest: (position: LatLon, metresNorth?: number) => Chest;
+  addTestChest: (position: LatLon, facingDeg?: number | null) => Chest;
   clearTestChests: () => void;
 }
 
 /** Test chests are kept apart from the real ones so a refresh from the network does not remove them. */
 let testChests: Chest[] = [];
-const METRES_PER_DEGREE = 111_320;
 
 export const useChests = create<ChestsState>((set, get) => ({
   chests: [],
@@ -34,8 +33,10 @@ export const useChests = create<ChestsState>((set, get) => ({
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   },
-  addTestChest: (position, metresNorth = 12) => {
-    const at = { latitudeDeg: position.latitudeDeg + metresNorth / METRES_PER_DEGREE, longitudeDeg: position.longitudeDeg };
+  addTestChest: (position, facingDeg = null) => {
+    // Exactly where you stand. GPS cannot tell which way a point under your feet lies, so in AR it is drawn in front of
+    // you, in the direction you were facing when you dropped it (see computeFrame).
+    const at = { latitudeDeg: position.latitudeDeg, longitudeDeg: position.longitudeDeg };
     const chest: Chest = {
       id: `test-${Date.now()}`,
       title: 'Test chest',
@@ -47,7 +48,7 @@ export const useChests = create<ChestsState>((set, get) => ({
       requester: 'Azimuth test',
       requires: 'phone',
       // One reading is enough, and the exact spot is given so it sits where you are.
-      spec: { minSamples: 1, lat: at.latitudeDeg, lon: at.longitudeDeg, test: true },
+      spec: { minSamples: 1, lat: at.latitudeDeg, lon: at.longitudeDeg, test: true, ...(facingDeg !== null ? { facingDeg } : {}) },
     };
     testChests = [chest, ...testChests];
     set({ chests: [chest, ...get().chests] });

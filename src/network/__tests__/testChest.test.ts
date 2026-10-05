@@ -9,15 +9,17 @@ beforeEach(() => {
 });
 
 describe('the test chest', () => {
-  it('is placed a few metres north of where you are, with an exact position and a cell', () => {
-    const chest = useChests.getState().addTestChest(HERE);
+  it('is placed exactly where you are, with its cell, and remembers which way you faced', () => {
+    const chest = useChests.getState().addTestChest(HERE, 120);
     expect(chest.spec.test).toBe(true);
     expect(chest.spec.minSamples).toBe(1);
+    expect(chest.spec.facingDeg).toBe(120);
     expect(chest.cellId).toMatch(/^h\d+:-?\d+:-?\d+$/);
-    const at = { latitudeDeg: chest.spec.lat!, longitudeDeg: chest.spec.lon! };
-    expect(distanceM(HERE, at)).toBeGreaterThan(11);
-    expect(distanceM(HERE, at)).toBeLessThan(13);
-    expect(at.longitudeDeg).toBe(HERE.longitudeDeg);
+    expect(distanceM(HERE, { latitudeDeg: chest.spec.lat!, longitudeDeg: chest.spec.lon! })).toBeLessThan(0.01);
+  });
+
+  it('has no facing when the compass had no heading yet', () => {
+    expect(useChests.getState().addTestChest(HERE, null).spec.facingDeg).toBeUndefined();
   });
 
   it('shows up in the chest list, and can be removed again', () => {

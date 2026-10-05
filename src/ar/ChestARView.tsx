@@ -90,6 +90,8 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
   user.current = pose.position;
   ready.current = claim.ready;
   targetRef.current = target;
+  const nearBearing = useRef<number | null>(chest.spec.facingDeg ?? null);
+  nearBearing.current = chest.spec.facingDeg ?? null;
 
   const showToast = useCallback((text: string) => {
     setToast(text);
@@ -161,6 +163,7 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
           declinationDeg: declination.current,
           user: user.current,
           target: targetRef.current,
+          nearBearingDeg: nearBearing.current,
           previous,
           dtSec: dt,
           ready: ready.current,

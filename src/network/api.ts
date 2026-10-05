@@ -20,7 +20,7 @@ export interface Chest {
   expiresMs: number;
   requester: string;
   requires: 'phone' | 'dongle';
-  spec: { minSamples?: number; noradId?: string; windowStartMs?: number; windowEndMs?: number; radiusCells?: number; beaconName?: string; minRssi?: number; frequencyHz?: number; serial?: string; lastSeenMs?: number; lat?: number; lon?: number; test?: boolean };
+  spec: { minSamples?: number; noradId?: string; windowStartMs?: number; windowEndMs?: number; radiusCells?: number; beaconName?: string; minRssi?: number; frequencyHz?: number; serial?: string; lastSeenMs?: number; lat?: number; lon?: number; test?: boolean; facingDeg?: number };
 }
 
 export interface SubmitResult {

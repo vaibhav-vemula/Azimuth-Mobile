@@ -90,3 +90,30 @@ describe('computeFrame', () => {
     expect(f.bearingDeg === 0 || f.bearingDeg > 355 || f.bearingDeg < 5).toBe(true);
   });
 });
+
+describe('a chest right where you stand', () => {
+  it('is drawn in front of you, in the direction it was dropped facing, instead of jumping around with GPS noise', () => {
+    // Facing east (90), the chest dropped while facing east: it must be straight ahead whatever the 1 m GPS wobble says.
+    for (const wobble of [north(1), east(1), { ...here, latitudeDeg: here.latitudeDeg - 1.5 / 111320 }]) {
+      const f = computeFrame(base({ target: wobble, nearBearingDeg: 90 }))!;
+      expect(f.bearingDeg).toBeCloseTo(90, 5);
+      expect(f.inView).toBe(true);
+      expect(Math.abs(f.relativeDeg)).toBeLessThan(1);
+      expect(f.world[0]).toBeGreaterThan(3.9); // 4 m to the east
+    }
+  });
+
+  it('is within reach to open it', () => {
+    expect(computeFrame(base({ target: here, nearBearingDeg: 90 }))!.withinOpenRange).toBe(true);
+  });
+
+  it('goes back to the real direction once you are far enough away to have one', () => {
+    const f = computeFrame(base({ target: east(20), nearBearingDeg: 200 }))!;
+    expect(f.bearingDeg).toBeCloseTo(90, 0);
+  });
+
+  it('does nothing special for an ordinary chest', () => {
+    const f = computeFrame(base({ target: north(2) }))!;
+    expect(f.bearingDeg).toBeCloseTo(0, 0);
+  });
+});
