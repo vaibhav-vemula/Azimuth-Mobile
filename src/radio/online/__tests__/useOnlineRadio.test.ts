@@ -110,3 +110,32 @@ describe('online radio', () => {
     expect(audio.createAudioPlayer).not.toHaveBeenCalled();
   });
 });
+
+describe('changing the frequency', () => {
+  it('stops the old station at once, before the new one is found', async () => {
+    answer([row('a', 'Old 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    const old = audio.__players[0];
+    expect(old.removed).toBe(false);
+
+    let release!: (v: unknown) => void;
+    global.fetch = jest.fn(() => new Promise((resolve) => (release = resolve))) as unknown as typeof fetch;
+    const next = useOnlineRadio.getState().tune(99.1); // the lookup is still pending
+    expect(old.removed).toBe(true);
+    expect(useOnlineRadio.getState()).toMatchObject({ status: 'searching', current: null });
+
+    release({ ok: true, status: 200, json: async () => [row('n', 'New 99.1')] });
+    await next;
+    expect(audio.__players.filter((p: { removed: boolean }) => !p.removed)).toHaveLength(1);
+    expect(useOnlineRadio.getState().current?.id).toBe('n');
+  });
+
+  it('never leaves two players running when stations are switched quickly', async () => {
+    answer([row('a', 'One 103.5'), row('b', 'Two 103.5', 1), row('c', 'Three 103.5', 0)]);
+    await useOnlineRadio.getState().tune(103.5);
+    const [, b, c] = useOnlineRadio.getState().stations;
+    await Promise.all([useOnlineRadio.getState().play(b), useOnlineRadio.getState().play(c)]);
+    expect(audio.__players.filter((p: { removed: boolean }) => !p.removed)).toHaveLength(1);
+    expect(useOnlineRadio.getState().current?.id).toBe('c');
+  });
+});

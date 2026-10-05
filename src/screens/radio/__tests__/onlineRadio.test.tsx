@@ -67,4 +67,11 @@ describe('the online radio screen', () => {
     useOnlineRadio.setState({ status: 'nomatch' });
     expect(text(render())).toContain('No station found for ');
   });
+
+  it('silences the playing station as soon as the dial moves', () => {
+    useOnlineRadio.setState({ current: station, stations: [station], status: 'playing' });
+    const t = render();
+    act(() => t.root.findAllByProps({ accessibilityLabel: 'Tune +0.1 megahertz' }).find((n) => typeof n.props.onPress === 'function')!.props.onPress());
+    expect(useOnlineRadio.getState()).toMatchObject({ status: 'idle', current: null, mhz: 98.8 });
+  });
 });

@@ -72,9 +72,11 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     const target = clampFm(mhz ?? get().mhz);
     get().setFrequency(target);
     const mine = ++request;
-    set({ status: 'searching', error: null, stations: [] });
+    // The old station stops the moment you tune, not when the new one is found.
+    releasePlayer();
+    set({ status: 'searching', error: null, stations: [], current: null });
     try {
-      let stations = await searchByFrequency(target, { countryCode });
+      const stations = await searchByFrequency(target, { countryCode });
       if (mine !== request) return;
       set({ stations });
       if (stations.length === 0) {
@@ -104,6 +106,8 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
 
   play: async (station) => {
     const mine = ++request;
+    // Whatever was playing stops first, so two streams are never heard together.
+    releasePlayer();
     // The dongle's own audio would play over this, so it is switched off first.
     const receiver = useReceiver.getState();
     if (receiver.listening) await receiver.setListening(false).catch(() => undefined);
@@ -111,7 +115,7 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     try {
       await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false, interruptionMode: 'doNotMix' });
       if (mine !== request) return;
-      releasePlayer();
+      releasePlayer(); // again, in case another station started while the audio mode was being set
       const next = createAudioPlayer({ uri: station.url });
       player = next;
       next.volume = get().volume;

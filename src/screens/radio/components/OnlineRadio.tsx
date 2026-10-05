@@ -6,6 +6,7 @@ import { Badge, Button, Row, SectionLabel } from '../../../components/ui';
 import { colors, typography } from '../../../theme';
 import { deviceRegion } from '../../../units/units';
 import { FM_MAX_MHZ, FM_MIN_MHZ, Station, formatMHz } from '../../../radio/online/radioBrowser';
+import { FrequencyBar } from './FrequencyBar';
 import { OnlineStatus, useOnlineRadio } from '../../../radio/online/useOnlineRadio';
 
 const STEPS = [
@@ -49,13 +50,22 @@ export function OnlineRadio() {
   // Turning the dial: the number moves at once and the station is looked up when you stop.
   const nudge = useCallback(
     (delta: number) => {
-      const next = useOnlineRadio.getState().mhz + delta;
-      useOnlineRadio.getState().setFrequency(next);
+      const radio = useOnlineRadio.getState();
+      // Turning the dial silences the old station straight away; the new one is looked up when you stop turning.
+      if (radio.current || radio.status === 'playing' || radio.status === 'connecting') radio.stop();
+      radio.setFrequency(radio.mhz + delta);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => tuneNow(useOnlineRadio.getState().mhz), TUNE_DELAY_MS);
     },
     [tuneNow]
   );
+
+  // Dragging the bar: the number follows the finger and whatever was playing goes quiet; the station is found when you let go.
+  const scrub = useCallback((value: number) => {
+    const radio = useOnlineRadio.getState();
+    if (radio.current || radio.status === 'playing' || radio.status === 'connecting') radio.stop();
+    radio.setFrequency(value);
+  }, []);
 
   const submitText = useCallback(() => {
     Keyboard.dismiss();
@@ -83,6 +93,8 @@ export function OnlineRadio() {
           </View>
           <Badge label={STATUS_LABEL[status]} color={STATUS_COLOR[status]} />
         </Row>
+
+        <FrequencyBar mhz={mhz} onScrub={scrub} onCommit={tuneNow} />
 
         <View style={styles.steps}>
           {STEPS.map((s) => (
