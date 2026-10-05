@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { colors, typography } from '../../../theme';
+import { typography } from '../../../theme';
 
 interface Props {
   running: boolean;
@@ -10,9 +9,9 @@ interface Props {
   onPress: () => void;
 }
 
-const START = { from: '#2EE6C5', to: '#3FA9F0', text: '#04121A', glow: '#2EE6C5' };
-const STOP = { from: '#FF6B6B', to: '#D62A5C', text: '#FFFFFF', glow: '#FF4D6D' };
-const RADIUS = 18;
+const START = { fill: '#2EE6C5', edge: '#7DF3E0', text: '#04121A' };
+const STOP = { fill: '#F2455D', edge: '#FF8A9A', text: '#FFFFFF' };
+const RADIUS = 32;
 
 /**
  * The main button of the map: a bright gradient to start, and a red one with a pulsing "live" dot to stop. It presses in
@@ -39,7 +38,7 @@ export function MappingButton({ running, busy, onPress }: Props) {
   const hint = busy ? 'One moment' : running ? 'Finish and save this session' : 'Clear the fog and collect signals';
 
   return (
-    <Animated.View style={[styles.shadow, { shadowColor: theme.glow, transform: [{ scale: press }], opacity: busy ? 0.85 : 1 }]}>
+    <Animated.View style={[styles.wrap, { transform: [{ scale: press }], opacity: busy ? 0.85 : 1 }]}>
       <Pressable
         onPress={onPress}
         onPressIn={() => animate(0.97)}
@@ -48,21 +47,12 @@ export function MappingButton({ running, busy, onPress }: Props) {
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ disabled: busy, busy }}
-        style={styles.button}
+        style={[styles.button, { backgroundColor: theme.fill, borderColor: theme.edge }]}
       >
-        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="mappingGradient" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={theme.from} />
-              <Stop offset="1" stopColor={theme.to} />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" rx={RADIUS} fill="url(#mappingGradient)" />
-          {/* A soft light along the top edge, so the button looks raised. */}
-          <Rect x="0" y="0" width="100%" height="50%" rx={RADIUS} fill="#FFFFFF" fillOpacity={0.12} />
-        </Svg>
+        {/* A lighter band across the top half gives the flat colour a little depth, with no gradient to misalign. */}
+        <View style={styles.sheen} pointerEvents="none" />
 
-        <View style={[styles.badge, { backgroundColor: running ? 'rgba(255,255,255,0.22)' : 'rgba(4,18,26,0.14)' }]}>
+        <View style={[styles.badge, { backgroundColor: running ? 'rgba(255,255,255,0.24)' : 'rgba(4,18,26,0.16)' }]}>
           {busy ? (
             <ActivityIndicator size="small" color={theme.text} />
           ) : running ? (
@@ -96,8 +86,9 @@ export function MappingButton({ running, busy, onPress }: Props) {
 }
 
 const styles = StyleSheet.create({
-  shadow: { borderRadius: RADIUS, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 9, backgroundColor: colors.background },
-  button: { minHeight: 64, borderRadius: RADIUS, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 14, paddingVertical: 10, overflow: 'hidden' },
+  wrap: { alignSelf: 'stretch' },
+  button: { alignSelf: 'stretch', minHeight: 64, borderRadius: RADIUS, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', gap: 14, paddingLeft: 12, paddingRight: 18, paddingVertical: 10, overflow: 'hidden' },
+  sheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '48%', backgroundColor: 'rgba(255,255,255,0.08)' },
   badge: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   playIcon: { marginLeft: 2 },
   ring: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 2 },
