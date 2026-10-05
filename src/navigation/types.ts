@@ -2,6 +2,7 @@ export type SatellitesStackParamList = {
   Passes: undefined;
   PassDetail: { passId: string };
   Capture: undefined;
+  SondeHunt: { serial: string };
 };
 
 export type ProfileStackParamList = {

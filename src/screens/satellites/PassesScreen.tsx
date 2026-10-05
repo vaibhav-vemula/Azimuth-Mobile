@@ -21,6 +21,7 @@ import { canCapture, captureWindow, isTestRun } from '../../capture/window';
 import { colors, typography } from '../../theme';
 import { formatClock, formatCountdown, formatDay } from '../../utils/format';
 import { PassCard, QUALITY_COLOR } from './components/PassCard';
+import { SondesPanel } from './components/SondesPanel';
 
 type Nav = NativeStackNavigationProp<SatellitesStackParamList, 'Passes'>;
 
@@ -43,6 +44,8 @@ export default function PassesScreen() {
   const capturePhase = useCapture((s) => s.phase);
   const captureOptions = useCapture((s) => s.options);
 
+  // Satellites: Meteor-M passes to record. Sondes: weather balloons to go and collect.
+  const [mode, setMode] = useState<'satellites' | 'sondes'>('satellites');
   const [filter, setFilter] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [reminderTick, setReminderTick] = useState(0);
@@ -207,17 +210,32 @@ export default function PassesScreen() {
       >
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Satellites</Text>
+            <Text style={styles.title}>{mode === 'sondes' ? 'Sondes' : 'Satellites'}</Text>
             <Text style={styles.subtitle}>
-              {location
-                ? `Meteor-M LRPT passes over ${location.latitudeDeg.toFixed(2)}°, ${location.longitudeDeg.toFixed(2)}°`
-                : 'Meteor-M LRPT pass predictions'}
+              {mode === 'sondes'
+                ? 'Weather balloons to find and collect'
+                : location
+                  ? `Meteor-M LRPT passes over ${location.latitudeDeg.toFixed(2)}°, ${location.longitudeDeg.toFixed(2)}°`
+                  : 'Meteor-M LRPT pass predictions'}
             </Text>
           </View>
-          {tleLoading ? <ActivityIndicator color={colors.accent} /> : null}
+          {tleLoading && mode === 'satellites' ? <ActivityIndicator color={colors.accent} /> : null}
         </View>
 
-        {recording ? (
+        <View style={styles.modes} accessibilityRole="tablist">
+          {(['satellites', 'sondes'] as const).map((m) => (
+            <Pressable key={m} onPress={() => setMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} style={[styles.mode, mode === m && styles.modeActive]}>
+              <Ionicons name={m === 'satellites' ? 'planet-outline' : 'balloon-outline'} size={16} color={mode === m ? colors.background : colors.textSecondary} />
+              <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>{m === 'satellites' ? 'Satellites' : 'Sondes'}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {mode === 'sondes' ? (
+          <SondesPanel here={location ? { latitudeDeg: location.latitudeDeg, longitudeDeg: location.longitudeDeg } : null} onOpen={(serial) => navigation.navigate('SondeHunt', { serial })} />
+        ) : null}
+
+        {mode === 'sondes' ? null : recording ? (
           <Pressable onPress={() => navigation.navigate('Capture')}>
             <GlassCard style={styles.recordingBanner}>
               <Ionicons name="radio-button-on" size={18} color={colors.record} />
@@ -233,7 +251,7 @@ export default function PassesScreen() {
           </Pressable>
         ) : null}
 
-        {outdated || stale ? (
+        {mode === 'sondes' ? null : outdated || stale ? (
           <GlassCard style={styles.warnCard}>
             <Ionicons name="warning-outline" size={18} color={colors.warning} />
             <Text style={styles.warnText}>
@@ -244,7 +262,7 @@ export default function PassesScreen() {
           </GlassCard>
         ) : null}
 
-        {body}
+        {mode === 'sondes' ? null : body}
       </ScrollView>
     </View>
   );
@@ -341,6 +359,11 @@ function NextPassHero({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: 16, paddingBottom: 32, gap: 14 },
+  modes: { flexDirection: 'row', gap: 8, backgroundColor: colors.surface, borderRadius: 16, padding: 4, borderWidth: 1, borderColor: colors.surfaceBorder },
+  mode: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12 },
+  modeActive: { backgroundColor: colors.accent },
+  modeText: { ...typography.subheading, fontSize: 14, color: colors.textSecondary },
+  modeTextActive: { color: colors.background },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { ...typography.heading, fontSize: 28, color: colors.textPrimary },
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },

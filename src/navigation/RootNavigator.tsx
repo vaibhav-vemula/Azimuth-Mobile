@@ -8,6 +8,7 @@ import RadioScreen from '../screens/radio/RadioScreen';
 import PassesScreen from '../screens/satellites/PassesScreen';
 import PassDetailScreen from '../screens/satellites/PassDetailScreen';
 import CaptureScreen from '../screens/satellites/CaptureScreen';
+import SondeHuntScreen from '../screens/satellites/SondeHuntScreen';
 import RecordingsScreen from '../screens/recordings/RecordingsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -55,6 +56,7 @@ const GuardedRadio = guarded(RadioScreen);
 const GuardedPasses = guarded(PassesScreen);
 const GuardedPassDetail = guarded(PassDetailScreen);
 const GuardedCapture = guarded(CaptureScreen);
+const GuardedSondeHunt = guarded(SondeHuntScreen);
 const GuardedRecordings = guarded(RecordingsScreen);
 const GuardedProfile = guarded(ProfileScreen);
 const GuardedMap = guarded(MapScreen);
@@ -74,6 +76,7 @@ function SatellitesStack() {
       <Stack.Screen name="Passes" component={GuardedPasses} options={{ headerShown: false }} />
       <Stack.Screen name="PassDetail" component={GuardedPassDetail} options={{ title: 'Pass details' }} />
       <Stack.Screen name="Capture" component={GuardedCapture} options={{ title: 'Capture', presentation: 'modal' }} />
+      <Stack.Screen name="SondeHunt" component={GuardedSondeHunt} options={{ title: 'Find the sonde' }} />
     </Stack.Navigator>
   );
 }
