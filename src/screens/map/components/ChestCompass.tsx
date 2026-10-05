@@ -6,6 +6,7 @@ import { compassPoint, formatDistanceShort } from '../../../mapping/geo';
 import { colors, typography } from '../../../theme';
 import { CHEST_KIND } from '../../chests/chestInfo';
 import { DirectionArrow } from './DirectionArrow';
+import { useHeadingStore } from '../../../mapping/headingStore';
 
 /** How close counts as "there": a chest's spot is about 100 m across. */
 export const ARRIVED_M = 90;
@@ -58,3 +59,9 @@ const styles = StyleSheet.create({
   rewardText: { ...typography.caption, fontSize: 12, color: colors.textPrimary },
   ar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
 });
+
+/** The compass wired to the live heading, so only this small piece redraws as the phone turns. */
+export function ConnectedChestCompass(props: Omit<Props, 'headingDeg'>) {
+  const heading = useHeadingStore((s) => s.heading);
+  return <ChestCompass {...props} headingDeg={heading} />;
+}

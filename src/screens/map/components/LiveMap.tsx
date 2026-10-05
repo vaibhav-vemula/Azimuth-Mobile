@@ -1,4 +1,4 @@
-import { Ref, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Ref, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { Camera, GeoJSONSource, Images, Layer, Map, Marker } from '@maplibre/maplibre-react-native';
 import type { CameraRef, StyleSpecification } from '@maplibre/maplibre-react-native';
@@ -7,6 +7,8 @@ import { clearedBoundary, fogFeature } from '../../../mapping/fog';
 import { VISION_RADIUS_M } from '../../../mapping/explore';
 import { HEAT_RADIUS_M, circleRing, radiusForMetres } from '../../../mapping/signalLayer';
 import type { FogStyle } from '../../../mapping/mappingStorage';
+import { useHeadingStore } from '../../../mapping/headingStore';
+import { useThrottled } from '../../../mapping/useThrottled';
 import type { LatLon } from '../../../mapping/hexGrid';
 import { colors } from '../../../theme';
 import type { Chest } from '../../../network/api';
@@ -47,7 +49,6 @@ export interface MapChest {
 
 interface Props {
   position: LatLon | null;
-  headingDeg: number | null;
   /** Fog-grid cells cleared so far. */
   explored: ReadonlySet<string>;
   chests: MapChest[];
@@ -70,13 +71,15 @@ const lngLat = (p: LatLon): [number, number] => [p.longitudeDeg, p.latitudeDeg];
  * The home map: a real street map under a layer of fog. Ground you have walked is cleared, with a soft edge where
  * the fog begins. Chests sit on top; 
  */
-export function LiveMap({ position, headingDeg, explored, chests, nearestId, signal, fogStyle, showVision, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
+function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, showVision, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
   const camera = useRef<CameraRef>(null);
   const firstFix = useRef(true);
   const mapStyle = useMapStyle(onLoadState);
 
-  const fog = useMemo(() => fogFeature(explored), [explored]);
-  const edge = useMemo(() => clearedBoundary(explored), [explored]);
+  // Rebuilding the fog shape is the heaviest thing here; while you walk it only needs to keep up a couple of times a second.
+  const shownExplored = useThrottled(explored, 800);
+  const fog = useMemo(() => fogFeature(shownExplored), [shownExplored]);
+  const edge = useMemo(() => clearedBoundary(shownExplored), [shownExplored]);
   const vision = useMemo<GeoJSON.Feature<GeoJSON.LineString> | null>(
     () => (position ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: circleRing(position, VISION_RADIUS_M) } } : null),
     [position]
@@ -184,7 +187,7 @@ export function LiveMap({ position, headingDeg, explored, chests, nearestId, sig
 
         {position ? (
           <Marker id="me" lngLat={lngLat(position)} anchor="center">
-            <MeMarker headingDeg={headingDeg} />
+            <MeMarker />
           </Marker>
         ) : null}
       </Map>
@@ -234,7 +237,8 @@ function ChestPin({ chest, nearest }: { chest: Chest; nearest: boolean }) {
 }
 
 /** You: a dot with a soft pulsing ring, and a cone showing which way the phone faces. */
-function MeMarker({ headingDeg }: { headingDeg: number | null }) {
+function MeMarker() {
+  const headingDeg = useHeadingStore((s) => s.heading);
   const pulse = usePulse(true);
   return (
     <View style={styles.meWrap} pointerEvents="none">
@@ -277,3 +281,6 @@ const styles = StyleSheet.create({
   cone: { position: 'absolute', width: 64, height: 64, alignItems: 'center' },
   coneIcon: { marginTop: -4 },
 });
+
+/** Memoised: the screen redraws for many reasons (timers, readings) that do not change the map. */
+export const LiveMap = memo(LiveMapImpl);

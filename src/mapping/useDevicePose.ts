@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { addOrientationListener, startOrientation, stopOrientation } from '../../modules/signal-scan';
 import { smoothAngleDeg, walkingHeadingDeg } from '../ar/orientation';
+import { useHeadingStore } from './headingStore';
 import type { LatLon } from './hexGrid';
 
 /** The heading is refreshed this often (the sensor reports about 60 times a second; a screen needs far fewer). */
@@ -16,14 +17,12 @@ export interface DevicePose {
   accuracyM: number | null;
   /** The phone reported this position as a mock location. */
   mocked: boolean;
-  /** The direction you are facing, in degrees from true north, however you hold the phone. Null without a compass. */
-  heading: number | null;
   permission: LocationPermission;
   request: () => Promise<void>;
 }
 
 /**
- * Where the phone is and which way it faces, for showing on the map. Nothing is recorded: this is a live view only,
+ * Where the phone is, for showing on the map. Which way it faces is published separately (see headingStore). Nothing is recorded: this is a live view only,
  * and it stops when `active` is false (for example when the Map tab is not showing).
  */
 export function useDevicePose(active: boolean): DevicePose {
@@ -32,7 +31,7 @@ export function useDevicePose(active: boolean): DevicePose {
   const [permission, setPermission] = useState<LocationPermission>('unknown');
   const [position, setPosition] = useState<LatLon | null>(null);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
-  const [heading, setHeading] = useState<number | null>(null);
+  const setHeading = useHeadingStore((s) => s.set);
   const [mocked, setMocked] = useState(false);
   const hasFix = position !== null;
 
@@ -123,5 +122,5 @@ export function useDevicePose(active: boolean): DevicePose {
     };
   }, [active, permission, hasFix]);
 
-  return { position, accuracyM, mocked, heading, permission, request };
+  return { position, accuracyM, mocked, permission, request };
 }

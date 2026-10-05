@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui';
 import { colors, typography } from '../../theme';
 import { LiveMap, LiveMapHandle, MapChest, MapLoadState } from './components/LiveMap';
-import { ChestCompass } from './components/ChestCompass';
+import { ConnectedChestCompass } from './components/ChestCompass';
 import { SessionDetails } from './components/SessionDetails';
 import { SignalChips, SignalLegend } from './components/SignalControls';
 import { SignalLayer, signalPoints } from '../../mapping/signalLayer';
@@ -153,7 +153,6 @@ export default function MapScreen() {
         key={mapKey}
         ref={mapRef}
         position={pose.position}
-        headingDeg={pose.heading}
         explored={exploredSet}
         chests={mapChests}
         nearestId={nearest?.item.id ?? null}
@@ -203,11 +202,10 @@ export default function MapScreen() {
       {/* Nearest chest: an arrow toward it and how far away, under the signal chips */}
       {nearest ? (
         <View style={[styles.compassRow, { top: insets.top + 108 }]} pointerEvents="box-none">
-          <ChestCompass
+          <ConnectedChestCompass
             chest={nearest.item}
             distanceM={nearest.distanceM}
             bearingDeg={nearest.bearingDeg}
-            headingDeg={pose.heading}
             onPress={() => {
               openChest(nearest.item);
               if (nearestPosition) mapRef.current?.showBoth(nearestPosition);
