@@ -65,53 +65,68 @@ describe('useWallet', () => {
   });
 });
 
-describe('authorizing the wallet before signing', () => {
+describe('running inside an authorized wallet session', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { authorizeForSigning } = require('../signReport');
+  const { inWalletSession, isAuthorizationFailure } = require('../signReport');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { rememberAuthToken, getAuthToken } = require('../useWallet');
+  const { rememberAuthToken, forgetAuthToken, getAuthToken } = require('../useWallet');
   const account = Buffer.alloc(32, 7).toString('base64');
 
-  it('tries the saved token first and keeps the one it gets back', async () => {
+  /** A fake wallet app: each call to transact is one session; `behaviours` says what authorize does in each. */
+  function fakeWallet(behaviours: ('ok' | 'auth-failed' | 'declined')[], address = account) {
+    const authorizeCalls: (string | undefined)[] = [];
+    let session = 0;
+    const transact = jest.fn(async (callback: (w: unknown) => Promise<unknown>) => {
+      const mode = behaviours[session++];
+      return callback({
+        authorize: async (p: { auth_token?: string }) => {
+          authorizeCalls.push(p.auth_token);
+          if (mode === 'auth-failed') throw new Error('-1/authorization request failed');
+          if (mode === 'declined') throw new Error('User declined');
+          return { auth_token: `token-${session}`, accounts: [{ address }] };
+        },
+      });
+    });
+    return { transact, authorizeCalls, sessions: () => session };
+  }
+
+  it('uses the saved token first and keeps the one it gets back', async () => {
     rememberAuthToken('old');
-    const authorize = jest.fn(async (_p: { auth_token?: string }) => ({ auth_token: 'new', accounts: [{ address: account }] }));
-    await authorizeForSigning({ authorize }, account);
-    expect(authorize).toHaveBeenCalledTimes(1);
-    expect(authorize.mock.calls[0][0].auth_token).toBe('old');
-    expect(getAuthToken()).toBe('new');
+    const w = fakeWallet(['ok']);
+    expect(await inWalletSession(account, async () => 'signed', w.transact)).toBe('signed');
+    expect(w.authorizeCalls).toEqual(['old']);
+    expect(getAuthToken()).toBe('token-1');
   });
 
-  it('asks again without the token when the wallet refuses it ("authorization request failed")', async () => {
+  it('retries in a NEW session without the token when the wallet refuses it', async () => {
     rememberAuthToken('stale');
-    const authorize = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('-1/authorization request failed'))
-      .mockResolvedValueOnce({ auth_token: 'fresh', accounts: [{ address: account }] });
-    await authorizeForSigning({ authorize }, account);
-    expect(authorize).toHaveBeenCalledTimes(2);
-    expect(authorize.mock.calls[1][0].auth_token).toBeUndefined();
-    expect(getAuthToken()).toBe('fresh');
+    const w = fakeWallet(['auth-failed', 'ok']);
+    expect(await inWalletSession(account, async () => 'signed', w.transact)).toBe('signed');
+    expect(w.sessions()).toBe(2);
+    expect(w.authorizeCalls).toEqual(['stale', undefined]);
+    expect(getAuthToken()).toBe('token-2');
   });
 
-  it('passes the error on when even a fresh request is refused', async () => {
-    rememberAuthToken('stale');
-    const authorize = jest.fn().mockRejectedValue(new Error('declined'));
-    await expect(authorizeForSigning({ authorize }, account)).rejects.toThrow('declined');
-    expect(authorize).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not retry when there was no saved token to blame', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../useWallet').forgetAuthToken();
-    const authorize = jest.fn().mockRejectedValue(new Error('declined'));
-    await expect(authorizeForSigning({ authorize }, account)).rejects.toThrow('declined');
-    expect(authorize).toHaveBeenCalledTimes(1);
+  it('does not retry when the user declined, or when there was no saved token', async () => {
+    rememberAuthToken('t');
+    const declined = fakeWallet(['declined', 'ok']);
+    await expect(inWalletSession(account, async () => 1, declined.transact)).rejects.toThrow('declined');
+    expect(declined.sessions()).toBe(1);
+    forgetAuthToken();
+    const none = fakeWallet(['auth-failed', 'ok']);
+    await expect(inWalletSession(account, async () => 1, none.transact)).rejects.toThrow('authorization request failed');
+    expect(none.sessions()).toBe(1);
   });
 
   it('refuses a different account', async () => {
     rememberAuthToken('t');
-    const other = Buffer.alloc(32, 9).toString('base64');
-    const authorize = jest.fn(async () => ({ auth_token: 't2', accounts: [{ address: other }] }));
-    await expect(authorizeForSigning({ authorize }, account)).rejects.toThrow(/different account/);
+    const other = fakeWallet(['ok'], Buffer.alloc(32, 9).toString('base64'));
+    await expect(inWalletSession(account, async () => 1, other.transact)).rejects.toThrow(/different account/);
+  });
+
+  it('recognises the wallet refusing a token, but not other errors', () => {
+    expect(isAuthorizationFailure(new Error('-1/authorization request failed'))).toBe(true);
+    expect(isAuthorizationFailure(new Error('User declined'))).toBe(false);
+    expect(isAuthorizationFailure(new Error('Local association cancelled by user'))).toBe(false);
   });
 });
