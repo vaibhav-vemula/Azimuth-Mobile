@@ -12,6 +12,7 @@ import { requestMappingPermissions } from './permissions';
 import { probeRadio, probeSonde } from './radioProbe';
 import { MAX_REVEAL_ACCURACY_M, cellsWithin } from './explore';
 import { stepDistance } from './hudFormat';
+import { SessionAccumulator, SessionTotals, emptyTotals, withoutIds } from './sessionStats';
 import { CellSignal, SIGNAL_CELL_M, addReading } from './signalLayer';
 import { useChests } from '../network/useChests';
 import { hexDistance } from './hexGrid';
@@ -60,6 +61,8 @@ interface MappingState {
   sessionDistanceM: number;
   /** Fog cells cleared this session (not counting ground that was already clear). */
   sessionClearedCells: number;
+  /** Towers, networks and devices found this session, as numbers. Kept after the session ends, until the next one. */
+  sessionTotals: SessionTotals;
   lastScan: MappedScan | null;
   startedAtMs: number | null;
   bluetoothEnabled: boolean;
@@ -97,6 +100,8 @@ let recorder: SessionRecorder | null = null;
 /** The latest usable position, so a reading can be painted onto the signal map where it was taken. */
 let lastFix: LatLon | null = null;
 let lastFixAtMs = 0;
+/** Counts distinct towers, networks and devices for the session. Lives in memory only and is reset at every start. */
+const accumulator = new SessionAccumulator();
 let positionWatch: Location.LocationSubscription | null = null;
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let scanning = false;
@@ -164,13 +169,15 @@ async function scanOnce(set: (p: Partial<MappingState>) => void, get: () => Mapp
       const heard = await probeSonde(sondeHz);
       if (typeof heard !== 'string') sonde = heard;
     }
-    let result: MappedScan = { ...phone };
+    // Count distinct towers, networks and devices, then drop the anonymous ids so nothing below keeps them.
+    const totals = accumulator.add(phone);
+    let result: MappedScan = withoutIds(phone);
     if (radio) result.radio = radio;
     if (sonde) result.sonde = sonde;
     if (beaconName) result = { ...result, beaconName };
     if (!recorder) return;
     const outcome = recorder.addScan(result, Date.now());
-    const patch: Partial<MappingState> = { lastScan: result };
+    const patch: Partial<MappingState> = { lastScan: result, sessionTotals: totals };
     if (includeRadio || sondeHz !== null) patch.radioStatus = radio || sonde ? 'ok' : 'skipped';
     if (outcome.recorded) {
       patch.scansThisSession = get().scansThisSession + 1;
@@ -237,6 +244,7 @@ export const useMapping = create<MappingState>((set, get) => ({
   scansThisSession: 0,
   sessionDistanceM: 0,
   sessionClearedCells: 0,
+  sessionTotals: emptyTotals(),
   lastScan: null,
   startedAtMs: null,
   bluetoothEnabled: true,
@@ -252,7 +260,7 @@ export const useMapping = create<MappingState>((set, get) => ({
 
   start: async () => {
     if (get().status !== 'idle') return false;
-    set({ status: 'starting', error: null, newCellsThisSession: 0, scansThisSession: 0, sessionDistanceM: 0, sessionClearedCells: 0, lastScan: null, lastReport: null });
+    set({ status: 'starting', error: null, newCellsThisSession: 0, scansThisSession: 0, sessionDistanceM: 0, sessionClearedCells: 0, sessionTotals: emptyTotals(), lastScan: null, lastReport: null });
     try {
       const permissions = await requestMappingPermissions();
       if (!permissions.location) throw new Error('Location permission is needed to place readings on the map.');
@@ -261,6 +269,7 @@ export const useMapping = create<MappingState>((set, get) => ({
       await useAppStore.getState().requestNotificationPermission();
 
       lastFix = null;
+      accumulator.reset();
       recorder = new SessionRecorder(new Set(Object.keys(get().visited)), { home: get().home });
       tick = 0;
       await startMapping();
@@ -307,6 +316,7 @@ export const useMapping = create<MappingState>((set, get) => ({
     const finished = recorder;
     await teardown();
     recorder = null;
+    accumulator.dropIds(); // the anonymous ids are not needed once the session is over
 
     const buckets = [...finished.buckets.values()];
     let report: Report | null = null;

@@ -32,6 +32,8 @@ export interface WifiSnapshot {
   /** Age of the newest cached result; Android throttles fresh scans. */
   ageMs?: number | null;
   scanRequested?: boolean;
+  /** Session-only stand-ins for the networks seen, to count distinct ones. Never addresses. */
+  ids?: number[];
 }
 
 export interface BluetoothSnapshot {
@@ -43,6 +45,8 @@ export interface BluetoothSnapshot {
   /** A tag whose advertised name starts with the requested prefix was heard. */
   beaconSeen?: boolean;
   beaconRssi?: number | null;
+  /** Session-only stand-ins for the devices seen, to count distinct ones. Never addresses. */
+  ids?: number[];
 }
 
 export interface GnssSnapshot {

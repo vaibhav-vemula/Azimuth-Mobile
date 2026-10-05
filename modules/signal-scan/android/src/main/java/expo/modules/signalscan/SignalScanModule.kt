@@ -29,6 +29,7 @@ import android.telephony.CellIdentityNr
 import android.telephony.CellSignalStrengthNr
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
+import java.security.SecureRandom
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -51,6 +52,12 @@ class SignalScanModule : Module() {
   private var bleBusy = false
   private var lastWifiScanRequestAtMs = 0L
   private var orientationListener: SensorEventListener? = null
+  /**
+   * A random value chosen for each mapping session. Network and device addresses are mixed with it and shortened before
+   * they leave this module, so the app can count how many different ones it has seen without ever holding an address.
+   * A new session gets a new value, so the numbers cannot be matched up across sessions.
+   */
+  @Volatile private var sessionSalt: Long = SecureRandom().nextLong()
   /** The map and the AR view both use the orientation stream; it runs while at least one of them wants it. */
   private var orientationClients = 0
 
@@ -71,6 +78,7 @@ class SignalScanModule : Module() {
     }
 
     AsyncFunction("startMapping") {
+      sessionSalt = SecureRandom().nextLong()
       MappingService.start(context)
       startGnss()
     }
@@ -123,6 +131,9 @@ class SignalScanModule : Module() {
     "bluetooth" to bluetooth,
     "gnss" to gnssSnapshot
   )
+
+  /** A short, session-only stand-in for an address: good for counting distinct ones, useless for identifying anything. */
+  private fun anonymous(address: String): Int = (address + "#" + sessionSalt).hashCode()
 
   private fun has(permission: String) =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -237,6 +248,7 @@ class SignalScanModule : Module() {
       if (r.timestamp > newestMicros) newestMicros = r.timestamp
     }
     val ageMs = if (newestMicros > 0) SystemClock.elapsedRealtime() - newestMicros / 1000 else null
+    val ids = results.mapNotNull { r -> r.BSSID?.let { anonymous(it) } }.distinct()
     return mapOf(
       "available" to true,
       "count" to results.size,
@@ -246,7 +258,8 @@ class SignalScanModule : Module() {
       "band5" to b5,
       "band6" to b6,
       "ageMs" to ageMs,
-      "scanRequested" to requested
+      "scanRequested" to requested,
+      "ids" to ids
     )
   }
 
@@ -312,7 +325,8 @@ class SignalScanModule : Module() {
           "strongestDbm" to levels.lastOrNull(),
           "medianDbm" to if (levels.isEmpty()) null else levels[levels.size / 2],
           "beaconSeen" to (beaconRssi != null),
-          "beaconRssi" to beaconRssi
+          "beaconRssi" to beaconRssi,
+          "ids" to seen.keys.map { anonymous(it) }
         )
       )
     }, BLE_SCAN_MS)
