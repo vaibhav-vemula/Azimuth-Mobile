@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SignalLayer, legendFor, rampColour, toHex } from '../../../mapping/signalLayer';
 import { colors, typography } from '../../../theme';
@@ -14,7 +14,8 @@ const OPTIONS: { layer: SignalLayer; label: string; icon: keyof typeof Ionicons.
 /** Chooses what the mapped ground is tinted by. */
 export function SignalChips({ value, onChange, showRadio }: { value: SignalLayer; onChange: (layer: SignalLayer) => void; showRadio: boolean }) {
   return (
-    <View style={styles.row}>
+    // Scrolls sideways when the chips do not all fit (Cellular, Wi-Fi, Bluetooth, Radio, Off).
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} keyboardShouldPersistTaps="handled" overScrollMode="never">
       {OPTIONS.filter((o) => o.layer !== 'radio' || showRadio || value === 'radio').map((o) => {
         const active = o.layer === value;
         return (
@@ -24,7 +25,7 @@ export function SignalChips({ value, onChange, showRadio }: { value: SignalLayer
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -56,7 +57,7 @@ export function SignalLegend({ layer, hasData }: { layer: Exclude<SignalLayer, '
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 6 },
+  row: { flexDirection: 'row', gap: 6, paddingRight: 12 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: 'rgba(11,15,26,0.92)', borderColor: colors.surfaceBorder, borderWidth: 1 },
   chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { ...typography.caption, fontSize: 12, color: colors.textSecondary },
