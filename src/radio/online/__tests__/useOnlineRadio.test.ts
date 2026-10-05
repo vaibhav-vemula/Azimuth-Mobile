@@ -391,3 +391,51 @@ describe('your own country first', () => {
     expect(guessCountry({ latitudeDeg: 19.43, longitudeDeg: -99.13 })).not.toBe('CA');
   });
 });
+
+describe('the dial follows what is playing', () => {
+  it('shows the frequency of a station chosen from the list', async () => {
+    answer([row('a', 'One 103.5'), row('b', 'Two 103.5', 1), row('c', 'Mix 98.7 FM', 0)]);
+    await useOnlineRadio.getState().tune(103.5);
+    await useOnlineRadio.getState().play({ ...useOnlineRadio.getState().stations[0], id: 'x', name: 'Other 91.3', url: 'https://x/91' });
+    expect(useOnlineRadio.getState().mhz).toBe(91.3);
+    expect(useOnlineRadio.getState().current?.id).toBe('x');
+  });
+
+  it('keeps the dial where it was when the station has no frequency in its name', async () => {
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    await useOnlineRadio.getState().play({ ...useOnlineRadio.getState().stations[0], id: 'j', name: 'Smooth Jazz', url: 'https://x/jazz' });
+    expect(useOnlineRadio.getState().mhz).toBe(103.5);
+  });
+
+  it('follows a station started from the near-me list or a name search too', async () => {
+    useOnlineRadio.setState({ mhz: 88.1 });
+    await useOnlineRadio.getState().play({ id: 'n', name: 'Local 96.3', url: 'https://x/n', country: 'USA', countryCode: 'US', bitrate: 128, codec: 'MP3', votes: 1, tags: '', state: '', lat: null, lon: null });
+    expect(useOnlineRadio.getState().mhz).toBe(96.3);
+  });
+
+  it('does not search again for the frequency it just showed', async () => {
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    (global.fetch as jest.Mock).mockClear();
+    await useOnlineRadio.getState().play({ ...useOnlineRadio.getState().stations[0], id: 'x', name: 'Other 91.3', url: 'https://x/91' });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('the station list keeps its own name', () => {
+  it('names the list for the frequency that was tuned, even after the dial moves to another station', async () => {
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    expect(useOnlineRadio.getState().listTitle).toBe('All US stations on 103.5 MHz');
+    await useOnlineRadio.getState().play({ ...useOnlineRadio.getState().stations[0], id: 'x', name: 'Other 91.3', url: 'https://x/91' });
+    expect(useOnlineRadio.getState().mhz).toBe(91.3);
+    expect(useOnlineRadio.getState().listTitle).toBe('All US stations on 103.5 MHz');
+  });
+
+  it('names a name search by its words', async () => {
+    answer([row('a', 'Jazz FM')]);
+    await useOnlineRadio.getState().search(' jazz ');
+    expect(useOnlineRadio.getState().listTitle).toBe('Results for “jazz”');
+  });
+});

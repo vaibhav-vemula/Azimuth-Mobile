@@ -4,7 +4,7 @@ import type { AudioPlayer } from 'expo-audio';
 import { createMMKV } from 'react-native-mmkv';
 import { useReceiver } from '../../receiver/useReceiver';
 import * as Location from 'expo-location';
-import { Here, Station, clampFm, formatMHz, searchByFrequency, searchByName, searchNearby } from './radioBrowser';
+import { Here, Station, clampFm, formatMHz, frequencyFromName, searchByFrequency, searchByName, searchNearby } from './radioBrowser';
 import { deviceRegion, inMilesCountry } from '../../units/units';
 import { EMPTY_BINS, audioBins, monoFrames, simulatedBins, smoothBins } from './audioSpectrum';
 
@@ -99,6 +99,8 @@ interface OnlineRadioState {
   here: Here | null;
   /** The country the stations are limited to. Stations from other countries are never shown. */
   scope: string | null;
+  /** What the list of stations is: "All US stations on 103.5 MHz", or the words searched for. The dial can move on while a station from the list plays, so the list keeps its own name. */
+  listTitle: string | null;
   /** Stations near the listener, nearest first, and how that search went. */
   nearby: Station[];
   nearbyStatus: 'idle' | 'loading' | 'ready' | 'empty' | 'no-location' | 'error';
@@ -232,6 +234,7 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
   stations: [],
   here: null,
   scope: null,
+  listTitle: null,
   nearby: [],
   nearbyStatus: 'idle',
   current: null,
@@ -277,7 +280,7 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
       }
       const stations = await searchByFrequency(target, { countryCode: country, here: place?.here ?? null });
       if (mine !== request) return;
-      set({ stations, scope: country });
+      set({ stations, scope: country, listTitle: `All ${country} stations on ${formatMHz(target)} MHz` });
       if (stations.length === 0) {
         releasePlayer();
         set({ status: 'nomatch', current: null, error: null });
@@ -302,7 +305,7 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
       }
       const stations = await searchByName(text, { countryCode: place.countryCode, here: place.here });
       if (mine !== request) return;
-      set({ stations, status: stations.length === 0 ? 'nomatch' : 'idle' });
+      set({ stations, status: stations.length === 0 ? 'nomatch' : 'idle', listTitle: `Results for “${text.trim()}”` });
     } catch (e) {
       if (mine !== request) return;
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) });
@@ -317,6 +320,9 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     const receiver = useReceiver.getState();
     if (receiver.listening) await receiver.setListening(false).catch(() => undefined);
     set({ current: station, status: 'connecting', error: null });
+    // Whatever station plays, the dial shows its frequency (when its name gives one).
+    const named = frequencyFromName(station.name);
+    if (named !== null) get().setFrequency(named);
     try {
       await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false, interruptionMode: 'doNotMix' });
       if (mine !== request) return;

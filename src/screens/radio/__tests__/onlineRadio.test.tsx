@@ -95,12 +95,12 @@ describe('the online radio screen', () => {
 
   it('lists every station on the frequency below the one that plays, even when there is just one', () => {
     const second = { ...station, id: 'b', name: 'Other 98.7', url: 'https://x/b' };
-    useOnlineRadio.setState({ current: station, status: 'playing', stations: [station, second] });
+    useOnlineRadio.setState({ current: station, status: 'playing', stations: [station, second], listTitle: 'All US stations on 98.7 MHz' });
     const out = text(render());
-    expect(out).toMatch(/all stations on 98.7 mhz/i);
+    expect(out).toMatch(/all us stations on 98.7 mhz/i);
     expect(out).toContain('Other 98.7');
     useOnlineRadio.setState({ stations: [station] });
-    expect(text(render())).toMatch(/all stations on 98.7 mhz/i);
+    expect(text(render())).toMatch(/all us stations on 98.7 mhz/i);
   });
 
   it('does not cut a long list short', () => {

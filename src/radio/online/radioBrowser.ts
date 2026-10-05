@@ -54,6 +54,25 @@ export function nameHasFrequency(name: string, mhz: number): boolean {
   return new RegExp(`(?<![0-9.,])${pattern}`).test(name);
 }
 
+/**
+ * The FM frequency a station names itself by: "WTOP 103.5 FM" gives 103.5, "Mix 98,7" gives 98.7. A whole number counts
+ * only when it is followed by "FM" or "MHz" ("Mix 98 FM"), so "Top 100 Hits" is not read as a frequency. Null when the name
+ * has no frequency on the FM band.
+ */
+export function frequencyFromName(name: string): number | null {
+  const decimal = /(?<![0-9.,])(\d{2,3})[.,](\d)(?![0-9])/g;
+  for (const m of name.matchAll(decimal)) {
+    const mhz = Number(`${m[1]}.${m[2]}`);
+    if (mhz >= FM_MIN_MHZ && mhz <= FM_MAX_MHZ) return mhz;
+  }
+  const whole = /(?<![0-9.,])(\d{2,3})(?![0-9.,])\s*(?:fm|mhz)\b/gi;
+  for (const m of name.matchAll(whole)) {
+    const mhz = Number(m[1]);
+    if (mhz >= FM_MIN_MHZ && mhz <= FM_MAX_MHZ) return mhz;
+  }
+  return null;
+}
+
 interface Row {
   stationuuid?: string;
   name?: string;

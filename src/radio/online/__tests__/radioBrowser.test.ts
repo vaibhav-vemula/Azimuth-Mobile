@@ -165,3 +165,35 @@ describe('FM from your own country', () => {
     expect((await searchByFrequency(103.5, { countryCode: 'US', here: DC, fetchImpl: f })).map((s) => s.id)).toEqual(['dc', 'la']);
   });
 });
+
+describe('the frequency in a station name', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { frequencyFromName } = require('../radioBrowser');
+
+  it('is read from the usual ways of writing it', () => {
+    expect(frequencyFromName('WTOP 103.5 FM')).toBe(103.5);
+    expect(frequencyFromName('Mix 98,7')).toBe(98.7);
+    expect(frequencyFromName('Kiss 100.3')).toBe(100.3);
+    expect(frequencyFromName('88.1 WYEP')).toBe(88.1);
+    expect(frequencyFromName('Hits 107.9 - The Best')).toBe(107.9);
+  });
+
+  it('reads a whole number only when it says FM or MHz', () => {
+    expect(frequencyFromName('Mix 98 FM')).toBe(98);
+    expect(frequencyFromName('Radio 95 MHz')).toBe(95);
+    expect(frequencyFromName('Top 100 Hits')).toBeNull();
+    expect(frequencyFromName('Radio 95')).toBeNull();
+  });
+
+  it('is nothing for a name without a frequency, or with one off the FM band', () => {
+    expect(frequencyFromName('Jazz FM')).toBeNull();
+    expect(frequencyFromName('AM 1010 WINS')).toBeNull();
+    expect(frequencyFromName('Station 12.5')).toBeNull();
+    expect(frequencyFromName('Number 150.7')).toBeNull();
+    expect(frequencyFromName('Hits 87.4')).toBeNull();
+  });
+
+  it('takes the first frequency on the band when a name has several numbers', () => {
+    expect(frequencyFromName('Channel 5 - 101.1 FM since 1998')).toBe(101.1);
+  });
+});
