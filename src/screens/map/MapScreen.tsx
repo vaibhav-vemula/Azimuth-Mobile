@@ -16,6 +16,7 @@ import { clearedBoundary, coordinateBounds } from '../../mapping/fog';
 import { loadSessionCells } from '../../mapping/mappingStorage';
 import { sessionDate, useSessionView } from '../../mapping/sessionHistory';
 import { useReceiver } from '../../receiver/useReceiver';
+import { MappingButton } from './components/MappingButton';
 import { MiniStats, SheetTimer } from './components/SheetHeaderParts';
 import { ChestCard } from '../chests/ChestCard';
 import { hexCenter, parseCellId } from '../../mapping/hexGrid';
@@ -339,13 +340,7 @@ export default function MapScreen() {
             {running ? <MiniStats showLabels={sheetOpen} /> : null}
             {running && !sheetSeen && !sheetOpen ? <SwipeHint text="Swipe up for all your stats" /> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Button
-              label={running ? 'Stop mapping' : 'Start mapping'}
-              icon={running ? 'stop-circle-outline' : 'play-circle-outline'}
-              variant={running ? 'danger' : 'primary'}
-              onPress={() => void onToggle()}
-              loading={busy}
-            />
+            <MappingButton running={running} busy={busy} onPress={() => void onToggle()} />
           </View>
         }
       >
