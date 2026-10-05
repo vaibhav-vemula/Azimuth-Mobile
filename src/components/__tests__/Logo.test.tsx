@@ -21,8 +21,8 @@ describe('AzimuthMark', () => {
         </>
       );
     });
-    const ids = JSON.stringify(t.toJSON()).match(/"id":"[^"]+"/g) ?? [];
-    expect(ids.length).toBeGreaterThanOrEqual(6);
+    const ids = JSON.stringify(t.toJSON()).match(/"name":"[^"]+"/g) ?? [];
+    expect(ids.length).toBeGreaterThanOrEqual(6); // three gradients in each copy
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
