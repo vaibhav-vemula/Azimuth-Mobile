@@ -46,7 +46,7 @@ describe('SessionHistory', () => {
     expect(out).toContain('12:34'); // 754 s
     expect(out).toContain('810'); // 812 m, shown to the nearest 10
     expect(out).toContain('-31 dBFS');
-    expect((out.match(/dBFS/g) ?? []).length).toBe(1);
+    expect((out.match(/\"-31 dBFS\"/g) ?? []).length).toBe(1); // only the session that had a dongle
     expect(t.root.findAllByProps({ accessibilityLabel: 'Delete this session' }).length).toBeGreaterThan(0);
   });
 
