@@ -55,6 +55,20 @@ export async function signText(text: string, walletAddressBase64: string): Promi
   return toBase64(signed.slice(signed.length - SIGNATURE_BYTES));
 }
 
+/**
+ * Asks the wallet to sign the same message `count` times in ONE wallet session, so there is a single approval screen.
+ * Returns the base64 signatures. Used to check that the wallet's signatures are repeatable.
+ */
+export async function signTextRepeated(text: string, walletAddressBase64: string, count: number): Promise<string[]> {
+  const message = new TextEncoder().encode(text);
+  const signed = await transact(async (wallet) => {
+    await authorizeForSigning(wallet as unknown as WalletSession, walletAddressBase64);
+    return wallet.signMessages({ addresses: Array(count).fill(walletAddressBase64), payloads: Array(count).fill(message) });
+  });
+  if (!signed || signed.length !== count || signed.some((s) => !s || s.length < SIGNATURE_BYTES)) throw new Error('The wallet did not return the signatures.');
+  return signed.map((s) => toBase64(s.slice(s.length - SIGNATURE_BYTES)));
+}
+
 /** Asks the connected wallet (Seed Vault on a Seeker) to sign the report. */
 export async function signReport(report: Report, walletAddressBase64: string): Promise<SignedReport> {
   const message = signingMessage(report);

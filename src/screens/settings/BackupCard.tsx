@@ -12,7 +12,7 @@ function when(ms: number | null): string {
 
 /** Turns on the encrypted, wallet-keyed backup of the map progress, and syncs it. */
 export function BackupCard() {
-  const { phase, step, enabled, lastMs, message, error, available, enable, syncNow, disable } = useBackup();
+  const { phase, enabled, lastMs, message, error, available, enable, syncNow, disable } = useBackup();
   const address = useWallet((s) => s.address);
   const busy = phase !== 'idle';
 
@@ -36,8 +36,8 @@ export function BackupCard() {
         </>
       ) : (
         <>
-          <Button label={phase === 'unlocking' ? `Waiting for wallet (${step || 1} of 2)…` : 'Turn on backup'} icon="shield-checkmark-outline" loading={busy} disabled={busy} onPress={() => void enable()} />
-          <Text style={styles.small}>Your wallet asks you to sign a short message, twice, to confirm the key is stable. It costs nothing and sends nothing on-chain.</Text>
+          <Button label={phase === 'unlocking' ? 'Waiting for wallet…' : 'Turn on backup'} icon="shield-checkmark-outline" loading={busy} disabled={busy} onPress={() => void enable()} />
+          <Text style={styles.small}>Your wallet asks you to approve signing a short message. It costs nothing and sends nothing on-chain.</Text>
         </>
       )}
 

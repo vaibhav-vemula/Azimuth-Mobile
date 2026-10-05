@@ -6,7 +6,7 @@ import { SUPABASE_KEY, SUPABASE_URL, backendMode } from '../network/config';
 import { createSupabaseApi } from '../network/supabaseApi';
 import { useMapping } from '../mapping/useMapping';
 import { useWallet } from '../wallet/useWallet';
-import { signText } from '../wallet/signReport';
+import { signTextRepeated } from '../wallet/signReport';
 import { BackupKeys, deriveKeys, open, seal, unlockMessage } from './crypto';
 import { Snapshot, hasNewerThan, packSnapshot, unpackSnapshot } from './snapshot';
 
@@ -97,11 +97,9 @@ export const useBackup = create<BackupState>((set, get) => ({
     try {
       const base64 = Buffer.from(bs58.decode(address)).toString('base64');
       const text = unlockMessage(address);
-      set({ step: 1 });
-      const first = await withTimeout(signText(text, base64), SIGN_TIMEOUT_MS, 'The wallet did not respond. Open your wallet app, make sure it is unlocked, and try again.');
-      // The key comes from this signature, so the wallet must give the same one every time. Ask once more to be sure.
-      set({ step: 2 });
-      const second = await withTimeout(signText(text, base64), SIGN_TIMEOUT_MS, 'The wallet did not respond to the second request. Try again.');
+      // The key comes from this signature, so the wallet must give the same one every time. Ask for it twice in the same
+      // wallet session (one approval screen) and compare.
+      const [first, second] = await withTimeout(signTextRepeated(text, base64, 2), SIGN_TIMEOUT_MS, 'The wallet did not respond. Open your wallet app, make sure it is unlocked, and try again.');
       if (first !== second) throw new Error('This wallet gives a different signature each time, so it cannot unlock a backup safely.');
       const keys = deriveKeys(new Uint8Array(Buffer.from(first, 'base64')));
       save({ node: address, ...keys, lastMs: null });

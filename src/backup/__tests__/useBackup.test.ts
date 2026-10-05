@@ -20,7 +20,9 @@ jest.mock('../../network/supabaseApi', () => ({ createSupabaseApi: () => ({ putB
 
 let mockSignature = Buffer.alloc(64, 5).toString('base64');
 const mockSign = jest.fn(async () => mockSignature);
-jest.mock('../../wallet/signReport', () => ({ signText: (...a: unknown[]) => (mockSign as (...x: unknown[]) => Promise<string>)(...a) }));
+jest.mock('../../wallet/signReport', () => ({
+  signTextRepeated: async (...a: unknown[]) => [await (mockSign as (...x: unknown[]) => Promise<string>)(...a), await (mockSign as (...x: unknown[]) => Promise<string>)(...a)],
+}));
 
 import { useBackup } from '../useBackup';
 import { useMapping } from '../../mapping/useMapping';
@@ -40,7 +42,7 @@ function reset(explored: Record<string, number>) {
 }
 
 describe('wallet-keyed encrypted backup', () => {
-  it('signs twice to be sure the key is stable, then uploads only encrypted data', async () => {
+  it('checks the signature is repeatable, then uploads only encrypted data', async () => {
     reset({ a: 1, b: 2 });
     const ok = await useBackup.getState().enable();
     if (!ok) throw new Error('enable failed: ' + useBackup.getState().error);
