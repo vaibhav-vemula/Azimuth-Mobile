@@ -165,14 +165,14 @@ describe('the signal bars', () => {
     expect(useAudioBars.getState().sampling).toBe('unknown');
   });
 
-  it('say so when this phone cannot give out the audio', async () => {
+  it('are simulated, and labelled so, when this phone cannot give out the audio', async () => {
     answer([row('a', 'One 103.5')]);
     audio.createAudioPlayer.mockImplementationOnce((source: unknown) => {
       const p = { source, volume: 1, isAudioSamplingSupported: false, setAudioSamplingEnabled: jest.fn(), play: jest.fn(), remove: jest.fn(), addListener: jest.fn(() => ({ remove: jest.fn() })) };
       return p;
     });
     await useOnlineRadio.getState().tune(103.5);
-    expect(useAudioBars.getState().sampling).toBe('off');
+    expect(useAudioBars.getState().sampling).toBe('simulated');
   });
 });
 
@@ -186,7 +186,7 @@ describe('the permission for the signal bars', () => {
     expoAudio.getRecordingPermissionsAsync.mockResolvedValueOnce({ granted: false });
     answer([row('a', 'One 103.5')]);
     await useOnlineRadio.getState().tune(103.5);
-    expect(useAudioBars.getState().sampling).toBe('needs-permission');
+    expect(useAudioBars.getState().sampling).toBe('simulated');
     expect(expoAudio.requestRecordingPermissionsAsync).not.toHaveBeenCalled();
     expect(audio.__players[0].setAudioSamplingEnabled).not.toHaveBeenCalled();
     expect(audio.__players[0].play).toHaveBeenCalled(); // the station still plays
@@ -206,6 +206,68 @@ describe('the permission for the signal bars', () => {
     answer([row('a', 'One 103.5')]);
     await useOnlineRadio.getState().tune(103.5);
     expect(await useOnlineRadio.getState().enableBars()).toBe(false);
-    expect(useAudioBars.getState().sampling).toBe('needs-permission');
+    expect(useAudioBars.getState().sampling).toBe('simulated');
+  });
+});
+
+describe('really stopping the sound', () => {
+  it('pauses and mutes the player before letting go of it, because removing it alone leaves the sound running', async () => {
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    const p = audio.__players[0];
+    useOnlineRadio.getState().stop();
+    expect(p.pause).toHaveBeenCalled();
+    expect(p.volume).toBe(0);
+    expect(p.removed).toBe(true);
+    expect(p.pause.mock.invocationCallOrder[0]).toBeLessThan(p.remove.mock.invocationCallOrder[0]);
+    expect(p.playing).toBe(false);
+  });
+
+  it('silences the old station when the dial moves, and when another is chosen', async () => {
+    answer([row('a', 'One 103.5'), row('b', 'Two 103.5', 1)]);
+    await useOnlineRadio.getState().tune(103.5);
+    const first = audio.__players[0];
+    await useOnlineRadio.getState().play(useOnlineRadio.getState().stations[1]);
+    expect(first.playing).toBe(false);
+    expect(first.volume).toBe(0);
+    const second = audio.__players[1];
+    useOnlineRadio.getState().stop();
+    expect(second.playing).toBe(false);
+    expect(audio.__players.filter((p: { playing: boolean }) => p.playing)).toHaveLength(0);
+  });
+
+  it('leaves nothing playing after a quick burst of tunes', async () => {
+    answer([row('a', 'One 103.5')]);
+    await Promise.all([useOnlineRadio.getState().tune(103.5), useOnlineRadio.getState().tune(103.5), useOnlineRadio.getState().tune(103.5)]);
+    expect(audio.__players.filter((p: { playing: boolean }) => p.playing).length).toBeLessThanOrEqual(1);
+    useOnlineRadio.getState().stop();
+    expect(audio.__players.filter((p: { playing: boolean }) => p.playing)).toHaveLength(0);
+  });
+});
+
+describe('the simulated bars', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAudioBars } = require('../useOnlineRadio');
+
+  it('move while a station plays and stop with it', async () => {
+    jest.useFakeTimers();
+    try {
+      answer([row('a', 'One 103.5')]);
+      const done = useOnlineRadio.getState().tune(103.5);
+      await jest.advanceTimersByTimeAsync(0);
+      await done;
+      audio.__players[0].emit({ playing: true, isBuffering: false, isLoaded: true, error: null });
+      expect(useAudioBars.getState().sampling).toBe('simulated');
+      await jest.advanceTimersByTimeAsync(600);
+      const first = [...useAudioBars.getState().bins];
+      await jest.advanceTimersByTimeAsync(700);
+      expect(Math.max(...first)).toBeGreaterThan(0.05);
+      expect(useAudioBars.getState().bins).not.toEqual(first);
+      useOnlineRadio.getState().stop();
+      await jest.advanceTimersByTimeAsync(500);
+      expect(Math.max(...useAudioBars.getState().bins)).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

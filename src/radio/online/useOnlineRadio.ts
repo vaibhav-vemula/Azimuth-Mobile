@@ -4,7 +4,7 @@ import type { AudioPlayer } from 'expo-audio';
 import { createMMKV } from 'react-native-mmkv';
 import { useReceiver } from '../../receiver/useReceiver';
 import { Station, clampFm, formatMHz, searchByFrequency, searchByName } from './radioBrowser';
-import { EMPTY_BINS, audioBins, monoFrames, smoothBins } from './audioSpectrum';
+import { EMPTY_BINS, audioBins, monoFrames, simulatedBins, smoothBins } from './audioSpectrum';
 
 const storage = createMMKV({ id: 'azimuth-radio' });
 const FREQ_KEY = 'onlineMhz';
@@ -17,10 +17,11 @@ const VOLUME_KEY = 'onlineVolume';
 interface BarsState {
   bins: number[];
   /**
-   * 'on': audio samples are coming; 'off': this phone cannot give them out; 'needs-permission': Android only lets an app read
-   * the sound it is playing if it holds the microphone permission, which has not been given; 'unknown': not known yet.
+   * 'on': the bars follow the real sound; 'simulated': a made-up moving display, used when the real sound cannot be read
+   * (Android only allows that with the microphone permission, which has not been given, or the phone cannot do it);
+   * 'unknown': nothing playing yet.
    */
-  sampling: 'unknown' | 'on' | 'off' | 'needs-permission';
+  sampling: 'unknown' | 'on' | 'simulated';
 }
 export const useAudioBars = create<BarsState>(() => ({ bins: EMPTY_BINS, sampling: 'unknown' }));
 const BARS_INTERVAL_MS = 50;
@@ -61,16 +62,52 @@ function savedVolume(): number {
   return typeof saved === 'number' ? Math.min(1, Math.max(0, saved)) : 0.8;
 }
 
+let simTimer: ReturnType<typeof setInterval> | null = null;
+const SIM_INTERVAL_MS = 60;
+
+function stopSimulation() {
+  if (simTimer) clearInterval(simTimer);
+  simTimer = null;
+}
+
+/** Moves the bars on their own while the real sound is not being read. Does nothing while the station is not playing. */
+function startSimulation() {
+  stopSimulation();
+  useAudioBars.setState({ sampling: 'simulated' });
+  const started = Date.now();
+  simTimer = setInterval(() => {
+    const { status, mhz, current } = useOnlineRadio.getState();
+    if (useAudioBars.getState().sampling !== 'simulated') return stopSimulation();
+    const seed = ((current?.id.length ?? 0) + Math.round(mhz * 10)) % 17;
+    const target = status === 'playing' ? simulatedBins((Date.now() - started) / 1000, seed) : EMPTY_BINS;
+    useAudioBars.setState({ bins: smoothBins(useAudioBars.getState().bins, target) });
+  }, SIM_INTERVAL_MS);
+}
+
 function releasePlayer() {
+  stopSimulation();
   useAudioBars.setState({ bins: EMPTY_BINS, sampling: 'unknown' });
   unsubscribe?.();
   unsubscribe = null;
+  const old = player;
+  player = null;
+  if (!old) return;
+  // On Android, remove() only forgets the player; it does not stop the sound. So it is paused and muted first.
   try {
-    player?.remove();
+    old.pause();
   } catch {
     // Already released.
   }
-  player = null;
+  try {
+    old.volume = 0;
+  } catch {
+    // Already released.
+  }
+  try {
+    old.remove();
+  } catch {
+    // Already released.
+  }
 }
 
 let barsStop: (() => void) | null = null;
@@ -84,14 +121,14 @@ async function attachBars(next: AudioPlayer, mine: number): Promise<() => void> 
   let sub: { remove: () => void } | null = null;
   try {
     if (!next.isAudioSamplingSupported) {
-      useAudioBars.setState({ sampling: 'off' });
-      return () => undefined;
+      startSimulation();
+      return stopSimulation;
     }
     const permission = await getRecordingPermissionsAsync();
     if (mine !== request || player !== next) return () => undefined;
     if (!permission.granted) {
-      useAudioBars.setState({ sampling: 'needs-permission' });
-      return () => undefined;
+      startSimulation();
+      return stopSimulation;
     }
     next.setAudioSamplingEnabled(true);
     let lastBars = 0;
@@ -101,10 +138,13 @@ async function attachBars(next: AudioPlayer, mine: number): Promise<() => void> 
       lastBars = now;
       const frames = monoFrames(sample.channels);
       if (frames.length < 32) return;
+      stopSimulation();
       useAudioBars.setState({ bins: smoothBins(useAudioBars.getState().bins, audioBins(frames)), sampling: 'on' });
     });
+    // Until the first real samples arrive, the bars move on their own.
+    startSimulation();
   } catch {
-    useAudioBars.setState({ sampling: 'off' });
+    startSimulation();
   }
   return () => {
     sub?.remove();

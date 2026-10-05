@@ -61,3 +61,32 @@ describe('mono frames', () => {
     expect(monoFrames([])).toEqual([]);
   });
 });
+
+describe('simulatedBins', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { simulatedBins } = require('../audioSpectrum');
+
+  it('gives 64 bars in range, with more energy low down than high up', () => {
+    const bins = simulatedBins(3, 4);
+    expect(bins).toHaveLength(64);
+    expect(Math.min(...bins)).toBeGreaterThan(0);
+    expect(Math.max(...bins)).toBeLessThanOrEqual(1);
+    const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+    let low = 0;
+    let high = 0;
+    for (let t = 0; t < 20; t += 0.5) {
+      const b = simulatedBins(t, 4);
+      low += avg(b.slice(0, 16));
+      high += avg(b.slice(48));
+    }
+    expect(low).toBeGreaterThan(high);
+  });
+
+  it('changes smoothly over time and differs between stations', () => {
+    const a = simulatedBins(1, 3);
+    const b = simulatedBins(1.05, 3);
+    const maxStep = Math.max(...a.map((v: number, i: number) => Math.abs(v - b[i])));
+    expect(maxStep).toBeLessThan(0.15);
+    expect(simulatedBins(1, 3)).not.toEqual(simulatedBins(1, 9));
+  });
+});

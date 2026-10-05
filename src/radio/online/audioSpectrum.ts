@@ -99,3 +99,20 @@ export function monoFrames(channels: { frames: ArrayLike<number> }[]): number[] 
 }
 
 export const EMPTY_BINS: number[] = new Array(SPECTRUM_BIN_COUNT).fill(0);
+
+/**
+ * A made-up bar display for when the real sound cannot be read: bass-heavy bars that move like music, different for each
+ * station (`seed`) and smooth in time (`seconds`). It is only a visual and says nothing about the actual signal.
+ */
+export function simulatedBins(seconds: number, seed = 0): number[] {
+  const bins: number[] = [];
+  for (let i = 0; i < SPECTRUM_BIN_COUNT; i += 1) {
+    const shape = 0.18 + 0.5 * Math.exp(-i / 22); // more energy low down, less up high
+    const a = Math.sin(seconds * (1.3 + ((i * 0.37 + seed) % 2.3)) + i * 1.7 + seed);
+    const b = Math.sin(seconds * (0.7 + ((i * 0.53 + seed * 0.5) % 1.9)) + i * 0.9);
+    const beat = 0.65 + 0.35 * Math.sin(seconds * 3.1 + seed); // a slow pulse across all the bars
+    const level = shape * (0.45 + 0.35 * a + 0.2 * b) * beat * 1.25;
+    bins.push(Math.min(1, Math.max(0.02, level)));
+  }
+  return bins;
+}

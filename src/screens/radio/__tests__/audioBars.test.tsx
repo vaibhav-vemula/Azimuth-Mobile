@@ -27,25 +27,23 @@ describe('the online signal bars', () => {
     expect(text(render(false))).toContain('No signal stream');
   });
 
-  it('wait for audio, then show the bars with no message', () => {
-    useAudioBars.setState({ sampling: 'unknown' });
-    expect(text(render(true))).toContain('Waiting for audio');
+  it('show the bars with no message and no label when they follow the real sound', () => {
     useAudioBars.setState({ sampling: 'on', bins: new Array(64).fill(0.5) });
     const out = text(render(true));
-    expect(out).not.toContain('Waiting for audio');
     expect(out).not.toContain('No signal stream');
+    expect(out).not.toContain('SIMULATED');
+    expect(out).toContain('Sound of the station');
   });
 
-  it('say so plainly when the phone cannot show the signal', () => {
-    useAudioBars.setState({ sampling: 'off' });
-    expect(text(render(true))).toContain('cannot show the signal');
-  });
-
-  it('offers the bars with a plain reason when the permission is missing', () => {
-    useAudioBars.setState({ sampling: 'needs-permission' });
+  it('label a simulated display as simulated, and offer the real sound', () => {
+    useAudioBars.setState({ sampling: 'simulated', bins: new Array(64).fill(0.4) });
     const out = text(render(true));
-    expect(out).toContain('microphone permission');
-    expect(out).toContain('Nothing is recorded');
-    expect(out).toContain('Show signal bars');
+    expect(out).toContain('SIMULATED');
+    expect(out).toContain('Use the real sound');
+  });
+
+  it('do not call anything simulated when nothing is playing', () => {
+    useAudioBars.setState({ sampling: 'simulated' });
+    expect(text(render(false))).not.toContain('SIMULATED');
   });
 });
