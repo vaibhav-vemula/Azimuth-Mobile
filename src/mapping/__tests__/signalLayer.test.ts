@@ -145,14 +145,14 @@ describe('radio signal layer', () => {
   const scan = (rms?: number) => ({
     cellular: { available: true, cells: [] },
     wifi: { available: true, count: 1 },
-    ...(rms === undefined ? {} : { radio: { band: 'noaa', peakDb: 0, carrier: false, rms, clip: 0, gainDb: 28 } }),
+    ...(rms === undefined ? {} : { radio: { band: 'meteor', peakDb: 0, carrier: false, rms, clip: 0, gainDb: 28 } }),
   });
 
   it('has no colour where the dongle never took a reading', () => {
     expect(level('radio', addReading(undefined, scan(), 1))).toBeNull();
   });
 
-  it('is dark where little radio was measured and bright where there is a lot, with no NOAA needed', () => {
+  it('is dark where little radio was measured and bright where there is a lot, with no satellite needed', () => {
     expect(level('radio', addReading(undefined, scan(0.001), 1))).toBe(0); // -60 dBFS
     expect(level('radio', addReading(undefined, scan(0.2), 1))).toBe(1); // -14 dBFS
     expect(level('radio', addReading(undefined, scan(0.0316), 1))).toBeCloseTo(0.6, 1); // -30 dBFS

@@ -120,7 +120,7 @@ Not on-chain: the measurements, reports, approvals, fog map and the coverage atl
 | gap, dead-zone | phone | cellular readings in/next to the chest cell, enough readings |
 | wifi-quality | phone | Wi-Fi readings at the chest |
 | visit | phone | readings at the chest; if the venue set a tag name, that tag heard above a minimum signal |
-| weather-radio, noise | dongle | NOAA readings at the chest |
+| weather-radio, noise | dongle | radio readings at the chest |
 | satellite-pass | dongle | a pass receipt matching the orbit, the right satellite, inside the window and near the place |
 | sonde | dongle | the sonde's own frequency heard near its landing point |
 
@@ -168,14 +168,14 @@ Server environment variables:
 **Not verified: needs a Seeker and real-world testing**
 - Mobile Wallet Adapter connect, `signMessages`, and the Seed Vault behaviour have never run on a device. They are tested only against a mock.
 - The native scanner has been compiled but not run: cellular, Wi-Fi throttling, Bluetooth, GNSS values, battery cost, and behaviour with the screen off need testing on real hardware.
-- Dongle-assisted mapping (NOAA and sonde probes) and the auto-gain have not run on hardware. The NOAA/sonde thresholds are first guesses.
+- Dongle-assisted mapping (radio sweep, Meteor and sonde probes) and the auto-gain have not run on hardware. The Meteor/sonde thresholds are first guesses.
 - No real satellite pass has been recorded.
 - Seeker Genesis Token checks run against a fake chain in tests; the real RPC path is untested.
 - The escrow program has had no external audit and is not deployed to devnet or mainnet.
 - The Supabase push has been tested against a simulated Supabase, not a real project: the SQL has not been run, and the real REST calls and the payout against a live token are untested. Try it on devnet first.
 
 **Known weaknesses by design** (see DEPIN_DESIGN.md section 5)
-- The verifier checks plausibility, not truth. A modified app can invent readings that look plausible. Venue-tag, sonde-frequency and NOAA checks raise the cost, but all of them can be faked with public information.
+- The verifier checks plausibility, not truth. A modified app can invent readings that look plausible. Venue-tag, sonde-frequency and Meteor checks raise the cost, but all of them can be faked with public information.
 - One verifier is trusted. The escrow limits what it can do (it cannot take funds, double-pay, or exceed the funded fills), but it decides who is paid.
 - Reward amounts are placeholders. Demand is unproven; talk to real requesters before relying on any of this.
 
@@ -185,5 +185,5 @@ Server environment variables:
 - **Arrow**: drawn as an SVG dial (tip straight up), turns by `bearing - heading` and glides the short way round. Heading comes from the native rotation-vector sensor, corrected to true north. The native module now also reports the sensor's own accuracy status; when it is low or unreliable the pill asks for a figure-8 wave of the phone. Not yet checked on a real phone.
 - **Mapping sheet**: drags from anywhere (header always; body only when scrolled to the top or not fully open).
 - **Map zoom**: starts at zoom 17 once both a fix and the map exist; the location button flies to you on the first press.
-- **Dongle at start**: pressing Start mapping now connects a plugged-in RTL-SDR first (`ensureDongle`, 20 s allowed for the Android USB prompt; mapping carries on without it if there is none). If it was missing at start, a later radio reading tries again, at most every 3 minutes. A radio reading about once a minute sweeps five 2.4 MHz windows (FM 98 MHz, VHF incl. NOAA 162.7, UHF 462.6, 751 and 945 MHz cellular bands) at a fixed 28 dB gain and stores the combined level; the NOAA check comes from the 162.7 window and is no longer what the map shows.
+- **Dongle at start**: pressing Start mapping now connects a plugged-in RTL-SDR first (`ensureDongle`, 20 s allowed for the Android USB prompt; mapping carries on without it if there is none). If it was missing at start, a later radio reading tries again, at most every 3 minutes. A radio reading about once a minute sweeps five 2.4 MHz windows (FM 98 MHz, Meteor-M 137.5 MHz covering 137.1 and 137.9, UHF 462.6, 751 and 945 MHz cellular bands) at a fixed 28 dB gain and stores the combined level; the Meteor check (is a Meteor-M LRPT signal heard, which only happens during a pass) comes from the 137.5 window.
 - **Radio coverage layer**: a Radio chip appears next to Cellular / Wi-Fi / Bluetooth once a dongle is connected or radio readings exist. It tints the map by the overall radio level measured there, in dB below full scale (dark = quiet, about -45 dBFS; yellow = strong, about -20 dBFS). The scale is a first guess and needs tuning against a real dongle.

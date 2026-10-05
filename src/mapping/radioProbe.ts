@@ -135,7 +135,7 @@ async function sweep(windowsHz: readonly number[]): Promise<{ windows: WindowSum
   }
 }
 
-/** One radio reading: how much radio energy there is here, across several bands, plus whether NOAA Weather Radio is heard. */
+/** One radio reading: how much radio energy there is here, across several bands, plus whether a Meteor satellite is heard. */
 export async function probeRadio(): Promise<RadioReading | ProbeSkip> {
   const out = await sweep(RADIO_WINDOWS_HZ);
   if (typeof out === 'string') return out;

@@ -1,42 +1,50 @@
-import { NOAA_CHANNELS_HZ, analyzeNoaa, nearestGain, noaaBin, NOAA_TUNE_HZ, RADIO_WINDOWS_HZ, combineWindows, levelDbfs } from '../radio';
+import { METEOR_CHANNELS_HZ, METEOR_TUNE_HZ, analyzeMeteor, meteorBin, nearestGain, RADIO_WINDOWS_HZ, combineWindows, levelDbfs } from '../radio';
 import { addScan, emptyBucket, summarize } from '../aggregate';
 import type { ScanResult } from '../../../modules/signal-scan';
 
 const flat = (level = 0.3) => new Array(64).fill(level);
 
-describe('NOAA analysis', () => {
-  it('puts all seven channels below the centre and clear of the centre spike', () => {
-    const bins = NOAA_CHANNELS_HZ.map(noaaBin);
-    expect(Math.max(...bins)).toBeLessThan(32 - 3);
-    expect(Math.min(...bins)).toBeGreaterThan(8);
+describe('Meteor analysis', () => {
+  const [low, high] = METEOR_CHANNELS_HZ.map(meteorBin);
+
+  it('puts both channels clear of the centre spike and inside the window', () => {
+    expect(high).toBeLessThan(62);
+    expect(low).toBeGreaterThan(2);
+    expect(Math.abs(low - 32)).toBeGreaterThan(6);
+    expect(Math.abs(high - 32)).toBeGreaterThan(6);
   });
 
   it('finds nothing in a flat spectrum', () => {
-    expect(analyzeNoaa(flat())).toEqual({ peakDb: 0, carrier: false });
+    expect(analyzeMeteor(flat())).toEqual({ peakDb: 0, carrier: false });
   });
 
-  it('detects a strong channel', () => {
-    const bins = flat();
-    bins[noaaBin(162_550_000)] = 0.6; // 15 dB over the noise (0.3 * 50 dB range)
-    const out = analyzeNoaa(bins);
-    expect(out.carrier).toBe(true);
-    expect(out.peakDb).toBeCloseTo(15, 0);
+  it('detects a wide signal on either channel', () => {
+    for (const c of [low, high]) {
+      const bins = flat();
+      for (let i = c - 2; i <= c + 2; i++) bins[i] = 0.6; // 15 dB over the noise (0.3 * 50 dB range)
+      const out = analyzeMeteor(bins);
+      expect(out.carrier).toBe(true);
+      expect(out.peakDb).toBeCloseTo(15, 0);
+    }
   });
 
-  it('does not call a weak bump a carrier', () => {
-    const bins = flat();
-    bins[noaaBin(162_400_000)] = 0.34; // 2 dB
-    expect(analyzeNoaa(bins).carrier).toBe(false);
+  it('does not call a weak bump, or one narrow spike, a satellite', () => {
+    const weak = flat();
+    for (let i = low - 2; i <= low + 2; i++) weak[i] = 0.34; // 2 dB
+    expect(analyzeMeteor(weak).carrier).toBe(false);
+    const spike = flat();
+    spike[high] = 0.6; // one bin: averaged over five it is only 3 dB
+    expect(analyzeMeteor(spike).carrier).toBe(false);
   });
 
   it('is not fooled by a spike at the dongle centre', () => {
     const bins = flat();
     bins[32] = 0.95;
-    expect(analyzeNoaa(bins).carrier).toBe(false);
+    expect(analyzeMeteor(bins).carrier).toBe(false);
   });
 
   it('rejects spectra of the wrong size', () => {
-    expect(analyzeNoaa([0.1, 0.2])).toEqual({ peakDb: 0, carrier: false });
+    expect(analyzeMeteor([0.1, 0.2])).toEqual({ peakDb: 0, carrier: false });
   });
 });
 
@@ -50,13 +58,13 @@ describe('radio helpers and aggregation', () => {
   it('aggregates dongle readings into the bucket and summary', () => {
     const phone: ScanResult = { atMs: 0, cellular: { available: false, cells: [] }, wifi: { available: false }, bluetooth: null, gnss: {} };
     const bins = flat();
-    bins[noaaBin(162_475_000)] = 0.6;
+    for (let i = meteorBin(137_900_000) - 2; i <= meteorBin(137_900_000) + 2; i++) bins[i] = 0.6;
     const bucket = emptyBucket('c', 0);
-    addScan(bucket, { ...phone, radio: combineWindows([{ hz: NOAA_TUNE_HZ, bins, rms: 0.1, clip: 0 }], 28)! });
-    addScan(bucket, { ...phone, radio: combineWindows([{ hz: NOAA_TUNE_HZ, bins: flat(), rms: 0.12, clip: 0 }], 28)! });
+    addScan(bucket, { ...phone, radio: combineWindows([{ hz: METEOR_TUNE_HZ, bins, rms: 0.1, clip: 0 }], 28)! });
+    addScan(bucket, { ...phone, radio: combineWindows([{ hz: METEOR_TUNE_HZ, bins: flat(), rms: 0.12, clip: 0 }], 28)! });
     expect(bucket.radio?.samples).toBe(2);
     expect(bucket.radio?.carriers).toBe(1);
-    expect(summarize([bucket]).noaaReception).toBe(0.5);
+    expect(summarize([bucket]).meteorReception).toBe(0.5);
   });
 
   it('leaves radio absent when no dongle was used', () => {
@@ -64,7 +72,7 @@ describe('radio helpers and aggregation', () => {
     const bucket = emptyBucket('c', 0);
     addScan(bucket, phone);
     expect(bucket.radio).toBeUndefined();
-    expect(summarize([bucket]).noaaReception).toBeNull();
+    expect(summarize([bucket]).meteorReception).toBeNull();
   });
 });
 
@@ -111,9 +119,9 @@ describe('sonde listening', () => {
 describe('radio level across bands', () => {
   const flatBins = new Array(64).fill(0.3);
 
-  it('listens in five windows that include the weather radio one', () => {
+  it('listens in five windows that include the Meteor one', () => {
     expect(RADIO_WINDOWS_HZ).toHaveLength(5);
-    expect(RADIO_WINDOWS_HZ).toContain(NOAA_TUNE_HZ);
+    expect(RADIO_WINDOWS_HZ).toContain(METEOR_TUNE_HZ);
   });
 
   it('turns a raw level into dB below full scale', () => {
@@ -122,7 +130,7 @@ describe('radio level across bands', () => {
     expect(levelDbfs(0)).toBe(-80);
   });
 
-  it('combines windows by power, takes the worst clipping, and does not need NOAA to be heard', () => {
+  it('combines windows by power, takes the worst clipping, and does not need a satellite to be heard', () => {
     const r = combineWindows(
       [
         { hz: 98_000_000, bins: flatBins, rms: 0.3, clip: 0 },

@@ -25,7 +25,7 @@ const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; text: str
   { icon: 'navigate-outline', title: 'Mapping sessions', text: 'Start and stop signal mapping', status: 'live' },
   { icon: 'cloud-outline', title: 'Fog-of-war map', text: 'Uncover places as you explore', status: 'live' },
   { icon: 'cube-outline', title: 'Bounty chests', text: 'Paid requests for measurements', status: 'live' },
-  { icon: 'hardware-chip-outline', title: 'Dongle readings in mapping', text: 'NOAA Weather Radio reception with an RTL-SDR', status: 'live' },
+  { icon: 'hardware-chip-outline', title: 'Dongle readings in mapping', text: 'Radio signal strength and Meteor-M reception with an RTL-SDR', status: 'live' },
   { icon: 'pulse-outline', title: 'FM and noise surveys', text: 'More bands for the map', status: 'next' },
   { icon: 'storefront-outline', title: 'Venue chests', text: 'Cafes and shops sponsor visits', status: 'planned' },
   { icon: 'balloon-outline', title: 'Sonde hunts', text: 'Track and recover weather balloons', status: 'planned' },

@@ -1,12 +1,12 @@
 import { DISPLAY_RANGE_DB } from '../utils/signal';
 
 /**
- * NOAA Weather Radio uses seven channels, 162.400 to 162.550 MHz, 25 kHz apart. Tuning to 162.700 MHz puts all of
- * them below the centre (150 to 300 kHz down), clear of the dongle's centre spike, and the span above the
- * centre is empty and serves as the noise reference.
+ * Meteor-M weather satellites send their picture (LRPT, about 144 kHz wide) near 137.1 and 137.9 MHz. One window
+ * centred on 137.5 MHz holds both, 400 kHz either side of the dongle's centre spike, and the rest of the window is
+ * the noise reference.
  */
-export const NOAA_TUNE_HZ = 162_700_000;
-export const NOAA_CHANNELS_HZ = [162_400_000, 162_425_000, 162_450_000, 162_475_000, 162_500_000, 162_525_000, 162_550_000];
+export const METEOR_TUNE_HZ = 137_500_000;
+export const METEOR_CHANNELS_HZ = [137_100_000, 137_900_000];
 /** One fixed gain for every reading, so readings from different places are comparable. */
 export const PROBE_GAIN_DB = 28;
 export const PROBE_SAMPLE_RATE_HZ = 2_400_000;
@@ -17,10 +17,10 @@ export const CARRIER_THRESHOLD_DB = 6;
 
 /**
  * Where the dongle listens to measure how much radio energy is around. Each is a 2.4 MHz-wide window; together they sample
- * FM broadcast, VHF (including NOAA Weather Radio), UHF two-way radio, the 700 MHz and the 900 MHz cellular bands. The
- * NOAA window doubles as the weather-radio check that chests of that kind need.
+ * FM broadcast, the Meteor-M satellite band, UHF two-way radio, the 700 MHz and the 900 MHz cellular bands. The
+ * Meteor window also checks whether a Meteor satellite is being heard.
  */
-export const RADIO_WINDOWS_HZ = [98_000_000, NOAA_TUNE_HZ, 462_600_000, 751_000_000, 945_000_000] as const;
+export const RADIO_WINDOWS_HZ = [98_000_000, METEOR_TUNE_HZ, 462_600_000, 751_000_000, 945_000_000] as const;
 
 /** Level of a window as dB below full scale, from its raw-sample level. Floors at -80 so silence stays finite. */
 export function levelDbfs(rms: number): number {
@@ -36,15 +36,15 @@ export interface WindowSummary {
 
 /**
  * One reading from several windows. `rms` is the combined level (the root of the mean power across windows), so it
- * works as one "how much radio is here" number; `clip` is the worst window. The NOAA check comes from the NOAA window.
+ * works as one "how much radio is here" number; `clip` is the worst window. The Meteor check comes from the Meteor window.
  */
 export function combineWindows(windows: WindowSummary[], gainDb: number): RadioReading | null {
   if (windows.length === 0) return null;
   const power = windows.reduce((sum, w) => sum + w.rms * w.rms, 0) / windows.length;
-  const noaa = windows.find((w) => w.hz === NOAA_TUNE_HZ);
-  const { peakDb, carrier } = noaa ? analyzeNoaa(noaa.bins) : { peakDb: 0, carrier: false };
+  const meteor = windows.find((w) => w.hz === METEOR_TUNE_HZ);
+  const { peakDb, carrier } = meteor ? analyzeMeteor(meteor.bins) : { peakDb: 0, carrier: false };
   return {
-    band: 'noaa',
+    band: 'meteor',
     peakDb,
     carrier,
     rms: Math.round(Math.sqrt(power) * 1e5) / 1e5,
@@ -55,12 +55,12 @@ export function combineWindows(windows: WindowSummary[], gainDb: number): RadioR
 }
 
 export interface RadioReading {
-  band: 'noaa';
+  band: 'meteor';
   /** How many windows were measured for this reading (the level in `rms` is across all of them). */
   windows?: number;
-  /** Strongest NOAA channel's level above the noise beside it, in dB (0 if nothing stands out). */
+  /** Strongest Meteor channel's level above the noise in the rest of the window, in dB (0 if nothing stands out). */
   peakDb: number;
-  /** A NOAA carrier was received. */
+  /** A Meteor satellite signal was heard (only possible while one is overhead). */
   carrier: boolean;
   /** Raw level of the receiver input as a fraction of full scale, at the fixed gain, across the measured windows. */
   rms: number;
@@ -75,30 +75,31 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-/** Display bin that holds `frequencyHz` when the dongle is tuned to NOAA_TUNE_HZ. */
-export function noaaBin(frequencyHz: number): number {
-  return Math.round(BIN_COUNT / 2 + (frequencyHz - NOAA_TUNE_HZ) / BIN_HZ);
+/** Display bin that holds `frequencyHz` when the dongle is tuned to METEOR_TUNE_HZ. */
+export function meteorBin(frequencyHz: number): number {
+  return Math.round(BIN_COUNT / 2 + (frequencyHz - METEOR_TUNE_HZ) / BIN_HZ);
 }
+
+/** A Meteor signal must stand this far above the rest of the window to count as heard. */
+export const METEOR_THRESHOLD_DB = 4;
 
 /**
- * Reads NOAA reception from one averaged spectrum. The level of the strongest NOAA channel is compared with
- * the median of an empty span above the centre.
+ * Reads Meteor reception from one averaged spectrum. A Meteor signal is wide (about four display bins), so each
+ * channel is judged by the mean of the five bins around it, against the median of the bins far from both channels
+ * and from the centre spike.
  */
-export function analyzeNoaa(bins: number[]): { peakDb: number; carrier: boolean } {
+export function analyzeMeteor(bins: number[]): { peakDb: number; carrier: boolean } {
   if (bins.length !== BIN_COUNT) return { peakDb: 0, carrier: false };
-  // Noise reference: bins well above the centre, where nothing is licensed near here.
-  const noise = median(bins.slice(BIN_COUNT / 2 + 6, BIN_COUNT / 2 + 22));
-  const from = noaaBin(NOAA_CHANNELS_HZ[0]);
-  const to = noaaBin(NOAA_CHANNELS_HZ[NOAA_CHANNELS_HZ.length - 1]);
+  const centres = METEOR_CHANNELS_HZ.map(meteorBin);
+  const near = (i: number) => Math.abs(i - BIN_COUNT / 2) <= 3 || centres.some((c) => Math.abs(i - c) <= 4);
+  const noise = median(bins.filter((_, i) => i > 1 && i < BIN_COUNT - 2 && !near(i)));
   let peak = -Infinity;
-  for (let i = from - 1; i <= to + 1; i++) peak = Math.max(peak, bins[i]);
+  for (const c of centres) {
+    const level = (bins[c - 2] + bins[c - 1] + bins[c] + bins[c + 1] + bins[c + 2]) / 5;
+    peak = Math.max(peak, level);
+  }
   const peakDb = Math.max(0, (peak - noise) * DISPLAY_RANGE_DB);
-  return { peakDb: Math.round(peakDb * 10) / 10, carrier: peakDb >= CARRIER_THRESHOLD_DB };
-}
-
-export function toReading(summary: { bins: number[]; rms: number; clip: number }, gainDb: number): RadioReading {
-  const { peakDb, carrier } = analyzeNoaa(summary.bins);
-  return { band: 'noaa', peakDb, carrier, rms: summary.rms, clip: summary.clip, gainDb };
+  return { peakDb: Math.round(peakDb * 10) / 10, carrier: peakDb >= METEOR_THRESHOLD_DB };
 }
 
 /** Closest gain the tuner actually offers. */

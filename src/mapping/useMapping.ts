@@ -128,7 +128,7 @@ function nearbyBeacon(currentCellId: string | null): string | null {
   return best ? best.name : null;
 }
 
-/** A sonde chest within a short walk: listen for its frequency instead of the usual NOAA reading. */
+/** A sonde chest within a short walk: listen for its frequency instead of the usual radio reading. */
 const SONDE_LISTEN_CELLS = 12;
 /** Detections within this many cells of the landing point count towards a sonde chest. */
 export const SONDE_CLAIM_CELLS = 8;

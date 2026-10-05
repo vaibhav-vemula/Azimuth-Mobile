@@ -30,7 +30,7 @@ export interface CellSignal {
   /** Bluetooth devices seen: sum and number of readings. */
   bs: number;
   bn: number;
-  /** Dongle readings: how many, how many heard NOAA Weather Radio, and the sum of their overall radio level (dB below full scale). */
+  /** Dongle readings: how many, how many heard a Meteor satellite, and the sum of their overall radio level (dB below full scale). */
   rn?: number;
   rc?: number;
   rs?: number;

@@ -8,7 +8,7 @@ export const CHEST_KIND: Record<Chest['kind'], { label: string; icon: keyof type
   'dead-zone': { label: 'Dead zone', icon: 'cellular-outline', color: colors.warning, blurb: 'Check whether cellular coverage really drops out here.' },
   'wifi-quality': { label: 'Wi-Fi', icon: 'wifi-outline', color: colors.success, blurb: 'Measure Wi-Fi availability and strength at this spot.' },
   visit: { label: 'Visit', icon: 'storefront-outline', color: '#BA68C8', blurb: 'Stop by and take readings.' },
-  'weather-radio': { label: 'Weather radio', icon: 'thunderstorm-outline', color: '#4FC3F7', blurb: 'Needs an RTL-SDR dongle to check NOAA Weather Radio.' },
+  'weather-radio': { label: 'Weather radio', icon: 'thunderstorm-outline', color: '#4FC3F7', blurb: 'Needs an RTL-SDR dongle to measure radio signal at this spot.' },
   'satellite-pass': { label: 'Satellite pass', icon: 'planet-outline', color: '#7986CB', blurb: 'Record a Meteor-M pass with an RTL-SDR and submit the receipt.' },
   sonde: { label: 'Sonde hunt', icon: 'balloon-outline', color: '#FF8A65', blurb: 'A weather balloon landed nearby. Find it by listening for its radio signal.' },
   noise: { label: 'Noise', icon: 'pulse-outline', color: colors.record, blurb: 'Needs an RTL-SDR dongle to measure radio noise.' },

@@ -141,8 +141,8 @@ export interface CellSummary {
   wifiMeanCount: number | null;
   bluetoothMeanCount: number | null;
   gnssMeanCn0: number | null;
-  /** Share of dongle readings in which a NOAA carrier was received. */
-  noaaReception: number | null;
+  /** Share of dongle readings in which a Meteor satellite signal was heard. */
+  meteorReception: number | null;
 }
 
 export function summarize(buckets: CellBucket[]): CellSummary {
@@ -182,6 +182,6 @@ export function summarize(buckets: CellBucket[]): CellSummary {
     wifiMeanCount: wifiSamples > 0 ? wifiSum / wifiSamples : null,
     bluetoothMeanCount: btSamples > 0 ? btSum / btSamples : null,
     gnssMeanCn0: gnssSamples > 0 ? gnssSum / gnssSamples : null,
-    noaaReception: radioSamples > 0 ? radioCarriers / radioSamples : null,
+    meteorReception: radioSamples > 0 ? radioCarriers / radioSamples : null,
   };
 }

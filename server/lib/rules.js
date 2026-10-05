@@ -67,7 +67,7 @@ function checkReport(report, now = Date.now()) {
     const r = b.radio;
     if (r) {
       if (!(r.samples >= 1 && r.samples <= b.samples)) problems.push(`${tag}: radio reading count is inconsistent`);
-      else if (r.carriers > r.samples) problems.push(`${tag}: more NOAA carriers than radio readings`);
+      else if (r.carriers > r.samples) problems.push(`${tag}: more Meteor carriers than radio readings`);
       else if (!inRange(r.peakDbMax, 0, 80) || r.peakDbSum > r.peakDbMax * r.samples + 1e-6) problems.push(`${tag}: radio levels are not physical`);
       else if (!inRange(r.rmsMax, 0, 1) || !inRange(r.clipMax, 0, 1)) problems.push(`${tag}: radio input level is not physical`);
     }
