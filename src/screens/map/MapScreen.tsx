@@ -11,6 +11,7 @@ import { SessionDetails } from './components/SessionDetails';
 import { SignalChips, SignalLegend } from './components/SignalControls';
 import { SignalLayer, signalPoints } from '../../mapping/signalLayer';
 import { Sheet } from './components/Sheet';
+import { MapSheet } from './components/MapSheet';
 import { ChestCard } from '../chests/ChestCard';
 import { hexCenter, parseCellId } from '../../mapping/hexGrid';
 import type { LatLon } from '../../mapping/hexGrid';
@@ -18,7 +19,9 @@ import { distanceM } from '../../mapping/hexGrid';
 import { nearestOf } from '../../mapping/geo';
 import { ChestARView } from '../../ar/ChestARView';
 import { chestPoint } from '../../ar/orientation';
-import { MAX_REVEAL_ACCURACY_M, exploredAreaKm2, formatArea } from '../../mapping/explore';
+import { exploredAreaKm2, formatArea } from '../../mapping/explore';
+import { formatElapsed } from '../../mapping/hudFormat';
+import { useElapsed } from '../../mapping/useElapsed';
 import { useMapping } from '../../mapping/useMapping';
 import { useDevicePose } from '../../mapping/useDevicePose';
 import { useChests } from '../../network/useChests';
@@ -27,7 +30,7 @@ import type { Chest } from '../../network/api';
 import { useWallet } from '../../wallet/useWallet';
 import { formatDistance } from '../chests/chestInfo';
 
-type Panel = 'none' | 'details' | 'chests' | 'chest';
+type Panel = 'none' | 'chests' | 'chest';
 
 /** Opacity steps that fake a gradient from the screen edge inwards. */
 const SCRIM = [0.62, 0.42, 0.24, 0.1, 0];
@@ -43,7 +46,6 @@ export default function MapScreen() {
   const explored = useMapping((s) => s.explored);
   const signals = useMapping((s) => s.signals);
   const fogStyle = useMapping((s) => s.fogStyle);
-  const revealAt = useMapping((s) => s.revealAt);
   const currentCellId = useMapping((s) => s.currentCellId);
   const newCells = useMapping((s) => s.newCellsThisSession);
   const scans = useMapping((s) => s.scansThisSession);
@@ -58,6 +60,10 @@ export default function MapScreen() {
 
   const [panel, setPanel] = useState<Panel>('none');
   const [arChest, setArChest] = useState<Chest | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState(150);
+  const startedAtMs = useMapping((s) => s.startedAtMs);
+  const elapsed = useElapsed(startedAtMs);
   const [selected, setSelected] = useState<Chest | null>(null);
   const [following, setFollowing] = useState(true);
   const [layer, setLayer] = useState<SignalLayer>('cellular');
@@ -71,12 +77,6 @@ export default function MapScreen() {
   useEffect(() => {
     if (focused) void refreshChests();
   }, [focused, refreshChests]);
-
-  // Walking clears the fog around you. Poor or mock fixes are ignored.
-  useEffect(() => {
-    if (!focused || !pose.position || pose.mocked) return;
-    if ((pose.accuracyM ?? 999) <= MAX_REVEAL_ACCURACY_M) revealAt(pose.position);
-  }, [focused, pose.position, pose.accuracyM, pose.mocked, revealAt]);
 
   // Say so if the map is slow to appear, instead of leaving a blank screen.
   useEffect(() => {
@@ -96,7 +96,9 @@ export default function MapScreen() {
   }, [pose.position, currentCellId]);
 
   const signalData = useMemo(() => signalPoints(signals, layer), [signals, layer]);
+  const sessionCleared = useMapping((s) => s.sessionClearedCells);
   const exploredSet = useMemo(() => new Set(Object.keys(explored)), [explored]);
+  const areaLabelSession = useMemo(() => `+${formatArea(exploredAreaKm2(sessionCleared, here?.latitudeDeg ?? 38.9))}`, [sessionCleared, here]);
   const areaLabel = useMemo(() => formatArea(exploredAreaKm2(exploredSet.size, here?.latitudeDeg ?? 38.9)), [exploredSet, here]);
 
   // Chests are only shown while mapping is on.
@@ -120,7 +122,7 @@ export default function MapScreen() {
     if (running) {
       const report = await stop(address);
       if (!report && address) Alert.alert('Nothing recorded', 'No usable readings were collected this time.');
-      else if (report) setPanel('details');
+      else if (report) setSheetOpen(true);
     } else {
       await start();
     }
@@ -157,6 +159,7 @@ export default function MapScreen() {
         nearestId={nearest?.item.id ?? null}
         signal={signalData}
         fogStyle={fogStyle}
+        showVision={running}
         following={following}
         onFollowingChange={setFollowing}
         onChestPress={openChest}
@@ -189,7 +192,6 @@ export default function MapScreen() {
         </View>
         <View style={styles.topButtons}>
           {running ? <RoundButton icon="cube-outline" label="All chests" badge={mapChests.length} onPress={() => setPanel('chests')} /> : null}
-          <RoundButton icon="stats-chart-outline" label="Session details" badge={lastReport && !running ? 1 : 0} onPress={() => setPanel('details')} />
         </View>
       </View>
 
@@ -248,34 +250,55 @@ export default function MapScreen() {
 
       {/* Recenter */}
       {!following && pose.position ? (
-        <Pressable style={[styles.recenter, { bottom: 300 }]} onPress={() => mapRef.current?.recenter()} accessibilityRole="button" accessibilityLabel="Recenter on me">
+        <Pressable style={[styles.recenter, { bottom: sheetHeight + 14 }]} onPress={() => mapRef.current?.recenter()} accessibilityRole="button" accessibilityLabel="Recenter on me">
           <Ionicons name="locate" size={22} color={colors.accent} />
         </Pressable>
       ) : null}
 
-      {/* Bottom panel */}
-      <View style={styles.bottom} pointerEvents="box-none">
-        {layer !== 'off' ? <SignalLegend layer={layer} hasData={signalData.features.length > 0} /> : null}
-        {!running && chests.length > 0 ? (
-          <View style={styles.hintChip}>
-            <Ionicons name="cube-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>Start mapping to see chests near you.</Text>
+      {/* Legend for the signal colours, above the sheet */}
+      {layer !== 'off' ? (
+        <View style={[styles.legendWrap, { bottom: sheetHeight + 12 }]} pointerEvents="none">
+          <SignalLegend layer={layer} hasData={signalData.features.length > 0} />
+        </View>
+      ) : null}
+
+      {/* Mapping sheet: a small bar with the timer and the main button; swipe it up for the full stats */}
+      <MapSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onCollapsedHeight={setSheetHeight}
+        header={
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetTitleRow}>
+              {running ? (
+                <>
+                  <View style={styles.sheetDot} />
+                  <Text style={styles.liveLabel}>MAPPING</Text>
+                  <Text style={styles.sheetStat}>{areaLabelSession}</Text>
+                  <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="map-outline" size={16} color={colors.textSecondary} />
+                  <Text style={styles.readyLabel}>
+                    {lastReport ? 'Session finished. Swipe up to submit it.' : chests.length > 0 ? 'Start mapping to clear the fog and see chests.' : 'Start mapping to clear the fog.'}
+                  </Text>
+                </>
+              )}
+            </View>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Button
+              label={running ? 'Stop mapping' : 'Start mapping'}
+              icon={running ? 'stop-circle-outline' : 'play-circle-outline'}
+              variant={running ? 'danger' : 'primary'}
+              onPress={() => void onToggle()}
+              loading={busy}
+            />
           </View>
-        ) : null}
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button
-          label={running ? `Stop mapping · ${scans} readings` : 'Start mapping'}
-          icon={running ? 'stop-circle-outline' : 'play-circle-outline'}
-          variant={running ? 'danger' : 'primary'}
-          onPress={() => void onToggle()}
-          loading={busy}
-        />
-      </View>
-
-      <Sheet visible={panel === 'details'} title="Mapping" onClose={closePanel}>
+        }
+      >
         <SessionDetails />
-      </Sheet>
+      </MapSheet>
 
       <Sheet visible={panel === 'chests'} title="Chests" onClose={closePanel}>
         {mapChests.length === 0 ? (
@@ -353,7 +376,14 @@ const styles = StyleSheet.create({
   prompt: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(11,15,26,0.94)', borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 12 },
   promptText: { ...typography.caption, color: colors.textPrimary, flex: 1 },
   recenter: { position: 'absolute', right: 14, width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(11,15,26,0.94)', borderColor: colors.surfaceBorder, borderWidth: 1 },
-  bottom: { position: 'absolute', left: 12, right: 12, bottom: 12, gap: 10 },
+  legendWrap: { position: 'absolute', left: 12 },
+  sheetHeader: { paddingHorizontal: 14, paddingBottom: 12, gap: 10 },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 30 },
+  sheetDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.success },
+  liveLabel: { ...typography.label, color: colors.success, letterSpacing: 1.6 },
+  sheetStat: { ...typography.caption, color: colors.accent, flex: 1 },
+  timer: { ...typography.heading, fontSize: 22, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  readyLabel: { ...typography.caption, color: colors.textSecondary, flex: 1 },
   empty: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(11,15,26,0.94)', borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 14 },
   emptyText: { ...typography.caption, color: colors.textSecondary, flex: 1 },
   error: { ...typography.caption, color: colors.danger, textAlign: 'center', backgroundColor: 'rgba(11,15,26,0.9)', borderRadius: 8, padding: 6 },

@@ -55,6 +55,8 @@ interface Props {
   /** Points tinted by measured signal, drawn as soft glows on mapped ground. */
   signal: GeoJSON.FeatureCollection<GeoJSON.Point>;
   fogStyle: FogStyle;
+  /** Show the ring that marks how far you clear the fog around you: only while mapping. */
+  showVision: boolean;
   following: boolean;
   onFollowingChange: (following: boolean) => void;
   onChestPress: (chest: Chest) => void;
@@ -68,7 +70,7 @@ const lngLat = (p: LatLon): [number, number] => [p.longitudeDeg, p.latitudeDeg];
  * The home map: a real street map under a layer of fog. Ground you have walked is cleared, with a soft edge where
  * the fog begins. Chests sit on top; 
  */
-export function LiveMap({ position, headingDeg, explored, chests, nearestId, signal, fogStyle, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
+export function LiveMap({ position, headingDeg, explored, chests, nearestId, signal, fogStyle, showVision, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
   const camera = useRef<CameraRef>(null);
   const firstFix = useRef(true);
   const mapStyle = useMapStyle(onLoadState);
@@ -168,7 +170,7 @@ export function LiveMap({ position, headingDeg, explored, chests, nearestId, sig
         </GeoJSONSource>
 
         {/* How far you can see: a faint dashed ring around you. */}
-        {vision ? (
+        {vision && showVision ? (
           <GeoJSONSource id="vision" data={vision}>
             <Layer id="vision-ring" type="line" paint={{ 'line-color': RIM, 'line-width': 1.2, 'line-opacity': 0.55, 'line-dasharray': [2, 3] }} />
           </GeoJSONSource>
