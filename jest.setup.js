@@ -55,3 +55,28 @@ jest.mock('expo-gl', () => {
   const React = require('react');
   return { GLView: () => React.createElement(React.Fragment, null) };
 });
+
+// Playing audio needs the phone's media player; tests use a stand-in that records what it was asked to do.
+jest.mock('expo-audio', () => {
+  const players = [];
+  return {
+    __players: players,
+    setAudioModeAsync: jest.fn(async () => undefined),
+    createAudioPlayer: jest.fn((source) => {
+      const listeners = [];
+      const p = {
+        source,
+        volume: 1,
+        playing: false,
+        removed: false,
+        play: jest.fn(function () { p.playing = true; }),
+        pause: jest.fn(function () { p.playing = false; }),
+        remove: jest.fn(function () { p.removed = true; }),
+        addListener: jest.fn((event, fn) => { listeners.push(fn); return { remove: jest.fn() }; }),
+        emit: (status) => listeners.forEach((fn) => fn(status)),
+      };
+      players.push(p);
+      return p;
+    }),
+  };
+});

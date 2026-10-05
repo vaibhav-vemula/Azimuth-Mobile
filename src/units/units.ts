@@ -54,7 +54,7 @@ export function systemForRegion(region: string | null): UnitSystem {
 }
 
 /** The phone's own region setting, which is the best sign of which units its owner is used to. */
-function deviceRegion(): string | null {
+export function deviceRegion(): string | null {
   const native = NativeModules as { I18nManager?: { localeIdentifier?: string }; SettingsManager?: { settings?: { AppleLocale?: string } } };
   const fromNative = native.I18nManager?.localeIdentifier ?? native.SettingsManager?.settings?.AppleLocale;
   const region = regionOfLocale(fromNative);

@@ -11,6 +11,7 @@ import { colors, typography } from '../../theme';
 import { formatFrequencyMHz } from '../../utils/format';
 import { useCapture } from '../../capture/useCapture';
 import { FrequencyTuner } from './components/FrequencyTuner';
+import { OnlineRadio } from './components/OnlineRadio';
 
 const STATUS_COLORS = {
   disconnected: colors.textTertiary,
@@ -43,6 +44,8 @@ export default function RadioScreen() {
   const receiverError = useReceiver((s) => s.error);
   const capturePhase = useCapture((s) => s.phase);
 
+  // Dongle: the RTL-SDR and its spectrum. Online: internet stations tuned by frequency, no dongle needed.
+  const [mode, setMode] = useState<'dongle' | 'online'>('dongle');
   const [localError, setLocalError] = useState<string | null>(null);
   const [listenBusy, setListenBusy] = useState(false);
 
@@ -113,12 +116,25 @@ export default function RadioScreen() {
       <View style={styles.titleRow}>
         <View>
           <Text style={styles.title}>Radio</Text>
-          <Text style={styles.subtitle}>Wideband FM and spectrum</Text>
+          <Text style={styles.subtitle}>{mode === 'online' ? 'Internet radio by frequency' : 'Wideband FM and spectrum'}</Text>
         </View>
-        <Badge label={STATUS_LABELS[status]} color={statusColor} />
+        {mode === 'dongle' ? <Badge label={STATUS_LABELS[status]} color={statusColor} /> : null}
       </View>
 
-      {Platform.OS !== 'android' ? (
+      <View style={styles.modes} accessibilityRole="tablist">
+        {(['dongle', 'online'] as const).map((m) => (
+          <Pressable key={m} onPress={() => setMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} style={[styles.mode, mode === m && styles.modeActive]}>
+            <Ionicons name={m === 'dongle' ? 'hardware-chip-outline' : 'globe-outline'} size={16} color={mode === m ? colors.background : colors.textSecondary} />
+            <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>{m === 'dongle' ? 'Dongle' : 'Online'}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {mode === 'online' ? (
+        <OnlineRadio />
+      ) : null}
+
+      {mode === 'online' ? null : Platform.OS !== 'android' ? (
         <GlassCard>
           <Text style={styles.body}>The RTL-SDR receiver needs an Android device with USB-OTG.</Text>
         </GlassCard>
@@ -211,6 +227,11 @@ export default function RadioScreen() {
 }
 
 const styles = StyleSheet.create({
+  modes: { flexDirection: 'row', gap: 8, backgroundColor: colors.surface, borderRadius: 16, padding: 4, borderWidth: 1, borderColor: colors.surfaceBorder },
+  mode: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12 },
+  modeActive: { backgroundColor: colors.accent },
+  modeText: { ...typography.subheading, fontSize: 14, color: colors.textSecondary },
+  modeTextActive: { color: colors.background },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { ...typography.heading, fontSize: 28, color: colors.textPrimary },
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },

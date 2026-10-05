@@ -54,7 +54,9 @@
           "recordAudioAndroid": false
         }
       ],
-      "./plugins/withAzimuthBackup"
+      "./plugins/withAzimuthBackup",
+      "expo-audio",
+      "./plugins/withCleartextAudio"
     ]
   }
 }
