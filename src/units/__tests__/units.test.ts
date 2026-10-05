@@ -50,7 +50,9 @@ describe('distances', () => {
   });
 
   it('walked distance and explored area follow the system', () => {
-    expect(walkedParts(0, 'imperial')).toEqual({ value: '0', unit: 'ft' });
+    expect(walkedParts(0, 'imperial')).toEqual({ value: '0.00', unit: 'mi' });
+    expect(walkedParts(100, 'imperial')).toEqual({ value: '0.06', unit: 'mi' }); // 328 ft: miles, never feet
+    expect(walkedParts(16_100, 'imperial')).toEqual({ value: '10.0', unit: 'mi' });
     expect(walkedParts(1609.344, 'imperial')).toEqual({ value: '1.00', unit: 'mi' });
     expect(walkedParts(2000, 'metric')).toEqual({ value: '2.00', unit: 'km' });
     expect(areaParts(0, 'imperial')).toEqual({ value: '0', unit: 'sq ft' });

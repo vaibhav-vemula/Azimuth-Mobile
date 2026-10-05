@@ -168,16 +168,14 @@ export function longDistanceParts(km: number, system: UnitSystem = currentSystem
   return system === 'imperial' ? { value: String(Math.round((km * 1000) / M_PER_MI)), unit: 'mi' } : { value: String(Math.round(km)), unit: 'km' };
 }
 
-/** Distance walked: "340 m", "1.20 km", "900 ft", "1.20 mi". */
+/** Distance walked: "340 m", "1.20 km", or in miles only, "0.12 mi", "1.20 mi". */
 export function walkedParts(metres: number, system: UnitSystem = currentSystem()): Quantity {
-  const feet = system === 'imperial';
-  if (!Number.isFinite(metres) || metres < 1) return { value: '0', unit: feet ? 'ft' : 'm' };
-  if (feet) {
-    const ft = metres / M_PER_FT;
-    if (ft < 1000) return { value: String(Math.round(ft / 10) * 10 || 10), unit: 'ft' };
+  if (system === 'imperial') {
+    if (!Number.isFinite(metres) || metres < 1) return { value: '0.00', unit: 'mi' };
     const mi = metres / M_PER_MI;
     return { value: mi.toFixed(mi < 10 ? 2 : 1), unit: 'mi' };
   }
+  if (!Number.isFinite(metres) || metres < 1) return { value: '0', unit: 'm' };
   if (metres < 1000) return { value: String(Math.round(metres / 5) * 5 || 5), unit: 'm' };
   return { value: (metres / 1000).toFixed(metres < 10_000 ? 2 : 1), unit: 'km' };
 }
