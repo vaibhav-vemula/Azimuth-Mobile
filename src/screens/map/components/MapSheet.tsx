@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, PanResponder, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '../../../theme';
 
@@ -70,10 +70,23 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
     ]).start();
   }, [peekSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Where the current touch started, and how far the contents are scrolled, so a drag goes to the right thing.
+  const touchInHeader = useRef(false);
+  const scrollY = useRef(0);
+
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      // Taps and scrolling are left to the buttons and the list inside; the sheet only takes over once a drag is clearly vertical.
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponderCapture: (_, g) => {
+        const vertical = Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx) * 1.4;
+        if (!vertical) return false;
+        // A drag that starts on the bar (the handle, title, counters or button) always moves the sheet, up or down.
+        if (touchInHeader.current) return true;
+        // In the contents: while the sheet is not fully open any vertical drag opens it; once open, only a downward drag
+        // from the very top of the list closes it, and everything else scrolls the list.
+        return !openRef.current || (scrollY.current <= 0 && g.dy > 0);
+      },
       onPanResponderGrant: () => {
         ty.stopAnimation((v) => {
           start.current = v;
@@ -81,27 +94,33 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
       },
       onPanResponderMove: (_, g) => ty.setValue(clamp(start.current + g.dy, 0, offsetRef.current)),
       onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dy) < 5 && Math.abs(g.dx) < 5) {
-          changeRef.current(!openRef.current); // a tap
-          return;
-        }
         const position = clamp(start.current + g.dy, 0, offsetRef.current);
-        const toOpen = g.vy < -0.35 ? true : g.vy > 0.35 ? false : position < offsetRef.current / 2;
+        // A quick flick decides by its direction; a slow drag decides by which half it ended in.
+        const toOpen = g.vy < -0.3 ? true : g.vy > 0.3 ? false : position < offsetRef.current / 2;
         changeRef.current(toOpen);
         settle(toOpen);
       },
+      onPanResponderTerminationRequest: () => false,
     })
   ).current;
 
   return (
-    <Animated.View style={[styles.sheet, { height: openH, transform: [{ translateY: ty }] }]}>
-      <View onLayout={(e) => setHeaderH(Math.ceil(e.nativeEvent.layout.height) - HANDLE_H)}>
-        <View {...pan.panHandlers} style={styles.handleArea} accessibilityRole="button" accessibilityLabel={open ? 'Collapse the mapping panel' : 'Expand the mapping panel'}>
+    <Animated.View style={[styles.sheet, { height: openH, transform: [{ translateY: ty }] }]} {...pan.panHandlers}>
+      <View onTouchStart={() => (touchInHeader.current = true)} onLayout={(e) => setHeaderH(Math.ceil(e.nativeEvent.layout.height) - HANDLE_H)}>
+        <Pressable style={styles.handleArea} onPress={() => changeRef.current(!openRef.current)} accessibilityRole="button" accessibilityLabel={open ? 'Collapse the mapping panel' : 'Expand the mapping panel'}>
           <View style={styles.handle} />
-        </View>
+        </Pressable>
         {header}
       </View>
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} scrollEnabled={open}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={open}
+        scrollEventThrottle={16}
+        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+        onTouchStart={() => (touchInHeader.current = false)}
+      >
         {children}
       </ScrollView>
     </Animated.View>

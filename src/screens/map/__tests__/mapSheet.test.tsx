@@ -32,10 +32,13 @@ describe('MapSheet', () => {
       );
     });
     const handle = tree.root.findByProps({ accessibilityLabel: 'Expand the mapping panel' });
-    // The drag and tap behaviour needs real touches, so it is checked on a device; here we check it is wired up.
-    expect(typeof handle.props.onResponderGrant).toBe('function');
-    expect(typeof handle.props.onResponderMove).toBe('function');
-    expect(typeof handle.props.onResponderRelease).toBe('function');
+    expect(typeof handle.props.onPress).toBe('function'); // tap to toggle
+    // The drag works from anywhere on the sheet, not just the handle. It needs real touches, so it is checked on a device; here we check the whole sheet is wired up to take over a vertical drag.
+    const sheet = tree.root.findAll((n) => typeof n.props.onMoveShouldSetResponderCapture === 'function')[0];
+    expect(sheet).toBeDefined();
+    expect(typeof sheet.props.onResponderGrant).toBe('function');
+    expect(typeof sheet.props.onResponderMove).toBe('function');
+    expect(typeof sheet.props.onResponderRelease).toBe('function');
 
     act(() => {
       tree.update(
