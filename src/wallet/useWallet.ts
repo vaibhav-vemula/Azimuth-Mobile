@@ -35,6 +35,18 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+/** Remembers a token the wallet just issued (and keeps it for next launch). */
+export function rememberAuthToken(token: string): void {
+  authToken = token;
+  const saved = loadWalletSession();
+  if (saved) saveWalletSession({ ...saved, authToken: token });
+}
+
+/** Forgets a token the wallet no longer accepts. */
+export function forgetAuthToken(): void {
+  authToken = null;
+}
+
 export function addressOf(account: Pick<Account, 'address'>): string {
   return bs58.encode(Buffer.from(account.address, 'base64'));
 }

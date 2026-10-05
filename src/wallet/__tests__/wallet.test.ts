@@ -64,3 +64,54 @@ describe('useWallet', () => {
     expect(useWallet.getState().guest).toBe(true);
   });
 });
+
+describe('authorizing the wallet before signing', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { authorizeForSigning } = require('../signReport');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { rememberAuthToken, getAuthToken } = require('../useWallet');
+  const account = Buffer.alloc(32, 7).toString('base64');
+
+  it('tries the saved token first and keeps the one it gets back', async () => {
+    rememberAuthToken('old');
+    const authorize = jest.fn(async (_p: { auth_token?: string }) => ({ auth_token: 'new', accounts: [{ address: account }] }));
+    await authorizeForSigning({ authorize }, account);
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect(authorize.mock.calls[0][0].auth_token).toBe('old');
+    expect(getAuthToken()).toBe('new');
+  });
+
+  it('asks again without the token when the wallet refuses it ("authorization request failed")', async () => {
+    rememberAuthToken('stale');
+    const authorize = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('-1/authorization request failed'))
+      .mockResolvedValueOnce({ auth_token: 'fresh', accounts: [{ address: account }] });
+    await authorizeForSigning({ authorize }, account);
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(authorize.mock.calls[1][0].auth_token).toBeUndefined();
+    expect(getAuthToken()).toBe('fresh');
+  });
+
+  it('passes the error on when even a fresh request is refused', async () => {
+    rememberAuthToken('stale');
+    const authorize = jest.fn().mockRejectedValue(new Error('declined'));
+    await expect(authorizeForSigning({ authorize }, account)).rejects.toThrow('declined');
+    expect(authorize).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when there was no saved token to blame', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../useWallet').forgetAuthToken();
+    const authorize = jest.fn().mockRejectedValue(new Error('declined'));
+    await expect(authorizeForSigning({ authorize }, account)).rejects.toThrow('declined');
+    expect(authorize).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a different account', async () => {
+    rememberAuthToken('t');
+    const other = Buffer.alloc(32, 9).toString('base64');
+    const authorize = jest.fn(async () => ({ auth_token: 't2', accounts: [{ address: other }] }));
+    await expect(authorizeForSigning({ authorize }, account)).rejects.toThrow(/different account/);
+  });
+});

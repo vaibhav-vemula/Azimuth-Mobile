@@ -1,8 +1,37 @@
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 import { Report, SignedReport, reportHash, signingMessage } from '../reports/report';
-import { SOLANA_CHAIN, getAuthToken } from './useWallet';
+import { SOLANA_CHAIN, forgetAuthToken, getAuthToken, rememberAuthToken } from './useWallet';
+import bs58 from 'bs58';
 
 const SIGNATURE_BYTES = 64;
+const IDENTITY = { name: 'Azimuth', uri: 'https://azimuth.app', icon: 'favicon.png' };
+
+/** The slice of the wallet session this file uses, so the retry below can be tested without a phone. */
+export interface WalletSession {
+  authorize: (params: { chain: string; identity: typeof IDENTITY; auth_token?: string }) => Promise<{ auth_token: string; accounts: { address: string }[] }>;
+}
+
+/**
+ * Gets the wallet ready to sign. The saved authorization is tried first, so there is no extra prompt. If the wallet no
+ * longer accepts it (the Seeker's wallet answers "authorization request failed" when a saved token has expired or was
+ * issued under other settings), ask again from scratch, which shows the wallet's approval screen once, and keep the new
+ * token. The account that comes back must be the one this app is signed in with.
+ */
+export async function authorizeForSigning(wallet: WalletSession, expectedBase64: string): Promise<void> {
+  const request = (token?: string) => wallet.authorize({ chain: SOLANA_CHAIN, identity: IDENTITY, auth_token: token });
+  const saved = getAuthToken();
+  let result;
+  try {
+    result = await request(saved ?? undefined);
+  } catch (e) {
+    if (!saved) throw e;
+    forgetAuthToken();
+    result = await request();
+  }
+  rememberAuthToken(result.auth_token);
+  const sameAccount = result.accounts.some((a) => a.address === expectedBase64 || bs58.encode(Buffer.from(a.address, 'base64')) === bs58.encode(Buffer.from(expectedBase64, 'base64')));
+  if (!sameAccount) throw new Error('The wallet approved a different account than the one this app is signed in with. Choose the same account.');
+}
 
 function toBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64');
@@ -18,11 +47,7 @@ function equal(a: Uint8Array, b: Uint8Array): boolean {
 export async function signText(text: string, walletAddressBase64: string): Promise<string> {
   const message = new TextEncoder().encode(text);
   const signed = await transact(async (wallet) => {
-    await wallet.authorize({
-      chain: SOLANA_CHAIN,
-      identity: { name: 'Azimuth', uri: 'https://azimuth.app', icon: 'favicon.png' },
-      auth_token: getAuthToken() ?? undefined,
-    });
+    await authorizeForSigning(wallet as unknown as WalletSession, walletAddressBase64);
     const result = await wallet.signMessages({ addresses: [walletAddressBase64], payloads: [message] });
     return result[0];
   });
@@ -34,11 +59,7 @@ export async function signText(text: string, walletAddressBase64: string): Promi
 export async function signReport(report: Report, walletAddressBase64: string): Promise<SignedReport> {
   const message = signingMessage(report);
   const signed = await transact(async (wallet) => {
-    await wallet.authorize({
-      chain: SOLANA_CHAIN,
-      identity: { name: 'Azimuth', uri: 'https://azimuth.app', icon: 'favicon.png' },
-      auth_token: getAuthToken() ?? undefined,
-    });
+    await authorizeForSigning(wallet as unknown as WalletSession, walletAddressBase64);
     const result = await wallet.signMessages({ addresses: [walletAddressBase64], payloads: [message] });
     return result[0];
   });
