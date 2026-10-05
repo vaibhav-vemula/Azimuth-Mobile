@@ -8,6 +8,7 @@ import { GlassCard } from '../../components/GlassCard';
 import { Badge, Button, SectionLabel, Stat } from '../../components/ui';
 import { colors, typography } from '../../theme';
 import { shortAddress } from '../../wallet/format';
+import { useSkrName } from '../../wallet/skrName';
 import { SOLANA_CHAIN, useWallet } from '../../wallet/useWallet';
 import { useMapping } from '../../mapping/useMapping';
 import { exploredAreaKm2, formatArea } from '../../mapping/explore';
@@ -16,26 +17,6 @@ import bs58 from 'bs58';
 import { signText } from '../../wallet/signReport';
 import { directMode, verifierConfigured } from '../../network/config';
 import type { ProfileStackParamList } from '../../navigation/types';
-
-type FeatureStatus = 'live' | 'next' | 'planned';
-
-const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string; status: FeatureStatus }[] = [
-  { icon: 'radio-outline', title: 'Radio', text: 'Spectrum and FM with an RTL-SDR', status: 'live' },
-  { icon: 'planet-outline', title: 'Satellite passes', text: 'Predict and record Meteor-M passes', status: 'live' },
-  { icon: 'navigate-outline', title: 'Mapping sessions', text: 'Start and stop signal mapping', status: 'live' },
-  { icon: 'cloud-outline', title: 'Fog-of-war map', text: 'Uncover places as you explore', status: 'live' },
-  { icon: 'cube-outline', title: 'Bounty chests', text: 'Paid requests for measurements', status: 'live' },
-  { icon: 'hardware-chip-outline', title: 'Dongle readings in mapping', text: 'Radio signal strength and Meteor-M reception with an RTL-SDR', status: 'live' },
-  { icon: 'pulse-outline', title: 'FM and noise surveys', text: 'More bands for the map', status: 'next' },
-  { icon: 'storefront-outline', title: 'Venue chests', text: 'Cafes and shops sponsor visits', status: 'planned' },
-  { icon: 'balloon-outline', title: 'Sonde hunts', text: 'Track and recover weather balloons', status: 'planned' },
-];
-
-const STATUS_LABEL: Record<FeatureStatus, { label: string; color: string }> = {
-  live: { label: 'Live', color: colors.success },
-  next: { label: 'Next', color: colors.accent },
-  planned: { label: 'Planned', color: colors.textTertiary },
-};
 
 export default function ProfileScreen() {
   const status = useWallet((s) => s.status);
@@ -121,7 +102,8 @@ export default function ProfileScreen() {
   const chestsOpened = summary ? summary.entries.filter((e) => e.kind === 'chest').length : 0;
 
   const connected = status === 'connected' && !!address;
-  const initials = address ? address.slice(0, 2).toUpperCase() : '?';
+  const skrName = useSkrName(connected ? address : null);
+  const initials = skrName ? skrName.slice(0, 2).toUpperCase() : address ? address.slice(0, 2).toUpperCase() : '?';
 
   const confirmDisconnect = () =>
     Alert.alert('Disconnect wallet?', 'You can connect again at any time.', [
@@ -139,7 +121,11 @@ export default function ProfileScreen() {
         </View>
         {connected ? (
           <>
-            <Text style={styles.address}>{shortAddress(address!, 5, 5)}</Text>
+            {/* The .skr name (Seeker ID) is the user name; the address sits under it, smaller. */}
+            <Text style={styles.userName} numberOfLines={1} accessibilityRole="header">
+              {skrName ?? shortAddress(address!, 5, 5)}
+            </Text>
+            {skrName ? <Text style={styles.muted}>{shortAddress(address!, 5, 5)}</Text> : null}
             <View style={styles.badges}>
               <Badge label={walletName ?? 'Wallet connected'} color={colors.success} />
               <Badge label={SOLANA_CHAIN.replace('solana:', '')} color={colors.accent} />
@@ -196,22 +182,6 @@ export default function ProfileScreen() {
         </Text>
       </GlassCard>
 
-      <SectionLabel>What's coming</SectionLabel>
-      <GlassCard style={styles.features}>
-        {FEATURES.map((f) => (
-          <View key={f.title} style={styles.feature}>
-            <View style={styles.featureIcon}>
-              <Ionicons name={f.icon} size={18} color={colors.accent} />
-            </View>
-            <View style={styles.featureText}>
-              <Text style={styles.rowTitle}>{f.title}</Text>
-              <Text style={styles.muted}>{f.text}</Text>
-            </View>
-            <Badge label={STATUS_LABEL[f.status].label} color={STATUS_LABEL[f.status].color} />
-          </View>
-        ))}
-      </GlassCard>
-
       <GlassCard style={styles.section}>
         <SectionLabel>Privacy and data</SectionLabel>
         <Text style={styles.muted}>
@@ -248,6 +218,7 @@ const styles = StyleSheet.create({
   link: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   linkLabel: { ...typography.subheading, flex: 1, color: colors.textPrimary },
   title: { ...typography.heading, color: colors.textPrimary },
+  userName: { ...typography.heading, fontSize: 24, color: colors.textPrimary },
   identity: { alignItems: 'center', gap: 10, paddingVertical: 22 },
   avatar: {
     width: 76,
@@ -266,17 +237,6 @@ const styles = StyleSheet.create({
   verify: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   verifyText: { flex: 1, gap: 2 },
   stats: { flexDirection: 'row', gap: 10 },
-  features: { gap: 14 },
-  feature: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  featureIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: colors.accentFaint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureText: { flex: 1, gap: 1 },
   rowTitle: { ...typography.subheading, fontSize: 15, color: colors.textPrimary },
   muted: { ...typography.caption, color: colors.textSecondary },
   error: { ...typography.caption, color: colors.danger, textAlign: 'center' },

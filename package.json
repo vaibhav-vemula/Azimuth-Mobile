@@ -18,6 +18,7 @@
     "@maplibre/maplibre-react-native": "^11.5.0",
     "@noble/ciphers": "^2.4.0",
     "@noble/hashes": "^2.4.0",
+    "@onsol/tldparser": "^1.2.1",
     "@react-navigation/bottom-tabs": "^7.20.0",
     "@react-navigation/native": "^7.5.0",
     "@react-navigation/native-stack": "^7.5.0",
@@ -88,5 +89,10 @@
       "<rootDir>/jest.setup.js"
     ]
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@onsol/tldparser": {
+      "buffer": "$buffer"
+    }
+  }
 }
