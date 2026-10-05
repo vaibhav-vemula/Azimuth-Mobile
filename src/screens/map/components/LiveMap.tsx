@@ -18,6 +18,7 @@ import { BASE_STYLE_URL, MAP_COLORS, loadThemedStyle } from '../mapStyle';
 
 /** Free vector tiles, no key needed. Attribution is shown by the map as the licence asks. */
 const START_ZOOM = 17;
+const RECENTER_MS = 700;
 /**
  * Unmapped ground is opaque, so nothing of the map shows through it: either a night sky of stars, or topographic
  * contour lines on dark ground. (The images are made by scripts/make-fog-textures.cjs.)
@@ -85,13 +86,18 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
     () => (position ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: circleRing(position, VISION_RADIUS_M) } } : null),
     [position]
   );
+  const followingRef = useRef(following);
+  followingRef.current = following;
+  const flyingUntil = useRef(0);
   useImperativeHandle(
     ref,
     () => ({
       recenter: () => {
         if (!position) return;
         onFollowingChange(true);
-        camera.current?.flyTo({ center: lngLat(position), zoom: START_ZOOM, duration: 700 });
+        // Let the flight finish: a follow-nudge starting now would cancel it before it reaches the zoom.
+        flyingUntil.current = Date.now() + RECENTER_MS + 150;
+        camera.current?.flyTo({ center: lngLat(position), zoom: START_ZOOM, duration: RECENTER_MS });
       },
       showBoth: (target) => {
         if (!position) return;
@@ -114,10 +120,11 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
     if (!didZoom.current) {
       didZoom.current = true;
       camera.current?.flyTo({ center: lngLat(position), zoom: START_ZOOM, duration: 900 });
-    } else if (following) {
+    } else if (followingRef.current && Date.now() > flyingUntil.current) {
       camera.current?.easeTo({ center: lngLat(position), duration: 500 });
     }
-  }, [position, following, mapReady]);
+    // Only a new position moves the camera; switching follow on is done by recenter() itself.
+  }, [position, mapReady]);
 
   // Until the themed style is ready, show the map colour instead of an empty screen.
   if (!mapStyle) return <View style={[styles.fill, { backgroundColor: MAP_COLORS.land }]} />;
