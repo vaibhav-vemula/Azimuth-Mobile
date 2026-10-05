@@ -35,7 +35,7 @@ alter table public.reports add constraint reports_shape check (
 
 -- Throttle floods. These limits are per claimed wallet and overall; the public key cannot be told apart by caller,
 -- so the overall limit is the real protection.
-create or replace function public.limit_report_inserts() returns trigger language plpgsql as $$
+create or replace function public.limit_report_inserts() returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if (select count(*) from public.reports where node = new.node and received_at > now() - interval '1 hour') >= 30 then
     raise exception 'too many reports from this wallet this hour' using errcode = 'P0001';
@@ -122,7 +122,7 @@ create table if not exists public.deletion_requests (
 );
 create index if not exists deletion_status_idx on public.deletion_requests (status, created_at);
 
-create or replace function public.limit_deletion_requests() returns trigger language plpgsql as $$
+create or replace function public.limit_deletion_requests() returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if (select count(*) from public.deletion_requests where node = new.node and created_at > now() - interval '1 hour') >= 5 then
     raise exception 'too many requests' using errcode = 'P0001';

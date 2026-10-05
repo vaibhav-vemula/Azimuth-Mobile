@@ -23,8 +23,9 @@ create table if not exists public.backups (
 );
 create index if not exists backups_lookup_idx on public.backups (node, tag, created_at desc);
 
--- Flood limits: per wallet, and overall.
-create or replace function public.limit_backup_inserts() returns trigger language plpgsql as $$
+-- Flood limits: per wallet, and overall. These run as the table owner (security definer) because the public key cannot read
+-- the table itself, and counting rows needs read access.
+create or replace function public.limit_backup_inserts() returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if (select count(*) from public.backups where node = new.node and created_at > now() - interval '1 hour') >= 20 then
     raise exception 'too many backups from this wallet this hour' using errcode = 'P0001';
