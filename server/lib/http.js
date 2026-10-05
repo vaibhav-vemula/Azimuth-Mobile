@@ -8,6 +8,8 @@ const FILES = {
   '/console': ['console.html', 'text/html; charset=utf-8'],
   '/console/hex.js': ['hex.js', 'text/javascript; charset=utf-8'],
   '/privacy': ['privacy.html', 'text/html; charset=utf-8'],
+  '/logo.svg': ['logo.svg', 'image/svg+xml'],
+  '/favicon.png': ['favicon.png', 'image/png'],
 };
 
 const MAX_BODY = 2 * 1024 * 1024;

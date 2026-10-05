@@ -12,6 +12,7 @@ const MAX_CELLS_SHOWN = 300;
 const FILES = {
   '/': ['admin.html', 'text/html; charset=utf-8'],
   '/admin.js': ['admin.js', 'text/javascript; charset=utf-8'],
+  '/logo.svg': [path.join('..', 'public', 'logo.svg'), 'image/svg+xml'],
   '/hex.js': [path.join('..', 'public', 'hex.js'), 'text/javascript; charset=utf-8'],
   '/vendor/leaflet.js': [path.join('..', 'node_modules', 'leaflet', 'dist', 'leaflet.js'), 'text/javascript; charset=utf-8'],
   '/vendor/leaflet.css': [path.join('..', 'node_modules', 'leaflet', 'dist', 'leaflet.css'), 'text/css; charset=utf-8'],

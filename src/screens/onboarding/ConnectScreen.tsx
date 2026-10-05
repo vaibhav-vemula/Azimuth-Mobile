@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/Screen';
+import { AzimuthMark } from '../../components/Logo';
 import { GlassCard } from '../../components/GlassCard';
 import { Button } from '../../components/ui';
 import { colors, typography } from '../../theme';
@@ -21,9 +22,7 @@ export function ConnectScreen() {
   return (
     <Screen contentStyle={styles.content}>
       <View style={styles.hero}>
-        <View style={styles.mark}>
-          <Ionicons name="radio" size={34} color={colors.accent} />
-        </View>
+        <AzimuthMark size={84} tile />
         <Text style={styles.title}>Welcome to Azimuth</Text>
         <Text style={styles.subtitle}>Explore the radio world around you and get rewarded for what you find.</Text>
       </View>
@@ -57,16 +56,6 @@ export function ConnectScreen() {
 const styles = StyleSheet.create({
   content: { flexGrow: 1, justifyContent: 'center', gap: 22, paddingVertical: 24 },
   hero: { alignItems: 'center', gap: 10 },
-  mark: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.accentFaint,
-    borderWidth: 1,
-    borderColor: colors.accentMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   title: { ...typography.heading, fontSize: 26, color: colors.textPrimary, textAlign: 'center' },
   subtitle: { ...typography.body, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 12 },
   points: { gap: 16 },

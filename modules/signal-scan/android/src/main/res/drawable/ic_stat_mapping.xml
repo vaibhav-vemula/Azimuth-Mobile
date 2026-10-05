@@ -1,9 +1,22 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+  <!-- The Azimuth mark in one colour (status bar icons are white): an A, and the orbit that is its crossbar. -->
+  <path
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="19"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:pathData="M42,156 L100,50 L158,156" />
+  <path
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="13"
+      android:strokeLineCap="round"
+      android:pathData="M24,138 C66,118 126,100 176,94" />
   <path
       android:fillColor="#FFFFFFFF"
-      android:pathData="M12,2C8.13,2 5,5.13 5,9c0,5.25 7,13 7,13s7,-7.75 7,-13c0,-3.87 -3.13,-7 -7,-7zM12,11.5c-1.38,0 -2.5,-1.12 -2.5,-2.5s1.12,-2.5 2.5,-2.5 2.5,1.12 2.5,2.5 -1.12,2.5 -2.5,2.5z" />
+      android:fillType="evenOdd"
+      android:pathData="M176,83.5a10.5,10.5 0 1,0 0.01,0zM176,89.8a4.2,4.2 0 1,1 -0.01,0z" />
 </vector>

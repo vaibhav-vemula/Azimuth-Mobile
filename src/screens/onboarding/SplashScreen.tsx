@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { StarfieldBackground } from '../../components/StarfieldBackground';
+import { AzimuthMark } from '../../components/Logo';
 import { colors, typography } from '../../theme';
 
 const RINGS = [0, 1, 2];
@@ -47,9 +47,7 @@ export function SplashScreen({ onDone, durationMs = 2200 }: { onDone: () => void
             ]}
           />
         ))}
-        <View style={styles.mark}>
-          <Ionicons name="radio" size={40} color={colors.accent} />
-        </View>
+        <AzimuthMark size={104} tile />
       </View>
       <Animated.View style={[styles.text, { opacity: fade }]}>
         <Text style={styles.title}>AZIMUTH</Text>
@@ -69,16 +67,6 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     borderWidth: 1.5,
     borderColor: colors.accent,
-  },
-  mark: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: colors.accentFaint,
-    borderWidth: 1,
-    borderColor: colors.accentMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   text: { alignItems: 'center', marginTop: 28, gap: 6 },
   title: { ...typography.display, color: colors.textPrimary, letterSpacing: 6, fontSize: 30 },

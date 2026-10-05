@@ -30,3 +30,7 @@ From the publisher policy:
 6. Review takes 3 to 5 business days. Approved apps go live under a category.
 
 Asset sizes and CLI details were not in the pages I read; check the portal.
+
+## Brand assets (2026-10-04)
+
+The logo is "Horizon A, bold" (`assets/logos/21-horizon-a-bold.svg`): an A whose crossbar is a satellite's orbit. It is used for the launcher icon, adaptive icon (foreground, background, monochrome), splash image, notification icons, the in-app splash and welcome screens (`src/components/Logo.tsx`), and the web pages. The PNGs are rendered from the SVG artwork (not hand-edited), so changing the logo means regenerating them. The wallet identity icon (`favicon.png`) is resolved against `https://azimuth.space`, so `https://azimuth.space/favicon.png` must exist: use `server/public/favicon.png` (192 px) or serve `server/public/logo.svg`. The dApp Store listing needs a 512 x 512 icon: render `assets/logos/21-horizon-a-bold.svg` at 512 px.

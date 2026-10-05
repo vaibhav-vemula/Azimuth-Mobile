@@ -16,7 +16,7 @@
     "android": {
       "package": "com.azimuth.v1",
       "adaptiveIcon": {
-        "backgroundColor": "#05070D",
+        "backgroundColor": "#04070E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -39,7 +39,13 @@
           "locationWhenInUsePermission": "Azimuth uses your location to predict when satellites pass overhead."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#4DD0E1"
+        }
+      ],
       "@maplibre/maplibre-react-native",
       [
         "expo-camera",

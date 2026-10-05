@@ -120,7 +120,7 @@ test('serves the page and its scripts without any third-party source, and a stri
     const csp = page.headers.get('content-security-policy');
     assert.match(csp, /script-src 'self'/);
     assert.doesNotMatch(csp, /unsafe-inline.*script|script-src[^;]*unsafe-inline/);
-    for (const p of ['/admin.js', '/hex.js', '/vendor/leaflet.js', '/vendor/leaflet.css']) {
+    for (const p of ['/admin.js', '/hex.js', '/logo.svg', '/vendor/leaflet.js', '/vendor/leaflet.css']) {
       assert.equal((await fetch(base + p, { headers: { authorization: auth } })).status, 200, p);
     }
   });
@@ -134,4 +134,14 @@ test('report contents are only ever passed on as plain text values', () => {
   assert.equal(typeof s.device, 'string');
   const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'admin', 'admin.js'), 'utf8');
   assert.doesNotMatch(html, /innerHTML|insertAdjacentHTML|document\.write|outerHTML/, 'the page never builds markup from report data');
+});
+
+test('the logo is served as an image and is the real mark', async () => {
+  await withPortal(async ({ base }) => {
+    const res = await fetch(base + '/logo.svg', { headers: { authorization: auth } });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'image/svg+xml');
+    assert.match(await res.text(), /<svg[^>]*viewBox="0 0 200 200"/);
+    assert.equal((await fetch(base + '/logo.svg')).status, 401, 'still behind the password');
+  });
 });
