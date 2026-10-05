@@ -67,5 +67,8 @@ export function useSubmission() {
     [sign]
   );
 
-  return { state, submit, signOnly, reset: () => setState({ phase: 'idle' }) };
+  /** Shows a finished result without sending anything (used for test chests). */
+  const finishLocally = useCallback((message: string) => setState({ phase: 'done', accepted: true, pending: false, message }), []);
+
+  return { state, submit, signOnly, finishLocally, reset: () => setState({ phase: 'idle' }) };
 }

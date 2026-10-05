@@ -35,3 +35,16 @@ describe('readinessOf', () => {
     expect(r.hint).toMatch(/Satellites tab/);
   });
 });
+
+describe('a test chest', () => {
+  it('needs no wallet, only mapping and one reading', () => {
+    const test = chest({ kind: 'visit', spec: { minSamples: 1, test: true } });
+    expect(readinessOf(input({ chest: test, hasWallet: false, have: 1 }))).toMatchObject({ ready: true });
+    expect(readinessOf(input({ chest: test, hasWallet: false, have: 0 })).ready).toBe(false);
+    expect(readinessOf(input({ chest: test, hasWallet: false, mappingRunning: false })).hint).toMatch(/Start mapping/);
+  });
+
+  it('does not loosen the rules for a real chest', () => {
+    expect(readinessOf(input({ hasWallet: false })).ready).toBe(false);
+  });
+});

@@ -1,4 +1,5 @@
 import { BackupCard } from './BackupCard';
+import { TestChestCard } from './TestChestCard';
 import { useUnits } from '../../units/units';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
@@ -243,6 +244,8 @@ export default function SettingsScreen() {
           />
         </Row>
       </GlassCard>
+
+      <TestChestCard />
 
       <GlassCard style={{ gap: 10 }}>
         <SectionLabel>Storage</SectionLabel>

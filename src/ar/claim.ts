@@ -18,7 +18,7 @@ export function useChestClaim(chest: Chest, mappingRunning: boolean, scans: numb
   const sondeDetectionsNear = useMapping((s) => s.sondeDetectionsNear);
   const buildChestReport = useMapping((s) => s.buildChestReport);
   const address = useWallet((s) => s.address);
-  const { state, submit, reset } = useSubmission();
+  const { state, submit, finishLocally, reset } = useSubmission();
 
   const dongleOnly = chest.requires === 'dongle';
   const sonde = chest.kind === 'sonde';
@@ -32,11 +32,17 @@ export function useChestClaim(chest: Chest, mappingRunning: boolean, scans: numb
 
   /** Builds the report from the running session, signs it with the wallet and submits it. */
   const claim = useCallback(async () => {
+    // A test chest opens right here and sends nothing: it is not a real chest on the server.
+    if (chest.spec.test === true) {
+      reset();
+      finishLocally('Test chest opened. Nothing was submitted, and no reward is paid.');
+      return;
+    }
     if (!address) return;
     reset();
     const report = await buildChestReport(address, { id: chest.id, cellId: chest.cellId });
     if (report) await submit(report);
-  }, [address, buildChestReport, chest.id, chest.cellId, reset, submit]);
+  }, [address, buildChestReport, chest.id, chest.cellId, chest.spec.test, finishLocally, reset, submit]);
 
   return { ...readiness, state, claim, reset, passChest: chest.kind === 'satellite-pass', dongleOnly, hasWallet: !!address };
 }

@@ -29,7 +29,8 @@ export function readinessOf(input: {
   if (chest.kind === 'satellite-pass') {
     return { ready: false, needed, have, hint: 'Record the pass from the Satellites tab. The receipt you sign afterwards claims this chest.' };
   }
-  if (!hasWallet) return { ready: false, needed, have, hint: 'Connect a wallet in Profile to open chests.' };
+  // A test chest only exists on this phone, so it needs no wallet.
+  if (!hasWallet && chest.spec.test !== true) return { ready: false, needed, have, hint: 'Connect a wallet in Profile to open chests.' };
   if (!mappingRunning) return { ready: false, needed, have, hint: 'Start mapping on the Map tab, then walk to this chest.' };
   if (have < needed) return { ready: false, needed, have, hint: `Readings near the chest: ${have} of ${needed}. Keep walking toward it.` };
   if (dongleOnly && radioHave < 1) {
