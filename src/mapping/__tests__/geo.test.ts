@@ -2,6 +2,9 @@ import { arrowRotationDeg, bearingDeg, compassPoint, formatDistanceShort, neares
 
 import { hexAt, hexCenter, neighbors, cellId } from '../hexGrid';
 import { FOG_CELL_M } from '../explore';
+import { useUnits } from '../../units/units';
+beforeEach(() => useUnits.getState().setPreference('metric'));
+
 
 const here = { latitudeDeg: 38.9072, longitudeDeg: -77.0369 };
 const at = (dLat: number, dLon: number) => ({ latitudeDeg: here.latitudeDeg + dLat, longitudeDeg: here.longitudeDeg + dLon });
@@ -47,3 +50,15 @@ describe('bearing and arrow', () => {
   });
 });
 
+
+describe('compass calibration', () => {
+  const { compassNeedsCalibration } = require('../headingStore');
+  it('asks for a figure-8 only when the sensor says it is unreliable', () => {
+    expect(compassNeedsCalibration(3, 0.1)).toBe(false);
+    expect(compassNeedsCalibration(2, null)).toBe(false);
+    expect(compassNeedsCalibration(1, null)).toBe(true);
+    expect(compassNeedsCalibration(0, null)).toBe(true);
+    expect(compassNeedsCalibration(undefined, 0.6)).toBe(true);
+    expect(compassNeedsCalibration(undefined, null)).toBe(false);
+  });
+});

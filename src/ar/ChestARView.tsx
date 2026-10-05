@@ -12,6 +12,7 @@ import type { Chest } from '../network/api';
 import type { LatLon } from '../mapping/hexGrid';
 import { useDevicePose } from '../mapping/useDevicePose';
 import { formatDistanceShort } from '../mapping/geo';
+import { rangeLabel, useUnitSystem } from '../units/units';
 import { DirectionArrow } from '../screens/map/components/DirectionArrow';
 import { CHEST_KIND } from '../screens/chests/chestInfo';
 import { ChestScene, createChestScene } from './chestScene';
@@ -59,6 +60,7 @@ export function ChestARView({ visible, chest, target, mappingRunning, scans, onC
 }
 
 function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest; target: LatLon; mappingRunning: boolean; scans: number; onClose: () => void }) {
+  useUnitSystem(); // redraw when the unit setting changes
   const insets = useSafeAreaInsets();
   const kind = CHEST_KIND[chest.kind];
   const [permission, requestPermission] = useCameraPermissions();
@@ -206,7 +208,7 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
       if (!f) return showToast('Finding your position…');
       const hit = sceneRef.current?.hitTest((x / size.current.w) * 2 - 1, -((y / size.current.h) * 2 - 1)) ?? false;
       if (!hit) return showToast(f.inView ? 'Tap the chest' : 'Turn toward the chest');
-      if (!f.withinOpenRange) return showToast(`${formatDistanceShort(f.distanceM)} away. Get within ${OPEN_RANGE_M} m to open it.`);
+      if (!f.withinOpenRange) return showToast(`${formatDistanceShort(f.distanceM)} away. Get within ${rangeLabel(OPEN_RANGE_M)} to open it.`);
       if (!ready.current) return showToast(claim.hint);
       void openIt();
     },

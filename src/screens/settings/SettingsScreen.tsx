@@ -1,3 +1,4 @@
+import { useUnits } from '../../units/units';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
@@ -43,6 +44,8 @@ export default function SettingsScreen() {
   }, []);
 
   const update = useAppStore.getState().updateSettings;
+  const unitPreference = useUnits((s) => s.preference);
+  const setUnitPreference = useUnits((s) => s.setPreference);
   const fogStyle = useMapping((s) => s.fogStyle);
   const setFogStyle = useMapping((s) => s.setFogStyle);
   const locationLabel =
@@ -53,6 +56,18 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.subtitle}>Location, predictions and storage</Text>
       </View>
+
+      <GlassCard style={{ gap: 12 }}>
+        <SectionLabel>Units</SectionLabel>
+        <Text style={styles.subtitle}>
+          Distances on the map, in chests and in session stats. Automatic follows your phone's region: miles and feet in the US, Canada and the UK, kilometres and metres elsewhere.
+        </Text>
+        <Row style={{ flexWrap: 'wrap' }}>
+          <Chip label="Automatic" selected={unitPreference === 'auto'} onPress={() => setUnitPreference('auto')} />
+          <Chip label="Miles & feet" selected={unitPreference === 'imperial'} onPress={() => setUnitPreference('imperial')} />
+          <Chip label="Kilometres & metres" selected={unitPreference === 'metric'} onPress={() => setUnitPreference('metric')} />
+        </Row>
+      </GlassCard>
 
       <GlassCard style={{ gap: 12 }}>
         <SectionLabel>Unmapped ground</SectionLabel>

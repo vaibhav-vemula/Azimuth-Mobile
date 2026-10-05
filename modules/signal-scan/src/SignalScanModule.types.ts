@@ -88,6 +88,8 @@ export interface OrientationEvent {
   declinationDeg: number;
   /** Estimated heading error in radians, when the sensor reports it. */
   accuracyRad: number | null;
+  /** The sensor's own rating: 3 high, 2 medium, 1 low, 0 unreliable. Low or unreliable means the compass needs calibrating. */
+  status?: number;
 }
 
 export type OrientationListener = (event: OrientationEvent) => void;

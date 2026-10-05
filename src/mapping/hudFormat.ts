@@ -1,3 +1,5 @@
+import { areaParts, walkedParts } from '../units/units';
+
 /** "12:34", or "1:02:09" once it passes an hour. */
 export function formatElapsed(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -9,19 +11,14 @@ export function formatElapsed(totalSeconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/** Distance walked: "0 m", "340 m", "1.2 km". */
+/** Distance walked, in the user's units (see units.ts). */
 export function formatWalked(metres: number): { value: string; unit: string } {
-  if (!Number.isFinite(metres) || metres < 1) return { value: '0', unit: 'm' };
-  if (metres < 1000) return { value: String(Math.round(metres / 5) * 5 || 5), unit: 'm' };
-  return { value: (metres / 1000).toFixed(metres < 10_000 ? 2 : 1), unit: 'km' };
+  return walkedParts(metres);
 }
 
-/** Area: "420 m²", "0.42 km²". The value and unit are separate so the unit can be drawn smaller. */
+/** Area, in the user's units. The value and unit are separate so the unit can be drawn smaller. */
 export function formatAreaParts(km2: number): { value: string; unit: string } {
-  if (!Number.isFinite(km2) || km2 <= 0) return { value: '0', unit: 'm²' };
-  if (km2 < 0.01) return { value: String(Math.round((km2 * 1e6) / 10) * 10 || 10), unit: 'm²' };
-  if (km2 < 10) return { value: km2.toFixed(2), unit: 'km²' };
-  return { value: String(Math.round(km2)), unit: 'km²' };
+  return areaParts(km2);
 }
 
 /** Bars for a cellular signal, 0 to 4, from its strength in dBm. */

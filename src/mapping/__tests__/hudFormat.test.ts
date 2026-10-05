@@ -1,4 +1,7 @@
 import { cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, stepDistance, techLabel } from '../hudFormat';
+import { useUnits } from '../../units/units';
+beforeEach(() => useUnits.getState().setPreference('metric'));
+
 
 describe('time', () => {
   it('shows minutes and seconds, then hours', () => {

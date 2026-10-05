@@ -178,3 +178,10 @@ Server environment variables:
 - The verifier checks plausibility, not truth. A modified app can invent readings that look plausible. Venue-tag, sonde-frequency and NOAA checks raise the cost, but all of them can be faked with public information.
 - One verifier is trusted. The escrow limits what it can do (it cannot take funds, double-pay, or exceed the funded fills), but it decides who is paid.
 - Reward amounts are placeholders. Demand is unproven; talk to real requesters before relying on any of this.
+
+## Units, arrow accuracy, sheet gesture and zoom (2026-10-04)
+
+- **Units** (`src/units/units.ts`): Settings > Units offers Automatic, Miles & feet, Kilometres & metres. Automatic reads the phone's region (`I18nManager.localeIdentifier`) and uses miles and feet in the US, Canada, the UK and a few others, kilometres and metres elsewhere. Applies to chest distances, the compass pill, AR text and range limits, session distance and area (acres / mi²), and satellite range and altitude. The choice is stored on the phone (MMKV).
+- **Arrow**: drawn as an SVG dial (tip straight up), turns by `bearing - heading` and glides the short way round. Heading comes from the native rotation-vector sensor, corrected to true north. The native module now also reports the sensor's own accuracy status; when it is low or unreliable the pill asks for a figure-8 wave of the phone. Not yet checked on a real phone.
+- **Mapping sheet**: drags from anywhere (header always; body only when scrolled to the top or not fully open).
+- **Map zoom**: starts at zoom 17 once both a fix and the map exist; the location button flies to you on the first press.

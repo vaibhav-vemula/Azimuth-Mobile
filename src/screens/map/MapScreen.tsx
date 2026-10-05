@@ -28,6 +28,7 @@ import { verifierConfigured } from '../../network/config';
 import type { Chest } from '../../network/api';
 import { useWallet } from '../../wallet/useWallet';
 import { formatDistance } from '../chests/chestInfo';
+import { useUnitSystem } from '../../units/units';
 
 type Panel = 'none' | 'chests' | 'chest';
 
@@ -35,6 +36,7 @@ type Panel = 'none' | 'chests' | 'chest';
 const SCRIM = [0.62, 0.42, 0.24, 0.1, 0];
 
 export default function MapScreen() {
+  useUnitSystem(); // redraw when the unit setting changes
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const pose = useDevicePose(focused);

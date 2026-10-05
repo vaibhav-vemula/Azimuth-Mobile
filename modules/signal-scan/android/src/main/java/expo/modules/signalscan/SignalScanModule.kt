@@ -396,6 +396,8 @@ class SignalScanModule : Module() {
     }
     val quaternion = FloatArray(4)
     var lastEmitMs = 0L
+    // SensorManager.SENSOR_STATUS_*: 3 high, 2 medium, 1 low, 0 unreliable. Low or unreliable means the compass needs calibrating.
+    var status = SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM
 
     val listener = object : SensorEventListener {
       override fun onSensorChanged(event: SensorEvent) {
@@ -412,12 +414,15 @@ class SignalScanModule : Module() {
             "y" to quaternion[2].toDouble(),
             "z" to quaternion[3].toDouble(),
             "declinationDeg" to declination,
-            "accuracyRad" to accuracy
+            "accuracyRad" to accuracy,
+            "status" to status
           )
         )
       }
 
-      override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+      override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        status = accuracy
+      }
     }
     orientationListener = listener
     sensors.registerListener(listener, rotation, SensorManager.SENSOR_DELAY_GAME)

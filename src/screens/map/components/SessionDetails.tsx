@@ -9,6 +9,7 @@ import { useSubmission } from '../../../network/useSubmission';
 import { useWallet } from '../../../wallet/useWallet';
 import { exploredAreaKm2 } from '../../../mapping/explore';
 import { hexCenter, parseCellId } from '../../../mapping/hexGrid';
+import { useUnitSystem } from '../../../units/units';
 import { Quality, cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, techLabel } from '../../../mapping/hudFormat';
 
 const QUALITY_COLOR: Record<Quality, string> = {
@@ -27,6 +28,7 @@ export function SessionDetails() {
 }
 
 function LiveStats() {
+  useUnitSystem(); // redraw when the unit setting changes
   const cleared = useMapping((s) => s.sessionClearedCells);
   const walked = useMapping((s) => s.sessionDistanceM);
   const scans = useMapping((s) => s.scansThisSession);

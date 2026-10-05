@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { addOrientationListener, startOrientation, stopOrientation } from '../../modules/signal-scan';
 import { smoothAngleDeg, walkingHeadingDeg } from '../ar/orientation';
-import { useHeadingStore } from './headingStore';
+import { compassNeedsCalibration, useHeadingStore } from './headingStore';
 import type { LatLon } from './hexGrid';
 
 /** The heading is refreshed this often (the sensor reports about 60 times a second; a screen needs far fewer). */
@@ -32,6 +32,7 @@ export function useDevicePose(active: boolean): DevicePose {
   const [position, setPosition] = useState<LatLon | null>(null);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
   const setHeading = useHeadingStore((s) => s.set);
+  const setNeedsCalibration = useHeadingStore((s) => s.setNeedsCalibration);
   const [mocked, setMocked] = useState(false);
   const hasFix = position !== null;
 
@@ -108,6 +109,7 @@ export function useDevicePose(active: boolean): DevicePose {
       last = now;
       smoothed = smoothAngleDeg(smoothed, walkingHeadingDeg({ w: e.w, x: e.x, y: e.y, z: e.z }, e.declinationDeg), HEADING_SMOOTHING);
       sensorHeadingRef.current = true;
+      setNeedsCalibration(compassNeedsCalibration(e.status, e.accuracyRad));
       setHeading(smoothed);
     });
     startOrientation(latest.current.latitudeDeg, latest.current.longitudeDeg).catch(() => {

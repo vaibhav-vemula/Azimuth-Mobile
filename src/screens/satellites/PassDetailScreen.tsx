@@ -1,3 +1,4 @@
+import { longDistanceParts, useUnitSystem } from '../../units/units';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +43,7 @@ type Route = RouteProp<SatellitesStackParamList, 'PassDetail'>;
 const SCRUB_STEP_MS = 60_000;
 
 export default function PassDetailScreen() {
+  const unitSystem = useUnitSystem();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const now = useNow(1000);
@@ -205,7 +207,7 @@ export default function PassDetailScreen() {
         <Row>
           <Stat label="Azimuth" value={lookAngles ? formatAzimuth(lookAngles.azimuthDeg) : '–'} />
           <Stat label="Elevation" value={lookAngles ? `${lookAngles.elevationDeg.toFixed(0)}°` : 'Below horizon'} />
-          <Stat label="Range" value={selected ? Math.round(selected.rangeKm).toString() : '–'} unit="km" />
+          <Stat label="Range" value={selected ? longDistanceParts(selected.rangeKm, unitSystem).value : '–'} unit={longDistanceParts(0, unitSystem).unit} />
         </Row>
       </GlassCard>
 
@@ -224,7 +226,7 @@ export default function PassDetailScreen() {
         <Row>
           <Stat label="Max elevation" value={`${pass.maxElevationDeg.toFixed(1)}°`} color={QUALITY_COLOR[quality]} />
           <Stat label="Duration" value={formatDuration(pass.durationSec)} />
-          <Stat label="Altitude" value={Math.round(selected?.altitudeKm ?? 0).toString()} unit="km" />
+          <Stat label="Altitude" value={longDistanceParts(selected?.altitudeKm ?? 0, unitSystem).value} unit={longDistanceParts(0, unitSystem).unit} />
         </Row>
       </GlassCard>
 

@@ -1,6 +1,7 @@
 import type { Ionicons } from '@expo/vector-icons';
 import type { Chest } from '../../network/api';
 import { colors } from '../../theme';
+import { distanceParts, formatQuantity } from '../../units/units';
 
 export const CHEST_KIND: Record<Chest['kind'], { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; blurb: string }> = {
   gap: { label: 'Gap', icon: 'map-outline', color: colors.accent, blurb: 'Measure cellular signal where the map is empty.' },
@@ -24,6 +25,5 @@ export function timeLeft(expiresMs: number, now = Date.now()): string {
 
 export function formatDistance(m: number | null): string {
   if (m === null) return '—';
-  if (m < 1000) return `${Math.round(m / 10) * 10} m`;
-  return `${(m / 1000).toFixed(1)} km`;
+  return formatQuantity(distanceParts(m));
 }

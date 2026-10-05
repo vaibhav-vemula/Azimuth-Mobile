@@ -1,3 +1,4 @@
+import { distanceParts, formatQuantity, currentSystem } from '../units/units';
 import { LatLon, distanceM } from './hexGrid';
 
 const toRad = (d: number) => (d * Math.PI) / 180;
@@ -27,11 +28,10 @@ export function compassPoint(bearing: number): string {
   return COMPASS[Math.round(((bearing % 360) + 360) % 360 / 45) % 8];
 }
 
-/** "120 m", "1.4 km". */
+/** "120 m", "1.4 km", or "400 ft", "0.9 mi", in the user's units. */
 export function formatDistanceShort(m: number): string {
   if (!Number.isFinite(m)) return '—';
-  if (m < 1000) return `${Math.max(5, Math.round(m / 5) * 5)} m`;
-  return `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+  return formatQuantity(distanceParts(m, currentSystem(), { minimum: 5 }));
 }
 
 export interface Located<T> {

@@ -6,6 +6,9 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 import { ARRIVED_M, ChestCompass } from '../components/ChestCompass';
 import { ARROW_PATH, DirectionArrow, shortestTurn } from '../components/DirectionArrow';
 import type { Chest } from '../../../network/api';
+import { useUnits } from '../../../units/units';
+beforeEach(() => useUnits.getState().setPreference('metric'));
+
 
 const chest: Chest = { id: 'c1', title: 'Wi-Fi at Main St Cafe', kind: 'wifi-quality', cellId: 'h120:1:1', rewardUsdc: 0.5, remaining: 3, expiresMs: Date.now() + 3 * 3600_000, requester: 'Cafe', requires: 'phone', spec: {} };
 

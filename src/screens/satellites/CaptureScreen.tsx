@@ -1,3 +1,4 @@
+import { longDistanceParts, useUnitSystem } from '../../units/units';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +35,7 @@ import { TipsCard } from './components/capture/TipsCard';
 import { PassReceiptCard } from './components/capture/PassReceiptCard';
 
 export default function CaptureScreen() {
+  const unitSystem = useUnitSystem();
   const navigation = useNavigation();
   const now = useNow(1000);
 
@@ -258,7 +260,7 @@ export default function CaptureScreen() {
           <Row>
             <Stat label="Azimuth" value={sat.elevationDeg > 0 ? formatAzimuth(sat.azimuthDeg) : '–'} />
             <Stat label="Elevation" value={sat.elevationDeg > 0 ? `${sat.elevationDeg.toFixed(0)}°` : `${sat.elevationDeg.toFixed(0)}° (below)`} />
-            <Stat label="Range" value={Math.round(sat.rangeKm).toString()} unit="km" />
+            <Stat label="Range" value={longDistanceParts(sat.rangeKm, unitSystem).value} unit={longDistanceParts(0, unitSystem).unit} />
           </Row>
         ) : null}
       </GlassCard>

@@ -6,10 +6,12 @@ import { colors, typography } from '../../theme';
 import { Chest } from '../../network/api';
 import { useChestClaim } from '../../ar/claim';
 import { AR_RANGE_M } from '../../ar/orientation';
+import { rangeLabel, useUnitSystem } from '../../units/units';
 import { CHEST_KIND, formatDistance, timeLeft } from './chestInfo';
 
 export function ChestCard({ chest, distance, mappingRunning, scans, onAr }: { chest: Chest; distance: number | null; mappingRunning: boolean; scans: number; onAr?: () => void }) {
   const kind = CHEST_KIND[chest.kind];
+  const system = useUnitSystem();
   const { state, ready, hint, claim, passChest, dongleOnly } = useChestClaim(chest, mappingRunning, scans);
 
   return (
@@ -48,7 +50,7 @@ export function ChestCard({ chest, distance, mappingRunning, scans, onAr }: { ch
           <Text style={styles.hint}>{hint}</Text>
           {onAr && !passChest ? (
             <Button
-              label={distance !== null && distance <= AR_RANGE_M ? 'Find it in AR' : `AR opens within ${AR_RANGE_M} m`}
+              label={distance !== null && distance <= AR_RANGE_M ? 'Find it in AR' : `AR opens within ${rangeLabel(AR_RANGE_M, system)}`}
               variant="secondary"
               icon="camera-outline"
               disabled={distance === null || distance > AR_RANGE_M}

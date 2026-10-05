@@ -7,10 +7,26 @@ import { create } from 'zustand';
  */
 interface HeadingState {
   heading: number | null;
+  /** True when the compass says it is not accurate (a figure-8 wave of the phone usually fixes it). */
+  needsCalibration: boolean;
   set: (heading: number | null) => void;
+  setNeedsCalibration: (needs: boolean) => void;
 }
 
-export const useHeadingStore = create<HeadingState>((set) => ({
+/** Heading error beyond this, in radians (about 25 degrees), is too much to trust an arrow. */
+export const POOR_HEADING_RAD = 0.44;
+
+/** Whether a sensor reading says the compass needs calibrating. */
+export function compassNeedsCalibration(status: number | undefined, accuracyRad: number | null): boolean {
+  if (typeof status === 'number' && status <= 1) return true;
+  return accuracyRad !== null && accuracyRad > POOR_HEADING_RAD;
+}
+
+export const useHeadingStore = create<HeadingState>((set, get) => ({
   heading: null,
+  needsCalibration: false,
   set: (heading) => set({ heading }),
+  setNeedsCalibration: (needs) => {
+    if (get().needsCalibration !== needs) set({ needsCalibration: needs });
+  },
 }));
