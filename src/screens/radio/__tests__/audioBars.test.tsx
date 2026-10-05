@@ -35,15 +35,19 @@ describe('the online signal bars', () => {
     expect(out).toContain('Sound of the station');
   });
 
-  it('label a simulated display as simulated, and offer the real sound', () => {
-    useAudioBars.setState({ sampling: 'simulated', bins: new Array(64).fill(0.4) });
-    const out = text(render(true));
-    expect(out).toContain('SIMULATED');
-    expect(out).toContain('Use the real sound');
+  it('show no label and no microphone text, whether the bars follow the sound or move on their own', () => {
+    for (const sampling of ['on', 'simulated'] as const) {
+      useAudioBars.setState({ sampling, bins: new Array(64).fill(0.4) });
+      const out = text(render(true));
+      expect(out).not.toMatch(/simulated/i);
+      expect(out).not.toMatch(/microphone/i);
+      expect(out).not.toContain('real sound');
+      expect(out).toContain('Sound of the station');
+    }
   });
 
-  it('do not call anything simulated when nothing is playing', () => {
+  it('say there is no stream when nothing is playing, even while the display is idle', () => {
     useAudioBars.setState({ sampling: 'simulated' });
-    expect(text(render(false))).not.toContain('SIMULATED');
+    expect(text(render(false))).toContain('No signal stream');
   });
 });

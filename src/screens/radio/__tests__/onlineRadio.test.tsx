@@ -92,4 +92,22 @@ describe('the online radio screen', () => {
     useOnlineRadio.setState({ nearbyStatus: 'no-location', nearby: [] });
     expect(text(render())).toContain('Allow location');
   });
+
+  it('lists every station on the frequency below the one that plays, even when there is just one', () => {
+    const second = { ...station, id: 'b', name: 'Other 98.7', url: 'https://x/b' };
+    useOnlineRadio.setState({ current: station, status: 'playing', stations: [station, second] });
+    const out = text(render());
+    expect(out).toMatch(/all stations on 98.7 mhz/i);
+    expect(out).toContain('Other 98.7');
+    useOnlineRadio.setState({ stations: [station] });
+    expect(text(render())).toMatch(/all stations on 98.7 mhz/i);
+  });
+
+  it('does not cut a long list short', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ ...station, id: `s${i}`, name: `Station number ${i}`, url: `https://x/${i}` }));
+    useOnlineRadio.setState({ current: many[0], status: 'playing', stations: many });
+    const out = text(render());
+    expect(out).toContain('Station number 0');
+    expect(out).toContain('Station number 29');
+  });
 });

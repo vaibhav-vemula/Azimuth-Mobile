@@ -161,7 +161,7 @@ export function OnlineRadio() {
         </GlassCard>
       ) : null}
 
-      {stations.length > 1 ? <StationList title={`${stations.length} stations`} stations={stations} currentId={current?.id ?? null} here={here} /> : null}
+      {stations.length > 0 ? <StationList title={`All stations on ${formatMHz(mhz)} MHz · ${stations.length}`} stations={stations} currentId={current?.id ?? null} here={here} limit={100} /> : null}
 
       <NearMe currentId={current?.id ?? null} />
 
