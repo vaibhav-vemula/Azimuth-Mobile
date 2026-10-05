@@ -47,7 +47,8 @@
           "cameraPermission": "Azimuth uses the camera to show treasure chests in AR where they really are.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "./plugins/withAzimuthBackup"
     ]
   }
 }
