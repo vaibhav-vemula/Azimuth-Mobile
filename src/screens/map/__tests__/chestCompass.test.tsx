@@ -4,7 +4,7 @@ import renderer, { act } from 'react-test-renderer';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import { ARRIVED_M, ChestCompass } from '../components/ChestCompass';
-import { ARROW_PATH, DirectionArrow } from '../components/DirectionArrow';
+import { ARROW_PATH, DirectionArrow, shortestTurn } from '../components/DirectionArrow';
 import type { Chest } from '../../../network/api';
 
 const chest: Chest = { id: 'c1', title: 'Wi-Fi at Main St Cafe', kind: 'wifi-quality', cellId: 'h120:1:1', rewardUsdc: 0.5, remaining: 3, expiresMs: Date.now() + 3 * 3600_000, requester: 'Cafe', requires: 'phone', spec: {} };
@@ -56,14 +56,24 @@ describe('ChestCompass', () => {
 });
 
 describe('DirectionArrow', () => {
+  it('takes the short way round when it turns', () => {
+    expect(shortestTurn(350, 10)).toBe(370);
+    expect(shortestTurn(10, 350)).toBe(-10);
+    expect(shortestTurn(0, 180)).toBe(180);
+    expect(shortestTurn(90, 90)).toBe(90);
+  });
+
   it('turns with the phone: target east while facing north points right, facing east points up', () => {
     const rotationOf = (heading: number | null) => {
       let t!: renderer.ReactTestRenderer;
       act(() => {
         t = renderer.create(<DirectionArrow bearingDeg={90} headingDeg={heading} />);
       });
-      const rotating = t.root.findAll((n) => Array.isArray(n.props?.style?.transform) || false);
-      return rotating.map((n) => n.props.style.transform?.[0]?.rotate).find(Boolean) as string;
+      // The arrow glides to its angle, so the rotation is an animated value; read what it currently holds.
+      const flat = (style: unknown): any => (Array.isArray(style) ? Object.assign({}, ...style.map(flat)) : style ?? {});
+      const spinning = t.root.findAll((n) => Array.isArray(flat(n.props?.style).transform))[0];
+      const rotate = flat(spinning.props.style).transform[0].rotate;
+      return Math.round(parseFloat(typeof rotate === 'string' ? rotate : rotate.__getValue())) + 'deg';
     };
     expect(rotationOf(0)).toBe('90deg');
     expect(rotationOf(90)).toBe('0deg');
