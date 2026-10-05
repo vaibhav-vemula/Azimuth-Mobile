@@ -56,7 +56,7 @@ describe('snapshots', () => {
     const s = snap({ explored, signals: { 'h20:1:2': cell(3, 5) }, savedMs: 9 });
     const bytes = packSnapshot(s);
     expect(bytes.length).toBeLessThan(JSON.stringify(s).length / 3);
-    expect(unpackSnapshot(bytes)).toEqual(s);
+    expect(unpackSnapshot(bytes)).toEqual({ ...s, sessions: [], sessionCells: {} });
   });
 
   it('refuse something that is not a snapshot', () => {
@@ -96,5 +96,30 @@ describe('snapshots', () => {
     expect(hasNewerThan(snap({ explored: { x: 1, y: 2 }, signals: base.signals }), base)).toBe(true);
     expect(hasNewerThan(snap({ explored: base.explored, signals: { s: cell(3, 3) } }), base)).toBe(true);
     expect(hasNewerThan(snap({}), base)).toBe(false);
+  });
+});
+
+describe('sessions in a backup', () => {
+  const rec = (id: string, startedMs: number) => ({ id, startedMs, endedMs: startedMs + 1000, durationSec: 1, distanceM: 5, clearedCells: 3, areaKm2: 0.0001, newCells: 1, readings: 2, towers: 1, wifi: 2, bluetooth: 0, radioDbfs: null });
+
+  it('travel with the backup, cells included', () => {
+    const s = snap({ sessions: [rec('1', 1)], sessionCells: { '1': ['f5:1:1', 'f5:1:2'] } });
+    expect(unpackSnapshot(packSnapshot(s))).toEqual({ ...s });
+  });
+
+  it('are joined by id, newest first, and a session is never lost', () => {
+    const m = mergeSnapshots(snap({ sessions: [rec('1', 100)], sessionCells: { '1': ['a'] } }), snap({ sessions: [rec('2', 200)], sessionCells: { '2': ['b'] } }));
+    expect(m.sessions?.map((r) => r.id)).toEqual(['2', '1']);
+    expect(m.sessionCells).toEqual({ '1': ['a'], '2': ['b'] });
+  });
+
+  it('read an older backup that had no sessions', () => {
+    const old = packSnapshot({ v: 1, savedMs: 1, explored: {}, visited: {}, signals: {} });
+    expect(unpackSnapshot(old).sessions).toEqual([]);
+  });
+
+  it('count as something new to upload', () => {
+    expect(hasNewerThan(snap({ sessions: [rec('1', 1)] }), snap({}))).toBe(true);
+    expect(hasNewerThan(snap({ sessions: [rec('1', 1)] }), snap({ sessions: [rec('1', 1)] }))).toBe(false);
   });
 });

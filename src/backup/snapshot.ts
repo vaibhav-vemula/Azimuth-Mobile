@@ -1,5 +1,6 @@
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import type { CellSignal } from '../mapping/signalLayer';
+import type { SessionRecord } from '../mapping/sessionHistory';
 
 /** Everything that makes up the user's map progress. Local to the phone, and backed up only in encrypted form. */
 export interface Snapshot {
@@ -11,6 +12,9 @@ export interface Snapshot {
   visited: Record<string, number>;
   /** What was measured in each signal cell. */
   signals: Record<string, CellSignal>;
+  /** Finished mapping sessions and the fog cells each cleared (absent in older backups). */
+  sessions?: SessionRecord[];
+  sessionCells?: Record<string, string[]>;
 }
 
 export const EMPTY: Omit<Snapshot, 'savedMs'> = { v: 1, explored: {}, visited: {}, signals: {} };
@@ -32,12 +36,18 @@ export function mergeSnapshots(local: Snapshot, remote: Snapshot): Snapshot {
     const mine = signals[id];
     if (!mine || theirs.n > mine.n || (theirs.n === mine.n && theirs.t > mine.t)) signals[id] = theirs;
   }
+  const sessions = new Map<string, SessionRecord>();
+  for (const r of [...(remote.sessions ?? []), ...(local.sessions ?? [])]) sessions.set(r.id, r);
+  const sessionCells: Record<string, string[]> = { ...(remote.sessionCells ?? {}), ...(local.sessionCells ?? {}) };
+  for (const id of Object.keys(sessionCells)) if (!sessions.has(id)) delete sessionCells[id];
   return {
     v: 1,
     savedMs: Math.max(local.savedMs, remote.savedMs),
     explored: earliest(local.explored, remote.explored),
     visited: earliest(local.visited, remote.visited),
     signals,
+    sessions: [...sessions.values()].sort((a, b) => b.startedMs - a.startedMs),
+    sessionCells,
   };
 }
 
@@ -45,6 +55,7 @@ export function mergeSnapshots(local: Snapshot, remote: Snapshot): Snapshot {
 export function hasNewerThan(a: Snapshot, b: Snapshot): boolean {
   const lacking = (x: Record<string, unknown>, y: Record<string, unknown>) => Object.keys(x).some((id) => !(id in y));
   if (lacking(a.explored, b.explored) || lacking(a.visited, b.visited) || lacking(a.signals, b.signals)) return true;
+  if ((a.sessions ?? []).some((r) => !(b.sessions ?? []).some((o) => o.id === r.id))) return true;
   return Object.entries(a.signals).some(([id, s]) => s.n > (b.signals[id]?.n ?? 0));
 }
 
@@ -66,5 +77,18 @@ export function unpackSnapshot(bytes: Uint8Array): Snapshot {
   const numbers = (r: Record<string, unknown>) => Object.values(r).every((t) => typeof t === 'number' && Number.isFinite(t));
   if (!numbers(parsed.explored) || !numbers(parsed.visited)) throw new Error('This backup is damaged.');
   if (!Object.values(parsed.signals).every((s) => isRecord(s) && typeof s.n === 'number' && typeof s.t === 'number')) throw new Error('This backup is damaged.');
-  return { v: 1, savedMs: typeof parsed.savedMs === 'number' ? parsed.savedMs : 0, explored: parsed.explored as Record<string, number>, visited: parsed.visited as Record<string, number>, signals: parsed.signals as Record<string, CellSignal> };
+  const sessions = Array.isArray(parsed.sessions) ? (parsed.sessions as SessionRecord[]).filter((r) => isRecord(r) && typeof r.id === 'string' && typeof r.startedMs === 'number') : [];
+  const sessionCells: Record<string, string[]> = {};
+  if (isRecord(parsed.sessionCells)) {
+    for (const [id, cells] of Object.entries(parsed.sessionCells)) if (Array.isArray(cells) && cells.every((c) => typeof c === 'string')) sessionCells[id] = cells as string[];
+  }
+  return {
+    v: 1,
+    savedMs: typeof parsed.savedMs === 'number' ? parsed.savedMs : 0,
+    explored: parsed.explored as Record<string, number>,
+    visited: parsed.visited as Record<string, number>,
+    signals: parsed.signals as Record<string, CellSignal>,
+    sessions,
+    sessionCells,
+  };
 }

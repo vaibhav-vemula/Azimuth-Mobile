@@ -41,6 +41,8 @@ export interface LiveMapHandle {
   recenter: () => void;
   /** Show the user and a place together. */
   showBoth: (target: LatLon) => void;
+  /** Fit the camera to a box: west, south, east, north. */
+  showBounds: (bounds: [number, number, number, number]) => void;
 }
 
 export interface MapChest {
@@ -61,6 +63,8 @@ interface Props {
   showVision: boolean;
   following: boolean;
   onFollowingChange: (following: boolean) => void;
+  /** The outline of one past session's cleared area, drawn on top while that session is being looked at. */
+  highlight: GeoJSON.Feature<GeoJSON.MultiLineString> | null;
   onChestPress: (chest: Chest) => void;
   onLoadState: (state: MapLoadState) => void;
   ref?: Ref<LiveMapHandle>;
@@ -72,7 +76,7 @@ const lngLat = (p: LatLon): [number, number] => [p.longitudeDeg, p.latitudeDeg];
  * The home map: a real street map under a layer of fog. Ground you have walked is cleared, with a soft edge where
  * the fog begins. Chests sit on top; 
  */
-function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, showVision, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
+function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, showVision, following, onFollowingChange, highlight, onChestPress, onLoadState, ref }: Props) {
   const camera = useRef<CameraRef>(null);
   const didZoom = useRef(false);
   const [mapReady, setMapReady] = useState(false);
@@ -99,6 +103,10 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
         flyingUntil.current = Date.now() + RECENTER_MS + 150;
         camera.current?.flyTo({ center: lngLat(position), zoom: START_ZOOM, duration: RECENTER_MS });
       },
+      showBounds: (bounds) => {
+        onFollowingChange(false);
+        camera.current?.fitBounds(bounds, { padding: { top: 150, bottom: 340, left: 60, right: 60 }, duration: 800 });
+      },
       showBoth: (target) => {
         if (!position) return;
         onFollowingChange(false);
@@ -112,6 +120,7 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
     }),
     [position, onFollowingChange]
   );
+  // (showBounds is added to the handle below)
 
   // Zoom in to you once there is both a position and a map to move. (The first fix often arrives before the map has
   // loaded; waiting for both is what makes it zoom in reliably.) Afterwards, keep you centred while following.
@@ -186,6 +195,14 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
           ))}
           <Layer id="edge-line" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': RIM, 'line-width': 1.6, 'line-opacity': 0.95 }} />
         </GeoJSONSource>
+
+        {/* A past session's area, outlined in amber while you look at it from the history list. */}
+        {highlight ? (
+          <GeoJSONSource id="session-area" data={highlight}>
+            <Layer id="session-area-glow" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#FFB020', 'line-width': 9, 'line-opacity': 0.22 }} />
+            <Layer id="session-area-line" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#FFC857', 'line-width': 2.4, 'line-opacity': 0.98 }} />
+          </GeoJSONSource>
+        ) : null}
 
         {/* How far you can see: a faint dashed ring around you. */}
         {vision && showVision ? (

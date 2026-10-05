@@ -144,3 +144,17 @@ describe('boundary line', () => {
     expect(clearedBoundary([]).geometry.coordinates).toHaveLength(0);
   });
 });
+
+describe('coordinateBounds', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { coordinateBounds } = require('../fog');
+  const line = (coordinates: number[][][]) => ({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates } });
+
+  it('gives the west, south, east and north limits', () => {
+    expect(coordinateBounds(line([[[-77.1, 38.9], [-77.0, 38.95]], [[-77.05, 38.85], [-77.02, 38.9]]]))).toEqual([-77.1, 38.85, -77.0, 38.95]);
+  });
+
+  it('gives nothing for an empty shape', () => {
+    expect(coordinateBounds(line([]))).toBeNull();
+  });
+});

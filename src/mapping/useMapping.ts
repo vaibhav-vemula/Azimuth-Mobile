@@ -6,12 +6,14 @@ import type { ScanResult } from '../../modules/signal-scan';
 import { useAppStore } from '../state/useAppStore';
 import { buildReport } from '../reports/report';
 import type { Report } from '../reports/report';
-import { cellIdAt, distanceM, neighbors, parseCellId, cellId as toCellId } from './hexGrid';
+import { cellIdAt, distanceM, hexCenter, neighbors, parseCellId, cellId as toCellId } from './hexGrid';
 import type { LatLon } from './hexGrid';
 import { requestMappingPermissions } from './permissions';
 import { Snapshot, mergeSnapshots } from '../backup/snapshot';
+import { MAX_SESSION_CELLS, SessionRecord, buildSessionRecord, sortSessions } from './sessionHistory';
+import { levelDbfs } from './radio';
 import { ensureDongle, probeRadio, probeSonde } from './radioProbe';
-import { MAX_REVEAL_ACCURACY_M, cellsWithin } from './explore';
+import { MAX_REVEAL_ACCURACY_M, cellsWithin, exploredAreaKm2 } from './explore';
 import { stepDistance } from './hudFormat';
 import { SessionAccumulator, SessionTotals, emptyTotals, withoutIds } from './sessionStats';
 import { CellSignal, SIGNAL_CELL_M, addReading } from './signalLayer';
@@ -32,6 +34,11 @@ import {
   FogStyle,
   loadFogStyle,
   saveFogStyle,
+  loadSessions,
+  saveSessions,
+  loadSessionCells,
+  saveSessionCells,
+  removeSessionCells,
   saveBluetoothEnabled,
   saveHome,
   saveVisited,
@@ -77,6 +84,10 @@ interface MappingState {
   home: HomeExclusion | null;
   /** The report built when the last session was stopped, ready to sign. */
   lastReport: Report | null;
+  /** Finished sessions, newest first. */
+  sessions: SessionRecord[];
+  /** Removes one finished session from the history (the fog it cleared stays cleared). */
+  removeSession: (id: string) => void;
 
   load: () => void;
   start: () => Promise<boolean>;
@@ -109,6 +120,17 @@ let lastFixAtMs = 0;
 const accumulator = new SessionAccumulator();
 let positionWatch: Location.LocationSubscription | null = null;
 let scanTimer: ReturnType<typeof setInterval> | null = null;
+/** Latitude of a reporting cell, or Washington's if there is none (area per cell varies only a little with it). */
+function latitudeOf(cellId: string | null): number {
+  const parsed = cellId ? parseCellId(cellId) : null;
+  return parsed ? hexCenter(parsed.hex, parsed.sizeM).latitudeDeg : 38.9;
+}
+
+/** Fog cells this session has cleared (new ones only), and the radio level so far, for the session history. */
+let sessionCellIds: string[] = [];
+let radioLevelSum = 0;
+let radioLevelN = 0;
+
 let scanning = false;
 let tick = 0;
 
@@ -177,7 +199,11 @@ async function scanOnce(set: (p: Partial<MappingState>) => void, get: () => Mapp
     // Count distinct towers, networks and devices, then drop the anonymous ids so nothing below keeps them.
     const totals = accumulator.add(phone);
     let result: MappedScan = withoutIds(phone);
-    if (radio) result.radio = radio;
+    if (radio) {
+      result.radio = radio;
+      radioLevelSum += levelDbfs(radio.rms);
+      radioLevelN += 1;
+    }
     if (sonde) result.sonde = sonde;
     if (beaconName) result = { ...result, beaconName };
     if (!recorder) return;
@@ -258,14 +284,18 @@ export const useMapping = create<MappingState>((set, get) => ({
   radioStatus: 'off',
   home: null,
   lastReport: null,
+  sessions: [],
 
   load: () => {
-    set({ visited: loadVisited(), explored: loadExplored(), signals: loadSignals(), fogStyle: loadFogStyle(), home: loadHome(), bluetoothEnabled: loadBluetoothEnabled(), radioEnabled: loadRadioEnabled() });
+    set({ sessions: sortSessions(loadSessions()), visited: loadVisited(), explored: loadExplored(), signals: loadSignals(), fogStyle: loadFogStyle(), home: loadHome(), bluetoothEnabled: loadBluetoothEnabled(), radioEnabled: loadRadioEnabled() });
   },
 
   start: async () => {
     if (get().status !== 'idle') return false;
     set({ status: 'starting', error: null, newCellsThisSession: 0, scansThisSession: 0, sessionDistanceM: 0, sessionClearedCells: 0, sessionTotals: emptyTotals(), lastScan: null, lastReport: null });
+    sessionCellIds = [];
+    radioLevelSum = 0;
+    radioLevelN = 0;
     try {
       const permissions = await requestMappingPermissions();
       if (!permissions.location) throw new Error('Location permission is needed to place readings on the map.');
@@ -338,7 +368,27 @@ export const useMapping = create<MappingState>((set, get) => ({
         checks: finished.checks(),
       });
     }
-    set({ status: 'idle', startedAtMs: null, lastReport: report });
+    const endedMs = Date.now();
+    const record = buildSessionRecord({
+      startedMs: get().startedAtMs ?? endedMs,
+      endedMs,
+      distanceM: get().sessionDistanceM,
+      clearedCells: get().sessionClearedCells,
+      areaKm2: exploredAreaKm2(get().sessionClearedCells, latitudeOf(get().currentCellId)),
+      newCells: get().newCellsThisSession,
+      readings: get().scansThisSession,
+      totals: get().sessionTotals,
+      radioLevelSum,
+      radioLevelN,
+    });
+    let sessions = get().sessions;
+    if (record) {
+      saveSessionCells(record.id, sessionCellIds.slice(0, MAX_SESSION_CELLS));
+      sessions = sortSessions([record, ...sessions]);
+      saveSessions(sessions);
+    }
+    sessionCellIds = [];
+    set({ status: 'idle', startedAtMs: null, lastReport: report, sessions });
     return report;
   },
 
@@ -409,7 +459,9 @@ export const useMapping = create<MappingState>((set, get) => ({
 
   progress: () => {
     const s = get();
-    return { v: 1 as const, savedMs: Date.now(), explored: s.explored, visited: s.visited, signals: s.signals };
+    const sessionCells: Record<string, string[]> = {};
+    for (const r of s.sessions) sessionCells[r.id] = loadSessionCells(r.id);
+    return { v: 1 as const, savedMs: Date.now(), explored: s.explored, visited: s.visited, signals: s.signals, sessions: s.sessions, sessionCells };
   },
 
   importProgress: (snapshot) => {
@@ -418,16 +470,28 @@ export const useMapping = create<MappingState>((set, get) => ({
     saveVisited(merged.visited);
     saveExplored(merged.explored);
     saveSignals(merged.signals);
-    set({ visited: merged.visited, explored: merged.explored, signals: merged.signals });
+    const sessions = sortSessions(merged.sessions ?? []);
+    for (const r of sessions) if (loadSessionCells(r.id).length === 0 && merged.sessionCells?.[r.id]?.length) saveSessionCells(r.id, merged.sessionCells[r.id]);
+    saveSessions(sessions);
+    set({ visited: merged.visited, explored: merged.explored, signals: merged.signals, sessions });
     return true;
+  },
+
+  removeSession: (id) => {
+    const sessions = get().sessions.filter((r) => r.id !== id);
+    removeSessionCells(id);
+    saveSessions(sessions);
+    set({ sessions });
   },
 
   clearFog: () => {
     if (get().status !== 'idle') return;
+    for (const r of get().sessions) removeSessionCells(r.id);
+    saveSessions([]);
     saveVisited({});
     saveExplored({});
     saveSignals({});
-    set({ visited: {}, explored: {}, signals: {}, currentCellId: null });
+    set({ visited: {}, explored: {}, signals: {}, sessions: [], currentCellId: null });
   },
 
   revealAt: (position) => {
@@ -440,6 +504,7 @@ export const useMapping = create<MappingState>((set, get) => ({
       next ??= { ...explored };
       next[id] = now;
       added += 1;
+      if (get().status === 'running' && sessionCellIds.length < MAX_SESSION_CELLS) sessionCellIds.push(id);
     }
     if (next) {
       set({ explored: next });

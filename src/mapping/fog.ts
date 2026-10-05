@@ -177,3 +177,22 @@ export function clearedBoundary(cells: Iterable<string>): GeoJSON.Feature<GeoJSO
   const lines = boundaryLoops(cells).map((l) => close(softEdge(l)));
   return { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } };
 }
+
+/** The west, south, east and north limits of a set of lines or polygons, or null when there are none. */
+export function coordinateBounds(feature: GeoJSON.Feature<GeoJSON.MultiLineString | GeoJSON.MultiPolygon>): [number, number, number, number] | null {
+  let w = Infinity;
+  let s = Infinity;
+  let e = -Infinity;
+  let n = -Infinity;
+  const visit = (c: unknown): void => {
+    if (Array.isArray(c) && typeof c[0] === 'number') {
+      const [lon, lat] = c as number[];
+      w = Math.min(w, lon);
+      e = Math.max(e, lon);
+      s = Math.min(s, lat);
+      n = Math.max(n, lat);
+    } else if (Array.isArray(c)) c.forEach(visit);
+  };
+  visit(feature.geometry.coordinates);
+  return Number.isFinite(w) ? [w, s, e, n] : null;
+}

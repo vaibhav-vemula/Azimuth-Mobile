@@ -10,6 +10,7 @@ import { useWallet } from '../../../wallet/useWallet';
 import { exploredAreaKm2 } from '../../../mapping/explore';
 import { hexCenter, parseCellId } from '../../../mapping/hexGrid';
 import { levelDbfs } from '../../../mapping/radio';
+import { SessionHistory } from './SessionHistory';
 import { useUnitSystem } from '../../../units/units';
 import { Quality, cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, techLabel } from '../../../mapping/hudFormat';
 
@@ -25,7 +26,18 @@ const QUALITY_COLOR: Record<Quality, string> = {
 export function SessionDetails() {
   const status = useMapping((s) => s.status);
   const running = status === 'running';
-  return <View style={styles.stack}>{running ? <LiveStats /> : <LastSession />}</View>;
+  return (
+    <View style={styles.stack}>
+      {running ? (
+        <LiveStats />
+      ) : (
+        <>
+          <LastSession />
+          <SessionHistory />
+        </>
+      )}
+    </View>
+  );
 }
 
 function LiveStats() {

@@ -12,6 +12,9 @@ import { SignalChips, SignalLegend } from './components/SignalControls';
 import { SignalLayer, signalPoints } from '../../mapping/signalLayer';
 import { Sheet } from './components/Sheet';
 import { MapSheet, SwipeHint } from './components/MapSheet';
+import { clearedBoundary, coordinateBounds } from '../../mapping/fog';
+import { loadSessionCells } from '../../mapping/mappingStorage';
+import { sessionDate, useSessionView } from '../../mapping/sessionHistory';
 import { useReceiver } from '../../receiver/useReceiver';
 import { MiniStats, SheetTimer } from './components/SheetHeaderParts';
 import { ChestCard } from '../chests/ChestCard';
@@ -120,6 +123,27 @@ export default function MapScreen() {
     [chests, running]
   );
 
+  // A past session picked from the history: its cleared area is outlined, the camera fits it and the panel gets out of the way.
+  const viewedId = useSessionView((s) => s.selectedId);
+  const viewedSession = useMapping((s) => s.sessions.find((r) => r.id === viewedId) ?? null);
+  const sessionOutline = useMemo(() => {
+    if (!viewedSession) return null;
+    const cells = loadSessionCells(viewedSession.id);
+    return cells.length > 0 ? clearedBoundary(cells) : null;
+  }, [viewedSession]);
+  useEffect(() => {
+    if (!sessionOutline) return;
+    const bounds = coordinateBounds(sessionOutline);
+    if (!bounds) return;
+    setSheetOpen(false);
+    mapRef.current?.showBounds(bounds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionOutline]);
+  useEffect(() => {
+    // Starting a new session ends the look back.
+    if (running) useSessionView.getState().show(null);
+  }, [running]);
+
   const nearest = useMemo(() => (here ? nearestOf(here, mapChests.map((m) => ({ item: m.chest, position: m.position }))) : null), [here, mapChests]);
   const nearestPosition = useMemo(() => (nearest ? mapChests.find((m) => m.chest.id === nearest.item.id)?.position ?? null : null), [nearest, mapChests]);
 
@@ -169,6 +193,7 @@ export default function MapScreen() {
         showVision={running}
         following={following}
         onFollowingChange={setFollowing}
+        highlight={sessionOutline}
         onChestPress={openChest}
         onLoadState={setLoadState}
       />
@@ -206,6 +231,17 @@ export default function MapScreen() {
       <View style={[styles.layerRow, { top: insets.top + 66 }]} pointerEvents="box-none">
         <SignalChips value={layer} onChange={setLayer} showRadio={hasRadio} />
       </View>
+
+      {/* Which past session is on the map, and a way to put it away */}
+      {viewedSession ? (
+        <View style={[styles.sessionBadge, { top: insets.top + 112 }]} pointerEvents="box-none">
+          <Pressable onPress={() => useSessionView.getState().show(null)} accessibilityRole="button" accessibilityLabel="Stop showing this session" style={styles.sessionBadgeInner}>
+            <Ionicons name="time-outline" size={14} color="#FFC857" />
+            <Text style={styles.sessionBadgeText}>{sessionDate(viewedSession.startedMs)}</Text>
+            <Ionicons name="close" size={14} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* Nearest chest: an arrow toward it and how far away, under the signal chips */}
       {nearest ? (
@@ -369,6 +405,9 @@ function RoundButton({ icon, label, badge, onPress }: { icon: keyof typeof Ionic
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  sessionBadge: { position: 'absolute', left: 12 },
+  sessionBadgeInner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(11,15,26,0.94)', borderColor: '#FFC857', borderWidth: 1, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
+  sessionBadgeText: { ...typography.caption, color: colors.textPrimary },
   layerRow: { position: 'absolute', left: 12, right: 12 },
   compassRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   hintChip: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(11,15,26,0.9)', borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },

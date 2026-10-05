@@ -1,6 +1,7 @@
 import { createMMKV } from 'react-native-mmkv';
 import type { HomeExclusion } from './session';
 import type { CellSignal } from './signalLayer';
+import type { SessionRecord } from './sessionHistory';
 
 const storage = createMMKV({ id: 'azimuth-mapping' });
 const VISITED = 'visited';
@@ -107,4 +108,41 @@ export function loadFogStyle(): FogStyle {
 
 export function saveFogStyle(style: FogStyle): void {
   storage.set(FOG_STYLE, style);
+}
+
+const SESSIONS = 'sessions';
+const sessionCellsKey = (id: string) => `session-cells:${id}`;
+
+/** The list of finished sessions (summaries only). Stays on the phone. */
+export function loadSessions(): SessionRecord[] {
+  try {
+    const raw = storage.getString(SESSIONS);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as SessionRecord[]).filter((r) => r && typeof r.id === 'string' && typeof r.startedMs === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSessions(records: SessionRecord[]): void {
+  storage.set(SESSIONS, JSON.stringify(records));
+}
+
+/** The fog cells a session cleared, for showing its area on the map. */
+export function loadSessionCells(id: string): string[] {
+  try {
+    const raw = storage.getString(sessionCellsKey(id));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSessionCells(id: string, cells: string[]): void {
+  storage.set(sessionCellsKey(id), JSON.stringify(cells));
+}
+
+export function removeSessionCells(id: string): void {
+  storage.remove(sessionCellsKey(id));
 }
