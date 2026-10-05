@@ -1,10 +1,10 @@
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 import { Report, SignedReport, reportHash, signingMessage } from '../reports/report';
-import { SOLANA_CHAIN, forgetAuthToken, getAuthToken, rememberAuthToken } from './useWallet';
+import { APP_IDENTITY, SOLANA_CHAIN, forgetAuthToken, getAuthToken, rememberAuthToken } from './useWallet';
 import bs58 from 'bs58';
 
 const SIGNATURE_BYTES = 64;
-const IDENTITY = { name: 'Azimuth', uri: 'https://azimuth.space', icon: 'favicon.png' };
+const IDENTITY = APP_IDENTITY;
 
 /** The slice of a wallet session this file uses, so the retry below can be tested without a phone. */
 export interface WalletSession {

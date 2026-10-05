@@ -8,6 +8,8 @@ export interface WalletSession {
   address: string;
   authToken: string;
   walletName: string | null;
+  /** The app identity (website) the wallet authorized this token for. A token for a different identity is not reused, or the wallet keeps showing the old name. */
+  identityUri?: string;
 }
 
 export function loadWalletSession(): WalletSession | null {
@@ -16,7 +18,7 @@ export function loadWalletSession(): WalletSession | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<WalletSession>;
     if (typeof parsed.address !== 'string' || typeof parsed.authToken !== 'string') return null;
-    return { address: parsed.address, authToken: parsed.authToken, walletName: parsed.walletName ?? null };
+    return { address: parsed.address, authToken: parsed.authToken, walletName: parsed.walletName ?? null, identityUri: typeof parsed.identityUri === 'string' ? parsed.identityUri : undefined };
   } catch {
     return null;
   }

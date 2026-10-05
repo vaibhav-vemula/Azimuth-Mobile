@@ -7,7 +7,7 @@ import { clearWalletSession, loadGuest, loadWalletSession, saveGuest, saveWallet
 /** Devnet while the network is being built; switch to 'solana:mainnet' before any real payout. */
 export const SOLANA_CHAIN = 'solana:devnet';
 
-const APP_IDENTITY = {
+export const APP_IDENTITY = {
   name: 'Azimuth',
   uri: 'https://azimuth.space',
   icon: 'favicon.png',
@@ -39,7 +39,7 @@ export function getAuthToken(): string | null {
 export function rememberAuthToken(token: string): void {
   authToken = token;
   const saved = loadWalletSession();
-  if (saved) saveWalletSession({ ...saved, authToken: token });
+  if (saved) saveWalletSession({ ...saved, authToken: token, identityUri: APP_IDENTITY.uri });
 }
 
 /** Forgets a token the wallet no longer accepts. */
@@ -74,7 +74,9 @@ export const useWallet = create<WalletState>((set, get) => ({
     set({ guest: loadGuest() });
     const saved = loadWalletSession();
     if (!saved) return;
-    authToken = saved.authToken;
+    // A token the wallet issued for another app identity (an older website address) is dropped, so the next request
+    // asks the wallet afresh and it shows the current name and address.
+    authToken = saved.identityUri === APP_IDENTITY.uri ? saved.authToken : null;
     set({ status: 'connected', address: saved.address, walletName: saved.walletName, error: null });
   },
 
@@ -95,7 +97,7 @@ export const useWallet = create<WalletState>((set, get) => ({
       const address = addressOf(account);
       authToken = result.auth_token;
       const walletName = account.label ?? null;
-      saveWalletSession({ address, authToken: result.auth_token, walletName });
+      saveWalletSession({ address, authToken: result.auth_token, walletName, identityUri: APP_IDENTITY.uri });
       saveGuest(false);
       set({ status: 'connected', address, walletName, error: null, guest: false });
       return true;

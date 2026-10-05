@@ -130,3 +130,29 @@ describe('running inside an authorized wallet session', () => {
     expect(isAuthorizationFailure(new Error('Local association cancelled by user'))).toBe(false);
   });
 });
+
+describe('a saved authorization for an older website address', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useWallet, getAuthToken, APP_IDENTITY } = require('../useWallet');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { saveWalletSession } = require('../walletStorage');
+
+  it('is not reused, so the wallet is asked again and shows the current address', () => {
+    saveWalletSession({ address: 'A'.repeat(44), authToken: 'old-token', walletName: 'Seed Vault', identityUri: 'https://azimuth.app' });
+    useWallet.getState().restore();
+    expect(getAuthToken()).toBeNull();
+    expect(useWallet.getState().status).toBe('connected'); // still signed in, just not reusing the token
+  });
+
+  it('is reused when it was issued for the current address', () => {
+    saveWalletSession({ address: 'A'.repeat(44), authToken: 'fresh-token', walletName: 'Seed Vault', identityUri: APP_IDENTITY.uri });
+    useWallet.getState().restore();
+    expect(getAuthToken()).toBe('fresh-token');
+  });
+
+  it('is not reused when the saved session predates identity tracking', () => {
+    saveWalletSession({ address: 'A'.repeat(44), authToken: 'legacy', walletName: null });
+    useWallet.getState().restore();
+    expect(getAuthToken()).toBeNull();
+  });
+});
