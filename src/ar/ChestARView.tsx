@@ -263,7 +263,7 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
             {chest.title}
           </Text>
           <Text style={styles.sub}>
-            {hud.distanceM === null ? 'Finding you…' : formatDistanceShort(hud.distanceM)} · {chest.rewardUsdc} USDC
+            {hud.distanceM === null ? 'Finding you…' : formatDistanceShort(hud.distanceM)}
           </Text>
         </View>
         <Ionicons name={kind.icon} size={22} color={kind.color} />

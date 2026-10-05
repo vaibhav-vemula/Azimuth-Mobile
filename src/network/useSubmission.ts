@@ -18,7 +18,7 @@ function rewardMessage(accepted: boolean, reasons: string[], reward?: { newCells
   if (accepted && pending) return 'Received. It will be checked soon, and any reward is added after review. Check Profile for the result.';
   if (!accepted) return reasons.length ? reasons.join('. ') : 'The verifier did not accept this report.';
   const parts: string[] = [];
-  if (reward?.chestUsdc) parts.push(`Chest reward: ${reward.chestUsdc} USDC`);
+  if (reward?.chestUsdc) parts.push('Chest opened');
   if (reward?.newCells) parts.push(`${reward.newCells} cell${reward.newCells === 1 ? '' : 's'} new to the network${reward.subsidyUsdc ? ` (+${reward.subsidyUsdc} USDC subsidy)` : ''}`);
   return parts.length ? parts.join('. ') : 'Accepted. These cells were already known to the network.';
 }

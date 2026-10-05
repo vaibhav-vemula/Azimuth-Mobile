@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Chest, fetchChests } from './api';
 import { verifierConfigured } from './config';
 import { cellIdAt } from '../mapping/hexGrid';
+import { loadOpenedChests, saveOpenedChests } from '../mapping/mappingStorage';
 import type { LatLon } from '../mapping/hexGrid';
 
 interface ChestsState {
@@ -11,12 +12,17 @@ interface ChestsState {
   loadedAtMs: number | null;
   refresh: () => Promise<void>;
   /** A chest that exists only on this phone, a few metres from `position`, for trying the opening without any network. */
+  /** A chest was opened: it leaves the map and the list for good (this phone remembers it). */
+  markOpened: (id: string) => void;
   addTestChest: (position: LatLon, facingDeg?: number | null) => Chest;
   clearTestChests: () => void;
 }
 
 /** Test chests are kept apart from the real ones so a refresh from the network does not remove them. */
 let testChests: Chest[] = [];
+/** Ids of chests already opened here. Kept off the map even if the network still lists them as open. */
+let opened = new Set<string>(loadOpenedChests());
+const notOpened = (list: Chest[]) => list.filter((c) => !opened.has(c.id));
 
 export const useChests = create<ChestsState>((set, get) => ({
   chests: [],
@@ -28,10 +34,16 @@ export const useChests = create<ChestsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const chests = await fetchChests();
-      set({ chests: [...testChests, ...chests], loading: false, loadedAtMs: Date.now() });
+      set({ chests: notOpened([...testChests, ...chests]), loading: false, loadedAtMs: Date.now() });
     } catch (e) {
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
+  },
+  markOpened: (id) => {
+    opened = new Set([...opened, id]);
+    saveOpenedChests([...opened]);
+    testChests = testChests.filter((c) => c.id !== id);
+    set({ chests: get().chests.filter((c) => c.id !== id) });
   },
   addTestChest: (position, facingDeg = null) => {
     // Exactly where you stand. GPS cannot tell which way a point under your feet lies, so in AR it is drawn in front of

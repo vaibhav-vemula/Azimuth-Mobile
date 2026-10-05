@@ -36,3 +36,28 @@ describe('the test chest', () => {
     expect(chest.expiresMs - Date.now()).toBeGreaterThan(3_599_000 * 2 - 5000);
   });
 });
+
+describe('an opened chest', () => {
+  const real = (id: string) => ({ id, title: 'Cafe', kind: 'visit' as const, cellId: 'h120:1:1', rewardUsdc: 2, remaining: 3, expiresMs: Date.now() + 1e6, requester: 'r', requires: 'phone' as const, spec: {} });
+
+  it('leaves the map and the list, and the others stay', () => {
+    useChests.setState({ chests: [real('a'), real('b')] });
+    useChests.getState().markOpened('a');
+    expect(useChests.getState().chests.map((c) => c.id)).toEqual(['b']);
+  });
+
+  it('removes a test chest for good', () => {
+    const chest = useChests.getState().addTestChest(HERE);
+    useChests.getState().markOpened(chest.id);
+    expect(useChests.getState().chests.some((c) => c.id === chest.id)).toBe(false);
+    useChests.getState().clearTestChests();
+    expect(useChests.getState().chests).toHaveLength(0);
+  });
+
+  it('is remembered on the phone, so a refresh from the network does not bring it back', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { loadOpenedChests } = require('../../mapping/mappingStorage');
+    useChests.getState().markOpened('zzz');
+    expect(loadOpenedChests()).toContain('zzz');
+  });
+});

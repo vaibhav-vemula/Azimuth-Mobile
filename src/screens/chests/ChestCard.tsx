@@ -26,10 +26,6 @@ export function ChestCard({ chest, distance, mappingRunning, scans, onAr }: { ch
             {chest.requester} · {formatDistance(distance)} · {timeLeft(chest.expiresMs)}
           </Text>
         </View>
-        <View style={styles.reward}>
-          <Text style={styles.rewardValue}>{chest.rewardUsdc}</Text>
-          <Text style={styles.rewardUnit}>USDC</Text>
-        </View>
       </View>
 
       <Text style={styles.blurb}>{kind.blurb}</Text>

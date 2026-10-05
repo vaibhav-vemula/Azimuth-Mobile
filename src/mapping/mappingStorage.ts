@@ -157,3 +157,21 @@ export function loadBackfilled(): boolean {
 export function saveBackfilled(done: boolean): void {
   storage.set(BACKFILLED, done);
 }
+
+const OPENED = 'openedChests';
+const MAX_OPENED_KEPT = 500;
+
+/** Chests this phone has opened (their ids), so they stay off the map even before the network has caught up. */
+export function loadOpenedChests(): string[] {
+  try {
+    const raw = storage.getString(OPENED);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveOpenedChests(ids: string[]): void {
+  storage.set(OPENED, JSON.stringify(ids.slice(-MAX_OPENED_KEPT)));
+}

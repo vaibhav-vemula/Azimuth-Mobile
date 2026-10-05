@@ -36,3 +36,19 @@ describe('opening a test chest', () => {
     expect((latest.state as { message: string }).message).toMatch(/Nothing was submitted/);
   });
 });
+
+describe('after a chest is opened', () => {
+  it('it leaves the map', async () => {
+    const { useChests } = require('../../network/useChests');
+    useChests.setState({ chests: [testChest] });
+    let latest!: ReturnType<typeof useChestClaim>;
+    act(() => {
+      renderer.create(<Probe onClaim={(c) => (latest = c)} />);
+    });
+    expect(useChests.getState().chests.map((c: Chest) => c.id)).toEqual(['test-1']);
+    await act(async () => {
+      await latest.claim();
+    });
+    expect(useChests.getState().chests).toEqual([]);
+  });
+});

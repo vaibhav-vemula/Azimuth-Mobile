@@ -42,10 +42,6 @@ export function ChestCompass({ chest, distanceM, bearingDeg, headingDeg, needsCa
           </Text>
           <Text style={styles.distance}>{formatDistanceShort(distanceM)}</Text>
         </View>
-        <View style={[styles.reward, { borderColor: kind.color }]}>
-          <Ionicons name="cube" size={13} color={kind.color} />
-          <Text style={styles.rewardText}>{chest.rewardUsdc}</Text>
-        </View>
       </Pressable>
       {inArRange ? (
         <Pressable onPress={onAr} accessibilityRole="button" accessibilityLabel="Find the chest in AR" style={({ pressed }) => [styles.ar, pressed && styles.pressed]}>

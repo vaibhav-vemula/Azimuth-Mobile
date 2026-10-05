@@ -364,7 +364,7 @@ export default function MapScreen() {
                   {m.chest.title}
                 </Text>
                 <Text style={styles.listMeta}>
-                  {here ? formatDistance(distanceM(here, m.position)) : '—'} · {m.chest.rewardUsdc} USDC
+                  {here ? formatDistance(distanceM(here, m.position)) : '—'}
                 </Text>
               </Pressable>
             ))

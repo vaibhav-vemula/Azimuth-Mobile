@@ -69,7 +69,7 @@ export function PassReceiptCard() {
       <Text style={styles.note}>
         A signed statement that you recorded this pass. The verifier checks it against the satellite's orbit. The recording itself is not uploaded.
       </Text>
-      {chest ? <Badge label={`Claims chest: ${chest.title} · ${chest.rewardUsdc} USDC`} color={colors.accent} /> : null}
+      {chest ? <Badge label={`Claims chest: ${chest.title}`} color={colors.accent} /> : null}
       {state.phase === 'done' ? (
         <>
           <Badge label={state.pending ? 'Submitted for review' : state.accepted ? 'Accepted' : 'Not accepted'} color={state.accepted ? (state.pending ? colors.accent : colors.success) : colors.danger} />

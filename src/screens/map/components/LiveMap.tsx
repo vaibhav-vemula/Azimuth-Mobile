@@ -259,11 +259,6 @@ function ChestPin({ chest, nearest }: { chest: Chest; nearest: boolean }) {
       <View style={[styles.pin, { width: size, height: size, borderRadius: size / 2, borderColor: kind.color, backgroundColor: nearest ? kind.color : 'rgba(11,15,26,0.94)' }]}>
         <Ionicons name="cube" size={nearest ? 22 : 17} color={nearest ? colors.background : kind.color} />
       </View>
-      {nearest ? (
-        <View style={[styles.pinTag, { borderColor: kind.color }]}>
-          <Text style={styles.pinTagText}>{chest.rewardUsdc} USDC</Text>
-        </View>
-      ) : null}
     </View>
   );
 }

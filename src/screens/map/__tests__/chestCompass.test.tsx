@@ -30,11 +30,12 @@ function render(props: Partial<React.ComponentProps<typeof ChestCompass>> = {}) 
 }
 
 describe('ChestCompass', () => {
-  it('shows only an arrow, how far it is, which way, and the reward', () => {
+  it('shows only an arrow, how far it is and which way, with no reward amount', () => {
     const t = text(render());
     expect(t).toContain('420 m');
     expect(t).toContain('E');
-    expect(t).toContain('0.5');
+    expect(t).not.toContain('0.5'); // the reward is not shown
+    expect(t).not.toMatch(/USDC/);
     expect(t).not.toContain('Wi-Fi at Main St Cafe'); // compact: no title
   });
 
