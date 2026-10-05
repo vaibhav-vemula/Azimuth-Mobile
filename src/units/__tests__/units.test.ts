@@ -53,8 +53,9 @@ describe('distances', () => {
     expect(walkedParts(0, 'imperial')).toEqual({ value: '0', unit: 'ft' });
     expect(walkedParts(1609.344, 'imperial')).toEqual({ value: '1.00', unit: 'mi' });
     expect(walkedParts(2000, 'metric')).toEqual({ value: '2.00', unit: 'km' });
-    expect(areaParts(0.004, 'imperial').unit).toBe('acres'); // 4,000 m² is about 1 acre
-    expect(areaParts(0.004, 'imperial').value).toBe('0.99');
+    expect(areaParts(0, 'imperial')).toEqual({ value: '0', unit: 'sq ft' });
+    expect(areaParts(0.004, 'imperial')).toEqual({ value: '43,100', unit: 'sq ft' }); // 4,000 m²
+    expect(areaParts(0.00001, 'imperial')).toEqual({ value: '110', unit: 'sq ft' }); // 10 m²
     expect(areaParts(2.589988, 'imperial')).toEqual({ value: '1.00', unit: 'mi²' });
     expect(areaParts(0.42, 'metric')).toEqual({ value: '0.42', unit: 'km²' });
   });

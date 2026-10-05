@@ -53,10 +53,10 @@ function LiveStats() {
   return (
     <>
       <View style={styles.tiles}>
-        <Tile value={area.value} unit={area.unit} label="Cleared" accent />
-        <Tile value={dist.value} unit={dist.unit} label="Walked" />
-        <Tile value={String(scans)} label="Readings" />
-        <Tile value={String(newCells)} label="New cells" />
+        <Tile icon="map" value={area.value} unit={area.unit} label="Cleared" accent />
+        <Tile icon="walk" value={dist.value} unit={dist.unit} label="Walked" />
+        <Tile icon="pulse" value={String(scans)} label="Readings" />
+        <Tile icon="sparkles" value={String(newCells)} label="New cells" />
       </View>
 
       <StatCard icon="cellular" color={QUALITY_COLOR[quality]} title="Cell towers" big={String(totals.towers)} bigLabel={totals.towers === 1 ? 'tower heard' : 'different towers heard'}>
@@ -199,9 +199,10 @@ function Row({ label, value, right }: { label: string; value: string; right?: Re
   );
 }
 
-function Tile({ value, unit, label, accent }: { value: string; unit?: string; label: string; accent?: boolean }) {
+function Tile({ icon, value, unit, label, accent }: { icon?: keyof typeof Ionicons.glyphMap; value: string; unit?: string; label: string; accent?: boolean }) {
   return (
-    <View style={[styles.tile, accent && styles.tileAccent]}>
+    <View style={[styles.tile, accent && styles.tileAccent]} accessible accessibilityLabel={`${label}: ${value}${unit ? ` ${unit}` : ''}`}>
+      {icon ? <Ionicons name={icon} size={16} color={accent ? '#7DF3FF' : colors.textSecondary} /> : null}
       <Text style={[styles.tileValue, accent && { color: '#7DF3FF' }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
         {unit ? <Text style={styles.tileUnit}> {unit}</Text> : null}

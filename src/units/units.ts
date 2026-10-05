@@ -71,7 +71,6 @@ export function useUnitSystem(): UnitSystem {
 
 const M_PER_FT = 0.3048;
 const M_PER_MI = 1609.344;
-const M2_PER_ACRE = 4046.8564224;
 const KM2_PER_MI2 = 2.589988110336;
 
 export interface Quantity {
@@ -127,15 +126,20 @@ export function walkedParts(metres: number, system: UnitSystem = currentSystem()
   return { value: (metres / 1000).toFixed(metres < 10_000 ? 2 : 1), unit: 'km' };
 }
 
-/** Area explored: "420 m²", "0.42 km²", or "0.1 acres", "1.4 mi²". */
+const FT2_PER_KM2 = 1e6 / (M_PER_FT * M_PER_FT);
+
+/** "1,200 sq ft" with thousands separated, rounded to a steady step. */
+function squareFeet(ft2: number): string {
+  const step = ft2 < 10_000 ? 10 : 100;
+  return (Math.round(ft2 / step) * step || step).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/** Area explored: "420 m²", "0.42 km²", or "4,600 sq ft", "1.4 mi²". */
 export function areaParts(km2: number, system: UnitSystem = currentSystem()): Quantity {
   if (system === 'imperial') {
-    if (!Number.isFinite(km2) || km2 <= 0) return { value: '0', unit: 'acres' };
+    if (!Number.isFinite(km2) || km2 <= 0) return { value: '0', unit: 'sq ft' };
     const mi2 = km2 / KM2_PER_MI2;
-    if (mi2 < 0.25) {
-      const acres = (km2 * 1e6) / M2_PER_ACRE;
-      return { value: acres < 10 ? acres.toFixed(2) : String(Math.round(acres)), unit: 'acres' };
-    }
+    if (mi2 < 0.02) return { value: squareFeet(km2 * FT2_PER_KM2), unit: 'sq ft' };
     return { value: mi2 < 10 ? mi2.toFixed(2) : String(Math.round(mi2)), unit: 'mi²' };
   }
   if (!Number.isFinite(km2) || km2 <= 0) return { value: '0', unit: 'm²' };
