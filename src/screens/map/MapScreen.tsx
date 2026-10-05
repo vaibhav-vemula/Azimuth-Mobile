@@ -12,6 +12,7 @@ import { SignalChips, SignalLegend } from './components/SignalControls';
 import { SignalLayer, signalPoints } from '../../mapping/signalLayer';
 import { Sheet } from './components/Sheet';
 import { MapSheet, SwipeHint } from './components/MapSheet';
+import { useReceiver } from '../../receiver/useReceiver';
 import { MiniStats, SheetTimer } from './components/SheetHeaderParts';
 import { ChestCard } from '../chests/ChestCard';
 import { hexCenter, parseCellId } from '../../mapping/hexGrid';
@@ -96,6 +97,9 @@ export default function MapScreen() {
     return parsed ? hexCenter(parsed.hex, parsed.sizeM) : null;
   }, [pose.position, currentCellId]);
 
+  // The Radio layer is offered once a dongle is plugged in or radio readings exist.
+  const dongleConnected = useReceiver((s) => s.status === 'connected' || s.status === 'streaming');
+  const hasRadio = useMemo(() => dongleConnected || Object.values(signals).some((s) => (s.rn ?? 0) > 0), [dongleConnected, signals]);
   const signalData = useMemo(() => signalPoints(signals, layer), [signals, layer]);
   const sessionCleared = useMapping((s) => s.sessionClearedCells);
   const exploredSet = useMemo(() => new Set(Object.keys(explored)), [explored]);
@@ -200,7 +204,7 @@ export default function MapScreen() {
 
       {/* What to tint mapped ground by */}
       <View style={[styles.layerRow, { top: insets.top + 66 }]} pointerEvents="box-none">
-        <SignalChips value={layer} onChange={setLayer} />
+        <SignalChips value={layer} onChange={setLayer} showRadio={hasRadio} />
       </View>
 
       {/* Nearest chest: an arrow toward it and how far away, under the signal chips */}

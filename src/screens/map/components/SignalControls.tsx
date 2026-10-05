@@ -7,14 +7,15 @@ const OPTIONS: { layer: SignalLayer; label: string; icon: keyof typeof Ionicons.
   { layer: 'cellular', label: 'Cellular', icon: 'cellular-outline' },
   { layer: 'wifi', label: 'Wi-Fi', icon: 'wifi-outline' },
   { layer: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-outline' },
+  { layer: 'radio', label: 'Radio', icon: 'radio-outline' },
   { layer: 'off', label: 'Off', icon: 'eye-off-outline' },
 ];
 
 /** Chooses what the mapped ground is tinted by. */
-export function SignalChips({ value, onChange }: { value: SignalLayer; onChange: (layer: SignalLayer) => void }) {
+export function SignalChips({ value, onChange, showRadio }: { value: SignalLayer; onChange: (layer: SignalLayer) => void; showRadio: boolean }) {
   return (
     <View style={styles.row}>
-      {OPTIONS.map((o) => {
+      {OPTIONS.filter((o) => o.layer !== 'radio' || showRadio || value === 'radio').map((o) => {
         const active = o.layer === value;
         return (
           <Pressable key={o.layer} onPress={() => onChange(o.layer)} accessibilityRole="button" accessibilityState={{ selected: active }} accessibilityLabel={`Show ${o.label}`} style={[styles.chip, active && styles.chipActive]}>

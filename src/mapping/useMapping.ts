@@ -9,7 +9,7 @@ import type { Report } from '../reports/report';
 import { cellIdAt, distanceM, neighbors, parseCellId, cellId as toCellId } from './hexGrid';
 import type { LatLon } from './hexGrid';
 import { requestMappingPermissions } from './permissions';
-import { probeRadio, probeSonde } from './radioProbe';
+import { ensureDongle, probeRadio, probeSonde } from './radioProbe';
 import { MAX_REVEAL_ACCURACY_M, cellsWithin } from './explore';
 import { stepDistance } from './hudFormat';
 import { SessionAccumulator, SessionTotals, emptyTotals, withoutIds } from './sessionStats';
@@ -267,6 +267,9 @@ export const useMapping = create<MappingState>((set, get) => ({
 
       await getCapabilities();
       await useAppStore.getState().requestNotificationPermission();
+
+      // If a dongle is plugged in, connect to it now so radio readings run from the first minute. Never blocks mapping.
+      if (get().radioEnabled) await ensureDongle(true);
 
       lastFix = null;
       accumulator.reset();

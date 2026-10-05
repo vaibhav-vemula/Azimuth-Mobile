@@ -139,3 +139,34 @@ describe('vision ring', () => {
     }
   });
 });
+
+describe('radio coverage layer', () => {
+  const { addReading, level, legendFor } = require('../signalLayer');
+  const scan = (radio?: { carrier: boolean; peakDb: number }) => ({
+    cellular: { available: true, cells: [] },
+    wifi: { available: true, count: 1 },
+    ...(radio ? { radio: { band: 'noaa', rms: 0.1, clip: 0, gainDb: 28, ...radio } } : {}),
+  });
+
+  it('has no colour where the dongle never took a reading', () => {
+    const s = addReading(undefined, scan(), 1);
+    expect(level('radio', s)).toBeNull();
+  });
+
+  it('is dark where the weather radio was not heard and bright where it is strong', () => {
+    const quiet = addReading(undefined, scan({ carrier: false, peakDb: 0 }), 1);
+    const loud = addReading(undefined, scan({ carrier: true, peakDb: 30 }), 1);
+    expect(level('radio', quiet)).toBe(0);
+    expect(level('radio', loud)).toBe(1);
+  });
+
+  it('averages the readings taken in one spot', () => {
+    let s = addReading(undefined, scan({ carrier: true, peakDb: 30 }), 1);
+    s = addReading(s, scan({ carrier: false, peakDb: 0 }), 2);
+    expect(level('radio', s)).toBeCloseTo(0.5, 5);
+  });
+
+  it('has a legend', () => {
+    expect(legendFor('radio').title).toMatch(/Radio/);
+  });
+});

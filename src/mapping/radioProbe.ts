@@ -2,6 +2,7 @@ import { setGain, setSampleRate, tune } from '../../modules/rtl-sdr';
 import { frameCollector } from '../receiver/frameCollector';
 import { useReceiver } from '../receiver/useReceiver';
 import { useCapture } from '../capture/useCapture';
+import { withTimeout } from '../utils/async';
 import {
   NOAA_TUNE_HZ,
   PROBE_GAIN_DB,
@@ -18,6 +19,34 @@ const SETTLE_MS = 400;
 const MEASURE_MS = 900;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** Waiting this long for the USB permission prompt before giving up on the dongle for now. */
+const CONNECT_TIMEOUT_MS = 20_000;
+/** After a failed attempt, do not ask again (and possibly pop the USB prompt) more often than this. */
+const RETRY_COOLDOWN_MS = 3 * 60_000;
+let lastAttemptMs = 0;
+
+const isConnected = () => {
+  const s = useReceiver.getState().status;
+  return s === 'connected' || s === 'streaming';
+};
+
+/**
+ * Makes sure the dongle is connected if one is plugged in. Called when mapping starts, and again before a radio reading
+ * if the dongle was not there before. It never throws: with no dongle, mapping carries on with the phone alone.
+ * `force` skips the wait between attempts (used when the user presses Start).
+ */
+export async function ensureDongle(force = false): Promise<boolean> {
+  if (isConnected()) return true;
+  if (!force && Date.now() - lastAttemptMs < RETRY_COOLDOWN_MS) return false;
+  lastAttemptMs = Date.now();
+  try {
+    await withTimeout(useReceiver.getState().connect(), CONNECT_TIMEOUT_MS, 'The dongle did not answer.');
+  } catch {
+    // Not plugged in, permission refused, or busy.
+  }
+  return isConnected();
+}
+
 /** Why a radio reading was not taken. */
 export type ProbeSkip = 'no-dongle' | 'busy';
 
@@ -33,8 +62,8 @@ interface Averaged {
  * user is using the dongle for something else.
  */
 async function measureAt(tuneHz: number): Promise<Averaged | ProbeSkip> {
+  if (!isConnected() && !(await ensureDongle())) return 'no-dongle';
   const receiver = useReceiver.getState();
-  if (receiver.status === 'disconnected' || receiver.status === 'error') return 'no-dongle';
   const capturing = useCapture.getState().phase;
   if (capturing === 'preparing' || capturing === 'recording' || capturing === 'finishing') return 'busy';
   // Something else (the Radio tab) is streaming or the user is listening: do not retune under them.
