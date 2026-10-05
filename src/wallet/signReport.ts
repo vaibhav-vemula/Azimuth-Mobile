@@ -4,7 +4,7 @@ import { SOLANA_CHAIN, forgetAuthToken, getAuthToken, rememberAuthToken } from '
 import bs58 from 'bs58';
 
 const SIGNATURE_BYTES = 64;
-const IDENTITY = { name: 'Azimuth', uri: 'https://azimuth.app', icon: 'favicon.png' };
+const IDENTITY = { name: 'Azimuth', uri: 'https://azimuth.space', icon: 'favicon.png' };
 
 /** The slice of a wallet session this file uses, so the retry below can be tested without a phone. */
 export interface WalletSession {

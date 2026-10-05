@@ -9,7 +9,7 @@ export const SOLANA_CHAIN = 'solana:devnet';
 
 const APP_IDENTITY = {
   name: 'Azimuth',
-  uri: 'https://azimuth.app',
+  uri: 'https://azimuth.space',
   icon: 'favicon.png',
 };
 
