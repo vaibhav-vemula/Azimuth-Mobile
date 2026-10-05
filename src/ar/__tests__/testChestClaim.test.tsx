@@ -12,8 +12,8 @@ jest.mock('../../../modules/rtl-sdr', () => ({
   addStatusListener: jest.fn(),
 }));
 
-const submitReport = jest.fn();
-jest.mock('../../network/api', () => ({ ...jest.requireActual('../../network/api'), submitReport: (...a: unknown[]) => submitReport(...a) }));
+const mockSubmitReport = jest.fn();
+jest.mock('../../network/api', () => ({ ...jest.requireActual('../../network/api'), submitReport: (...a: unknown[]) => mockSubmitReport(...a) }));
 
 const testChest: Chest = { id: 'test-1', title: 'Test chest', kind: 'visit', cellId: 'h120:1:1', rewardUsdc: 1, remaining: 1, expiresMs: Date.now() + 1e6, requester: 'Azimuth test', requires: 'phone', spec: { minSamples: 1, test: true } };
 
@@ -31,7 +31,7 @@ describe('opening a test chest', () => {
     await act(async () => {
       await latest.claim();
     });
-    expect(submitReport).not.toHaveBeenCalled();
+    expect(mockSubmitReport).not.toHaveBeenCalled();
     expect(latest.state).toMatchObject({ phase: 'done', accepted: true, pending: false });
     expect((latest.state as { message: string }).message).toMatch(/Nothing was submitted/);
   });
