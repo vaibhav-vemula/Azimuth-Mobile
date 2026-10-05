@@ -155,10 +155,17 @@ export interface SearchOptions {
   fetchImpl?: FetchFn;
 }
 
-/** Stations whose name mentions this FM frequency, best first. */
+/**
+ * Stations whose name mentions this FM frequency, best first. With a country, only that country's stations are returned
+ * (FM frequencies are reused from country to country, so a 98.7 in another country is not the one you can tune here).
+ */
 export async function searchByFrequency(mhz: number, { countryCode = null, here = null, fetchImpl = fetch }: SearchOptions = {}): Promise<Station[]> {
-  const rows = await query(`${SEARCH}&name=${encodeURIComponent(formatMHz(mhz))}`, fetchImpl);
-  const stations = rows.map(stationFromRow).filter((s): s is Station => s !== null && nameHasFrequency(s.name, mhz));
+  const country = countryCode ? `&countrycode=${encodeURIComponent(countryCode.toUpperCase())}` : '';
+  const rows = await query(`${SEARCH}&name=${encodeURIComponent(formatMHz(mhz))}${country}`, fetchImpl);
+  const home = countryCode?.toUpperCase() ?? null;
+  const stations = rows
+    .map(stationFromRow)
+    .filter((s): s is Station => s !== null && nameHasFrequency(s.name, mhz) && (!home || s.countryCode === home));
   return rankStations(dedupe(stations), countryCode, here);
 }
 

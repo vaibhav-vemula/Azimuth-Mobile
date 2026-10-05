@@ -5,7 +5,7 @@ import { createMMKV } from 'react-native-mmkv';
 import { useReceiver } from '../../receiver/useReceiver';
 import * as Location from 'expo-location';
 import { Here, Station, clampFm, formatMHz, searchByFrequency, searchByName, searchNearby } from './radioBrowser';
-import { deviceRegion } from '../../units/units';
+import { deviceRegion, inMilesCountry } from '../../units/units';
 import { EMPTY_BINS, audioBins, monoFrames, simulatedBins, smoothBins } from './audioSpectrum';
 
 const storage = createMMKV({ id: 'azimuth-radio' });
@@ -34,6 +34,20 @@ export interface Place {
   countryCode: string | null;
 }
 
+/**
+ * The country when the phone cannot say (no geocoder): the phone's region setting, checked against the position. Standing
+ * in the United States or Canada with some other region set means the setting is out of date for where the phone is, and
+ * a US or Canada setting while standing elsewhere is just as stale. When they disagree, tuning looks worldwide (null)
+ * rather than at the wrong country.
+ */
+export function guessCountry(here: Here): string | null {
+  const region = deviceRegion();
+  const inNorthAmerica = inMilesCountry(here.latitudeDeg, here.longitudeDeg);
+  const settingSaysNorthAmerica = region === 'US' || region === 'CA';
+  if (inNorthAmerica) return settingSaysNorthAmerica ? region : 'US';
+  return settingSaysNorthAmerica ? null : region;
+}
+
 async function locateWithPhone(): Promise<Place | null> {
   try {
     const permission = await Location.getForegroundPermissionsAsync();
@@ -48,7 +62,7 @@ async function locateWithPhone(): Promise<Place | null> {
     } catch {
       // No geocoder on this phone: the phone's region setting is the next best sign of the country.
     }
-    return { here, countryCode: countryCode ?? deviceRegion() };
+    return { here, countryCode: countryCode ?? guessCountry(here) };
   } catch {
     return null;
   }
@@ -81,6 +95,10 @@ interface OnlineRadioState {
   stations: Station[];
   /** Where the listener is, once known. */
   here: Here | null;
+  /** The country the stations were limited to, or null when tuning looked worldwide (no country known, or none had it). */
+  scope: string | null;
+  /** The listener's country had no station on this frequency, so stations from other countries are shown. */
+  widened: boolean;
   /** Stations near the listener, nearest first, and how that search went. */
   nearby: Station[];
   nearbyStatus: 'idle' | 'loading' | 'ready' | 'empty' | 'no-location' | 'error';
@@ -213,6 +231,8 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
   status: 'idle',
   stations: [],
   here: null,
+  scope: null,
+  widened: false,
   nearby: [],
   nearbyStatus: 'idle',
   current: null,
@@ -244,14 +264,22 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     const mine = ++request;
     // The old station stops the moment you tune, not when the new one is found.
     releasePlayer();
-    set({ status: 'searching', error: null, stations: [], current: null });
+    set({ status: 'searching', error: null, stations: [], current: null, widened: false });
     try {
       const place = await locate();
       if (mine !== request) return;
       if (place) set({ here: place.here });
-      const stations = await searchByFrequency(target, { countryCode: place?.countryCode ?? null, here: place?.here ?? null });
+      const country = place?.countryCode ?? null;
+      let stations = await searchByFrequency(target, { countryCode: country, here: place?.here ?? null });
       if (mine !== request) return;
-      set({ stations });
+      let widened = false;
+      if (stations.length === 0 && country) {
+        // Nothing on this frequency in the listener's country: look worldwide rather than leave them with nothing.
+        stations = await searchByFrequency(target, { countryCode: null, here: place?.here ?? null });
+        if (mine !== request) return;
+        widened = stations.length > 0;
+      }
+      set({ stations, scope: widened ? null : country, widened });
       if (stations.length === 0) {
         releasePlayer();
         set({ status: 'nomatch', current: null, error: null });

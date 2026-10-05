@@ -326,3 +326,56 @@ describe('local stations', () => {
     expect(useOnlineRadio.getState().nearbyStatus).toBe('error');
   });
 });
+
+describe('your own country first', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { setLocator, guessCountry } = require('../useOnlineRadio');
+  const US = { here: { latitudeDeg: 38.9072, longitudeDeg: -77.0369 }, countryCode: 'US' };
+  const r = (id: string, name: string, cc: string, lat: number | null = null, lon: number | null = null, votes = 10) => ({ ...row(id, name, votes), countrycode: cc, geo_lat: lat, geo_long: lon });
+  afterEach(() => setLocator(null));
+
+  it('plays the nearest station of your country and lists only your country on that frequency', async () => {
+    setLocator(async () => US);
+    global.fetch = jest.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => [r('mx', 'Radio 103.5', 'MX', 19.4, -99.1, 999), r('la', 'KIIS 103.5', 'US', 34.05, -118.24, 500), r('dc', 'WTOP 103.5', 'US', 38.95, -77.03, 5)].filter((x) => !String(url).includes('countrycode=US') || x.countrycode === 'US'),
+    })) as unknown as typeof fetch;
+    await useOnlineRadio.getState().tune(103.5);
+    const s = useOnlineRadio.getState();
+    expect(s.stations.map((x) => x.id)).toEqual(['dc', 'la']);
+    expect(s.current?.id).toBe('dc');
+    expect(s.scope).toBe('US');
+    expect(s.widened).toBe(false);
+  });
+
+  it('shows stations from other countries, and says so, only when your country has none', async () => {
+    setLocator(async () => US);
+    global.fetch = jest.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(url).includes('countrycode=US') ? [] : [r('mx', 'Radio 99.1', 'MX', 19.4, -99.1)]),
+    })) as unknown as typeof fetch;
+    await useOnlineRadio.getState().tune(99.1);
+    const s = useOnlineRadio.getState();
+    expect(s.widened).toBe(true);
+    expect(s.scope).toBeNull();
+    expect(s.stations.map((x) => x.id)).toEqual(['mx']);
+  });
+
+  it('says there is no station when nothing exists anywhere', async () => {
+    setLocator(async () => US);
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => [] })) as unknown as typeof fetch;
+    await useOnlineRadio.getState().tune(99.1);
+    expect(useOnlineRadio.getState().status).toBe('nomatch');
+    expect(useOnlineRadio.getState().widened).toBe(false);
+  });
+
+  it('works out the country from where the phone is when the phone cannot say', () => {
+    // In the United States: the answer is the United States or Canada whatever the phone's region says.
+    expect(guessCountry({ latitudeDeg: 38.9, longitudeDeg: -77.0 })).toMatch(/^(US|CA)$/);
+    // Standing in Mexico City: never the United States, even if the phone's region setting says so.
+    expect(guessCountry({ latitudeDeg: 19.43, longitudeDeg: -99.13 })).not.toBe('US');
+    expect(guessCountry({ latitudeDeg: 19.43, longitudeDeg: -99.13 })).not.toBe('CA');
+  });
+});

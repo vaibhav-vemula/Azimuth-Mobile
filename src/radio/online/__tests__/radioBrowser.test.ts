@@ -139,3 +139,29 @@ describe('stations near you', () => {
     expect(NEARBY_KM).toBeGreaterThan(50);
   });
 });
+
+describe('FM from your own country', () => {
+  const r = (id: string, name: string, cc: string, votes = 10) => row({ stationuuid: id, name, countrycode: cc, url_resolved: `https://stream.example/${id}`, votes });
+
+  it('asks the directory for that country only, and keeps only its stations', async () => {
+    const f = reply([r('us', 'WTOP 103.5', 'US'), r('mx', 'Radio 103.5', 'MX', 900), r('gb', 'Beat 103.5', 'GB', 900)]);
+    const found = await searchByFrequency(103.5, { countryCode: 'us', fetchImpl: f });
+    expect(found.map((s) => s.id)).toEqual(['us']);
+    expect((f as jest.Mock).mock.calls[0][0]).toContain('countrycode=US');
+  });
+
+  it('looks worldwide when no country is given', async () => {
+    const f = reply([r('us', 'WTOP 103.5', 'US'), r('mx', 'Radio 103.5', 'MX')]);
+    expect(await searchByFrequency(103.5, { fetchImpl: f })).toHaveLength(2);
+    expect((f as jest.Mock).mock.calls[0][0]).not.toContain('countrycode');
+  });
+
+  it('puts the nearest of your own country first', async () => {
+    const DC = { latitudeDeg: 38.9072, longitudeDeg: -77.0369 };
+    const f = reply([
+      { ...r('la', 'KIIS 103.5', 'US', 900), geo_lat: 34.05, geo_long: -118.24 },
+      { ...r('dc', 'WTOP 103.5', 'US', 5), geo_lat: 38.95, geo_long: -77.03 },
+    ]);
+    expect((await searchByFrequency(103.5, { countryCode: 'US', here: DC, fetchImpl: f })).map((s) => s.id)).toEqual(['dc', 'la']);
+  });
+});

@@ -32,6 +32,8 @@ export function OnlineRadio() {
   const error = useOnlineRadio((s) => s.error);
   const volume = useOnlineRadio((s) => s.volume);
   const here = useOnlineRadio((s) => s.here);
+  const scope = useOnlineRadio((s) => s.scope);
+  const widened = useOnlineRadio((s) => s.widened);
   const [text, setText] = useState(() => formatMHz(mhz));
   const [typing, setTyping] = useState(false);
   const [query, setQuery] = useState('');
@@ -161,7 +163,13 @@ export function OnlineRadio() {
         </GlassCard>
       ) : null}
 
-      {stations.length > 0 ? <StationList title={`All stations on ${formatMHz(mhz)} MHz · ${stations.length}`} stations={stations} currentId={current?.id ?? null} here={here} limit={100} /> : null}
+      {widened ? (
+        <GlassCard>
+          <Text style={styles.note}>Nothing on {formatMHz(mhz)} MHz in your country, so these are stations from other countries.</Text>
+        </GlassCard>
+      ) : null}
+
+      {stations.length > 0 ? <StationList title={`All ${scope ? `${scope} ` : ''}stations on ${formatMHz(mhz)} MHz · ${stations.length}`} stations={stations} currentId={current?.id ?? null} here={here} limit={100} /> : null}
 
       <NearMe currentId={current?.id ?? null} />
 
