@@ -7,6 +7,7 @@ import { colors, typography } from '../../../theme';
 import { deviceRegion } from '../../../units/units';
 import { FM_MAX_MHZ, FM_MIN_MHZ, Station, formatMHz } from '../../../radio/online/radioBrowser';
 import { FrequencyBar } from './FrequencyBar';
+import { AudioBars } from './AudioBars';
 import { OnlineStatus, useOnlineRadio } from '../../../radio/online/useOnlineRadio';
 
 const STEPS = [
@@ -93,6 +94,8 @@ export function OnlineRadio() {
           </View>
           <Badge label={STATUS_LABEL[status]} color={STATUS_COLOR[status]} />
         </Row>
+
+        <AudioBars playing={status === 'playing'} />
 
         <FrequencyBar mhz={mhz} onScrub={scrub} onCommit={tuneNow} />
 

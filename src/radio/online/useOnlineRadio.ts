@@ -1,13 +1,29 @@
 import { create } from 'zustand';
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { createMMKV } from 'react-native-mmkv';
 import { useReceiver } from '../../receiver/useReceiver';
 import { Station, clampFm, formatMHz, searchByFrequency, searchByName } from './radioBrowser';
+import { EMPTY_BINS, audioBins, monoFrames, smoothBins } from './audioSpectrum';
 
 const storage = createMMKV({ id: 'azimuth-radio' });
 const FREQ_KEY = 'onlineMhz';
 const VOLUME_KEY = 'onlineVolume';
+
+/**
+ * The bars for the audio that is playing. Kept apart from the rest of the radio state because it changes about 20 times a
+ * second, and only the bar display listens to it.
+ */
+interface BarsState {
+  bins: number[];
+  /**
+   * 'on': audio samples are coming; 'off': this phone cannot give them out; 'needs-permission': Android only lets an app read
+   * the sound it is playing if it holds the microphone permission, which has not been given; 'unknown': not known yet.
+   */
+  sampling: 'unknown' | 'on' | 'off' | 'needs-permission';
+}
+export const useAudioBars = create<BarsState>(() => ({ bins: EMPTY_BINS, sampling: 'unknown' }));
+const BARS_INTERVAL_MS = 50;
 
 export type OnlineStatus = 'idle' | 'searching' | 'connecting' | 'playing' | 'nomatch' | 'error';
 
@@ -26,6 +42,8 @@ interface OnlineRadioState {
   play: (station: Station) => Promise<void>;
   stop: () => void;
   setVolume: (volume: number) => void;
+  /** Asks for the permission Android wants before the signal bars can read the sound, then starts them. */
+  enableBars: () => Promise<boolean>;
 }
 
 let player: AudioPlayer | null = null;
@@ -44,6 +62,7 @@ function savedVolume(): number {
 }
 
 function releasePlayer() {
+  useAudioBars.setState({ bins: EMPTY_BINS, sampling: 'unknown' });
   unsubscribe?.();
   unsubscribe = null;
   try {
@@ -52,6 +71,49 @@ function releasePlayer() {
     // Already released.
   }
   player = null;
+}
+
+let barsStop: (() => void) | null = null;
+
+/**
+ * Starts the signal bars for a player. Returns a function that stops them. Android reads the playing sound through a
+ * "visualizer", which it only allows for an app that holds the microphone permission (nothing is recorded: it is the
+ * sound the app itself is playing).
+ */
+async function attachBars(next: AudioPlayer, mine: number): Promise<() => void> {
+  let sub: { remove: () => void } | null = null;
+  try {
+    if (!next.isAudioSamplingSupported) {
+      useAudioBars.setState({ sampling: 'off' });
+      return () => undefined;
+    }
+    const permission = await getRecordingPermissionsAsync();
+    if (mine !== request || player !== next) return () => undefined;
+    if (!permission.granted) {
+      useAudioBars.setState({ sampling: 'needs-permission' });
+      return () => undefined;
+    }
+    next.setAudioSamplingEnabled(true);
+    let lastBars = 0;
+    sub = next.addListener('audioSampleUpdate', (sample) => {
+      const now = Date.now();
+      if (player !== next || now - lastBars < BARS_INTERVAL_MS) return;
+      lastBars = now;
+      const frames = monoFrames(sample.channels);
+      if (frames.length < 32) return;
+      useAudioBars.setState({ bins: smoothBins(useAudioBars.getState().bins, audioBins(frames)), sampling: 'on' });
+    });
+  } catch {
+    useAudioBars.setState({ sampling: 'off' });
+  }
+  return () => {
+    sub?.remove();
+    try {
+      next.setAudioSamplingEnabled(false);
+    } catch {
+      // The player is already gone.
+    }
+  };
 }
 
 export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
@@ -125,7 +187,14 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
         else if (s.playing && !s.isBuffering) set({ status: 'playing' });
         else if (s.isBuffering || !s.isLoaded) set({ status: 'connecting' });
       });
-      unsubscribe = () => sub.remove();
+      // The bars: ask the player for the audio it is playing, if this phone can give it out and the permission is there.
+      const stopBars = await attachBars(next, mine);
+      unsubscribe = () => {
+        sub.remove();
+        stopBars();
+        barsStop = null;
+      };
+      barsStop = stopBars;
       next.play();
     } catch (e) {
       if (mine !== request) return;
@@ -137,6 +206,14 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     request += 1;
     releasePlayer();
     set({ status: 'idle', current: null, error: null });
+  },
+
+  enableBars: async () => {
+    const result = await requestRecordingPermissionsAsync().catch(() => ({ granted: false }));
+    if (!result.granted || !player) return false;
+    barsStop?.();
+    barsStop = await attachBars(player, request);
+    return true;
   },
 
   setVolume: (volume) => {

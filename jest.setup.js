@@ -62,18 +62,22 @@ jest.mock('expo-audio', () => {
   return {
     __players: players,
     setAudioModeAsync: jest.fn(async () => undefined),
+    getRecordingPermissionsAsync: jest.fn(async () => ({ granted: true })),
+    requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: true })),
     createAudioPlayer: jest.fn((source) => {
       const listeners = [];
       const p = {
         source,
         volume: 1,
+        isAudioSamplingSupported: true,
+        setAudioSamplingEnabled: jest.fn(),
         playing: false,
         removed: false,
         play: jest.fn(function () { p.playing = true; }),
         pause: jest.fn(function () { p.playing = false; }),
         remove: jest.fn(function () { p.removed = true; }),
-        addListener: jest.fn((event, fn) => { listeners.push(fn); return { remove: jest.fn() }; }),
-        emit: (status) => listeners.forEach((fn) => fn(status)),
+        addListener: jest.fn((event, fn) => { listeners.push({ event, fn }); return { remove: jest.fn() }; }),
+        emit: (status, event = 'playbackStatusUpdate') => listeners.filter((l) => l.event === event).forEach((l) => l.fn(status)),
       };
       players.push(p);
       return p;

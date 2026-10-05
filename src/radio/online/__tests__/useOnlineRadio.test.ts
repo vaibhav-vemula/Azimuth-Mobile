@@ -139,3 +139,73 @@ describe('changing the frequency', () => {
     expect(useOnlineRadio.getState().current?.id).toBe('c');
   });
 });
+
+describe('the signal bars', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAudioBars } = require('../useOnlineRadio');
+  const tone = Array.from({ length: 512 }, (_, i) => Math.sin((2 * Math.PI * 40 * i) / 512));
+
+  it('follow the sound that is playing', async () => {
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    const player = audio.__players[0];
+    expect(player.setAudioSamplingEnabled).toHaveBeenCalledWith(true);
+    player.emit({ channels: [{ frames: tone }, { frames: tone }], timestamp: 0 }, 'audioSampleUpdate');
+    const { bins, sampling } = useAudioBars.getState();
+    expect(sampling).toBe('on');
+    expect(Math.max(...bins)).toBeGreaterThan(0.3);
+  });
+
+  it('go flat when the station stops', async () => {
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    audio.__players[0].emit({ channels: [{ frames: tone }], timestamp: 0 }, 'audioSampleUpdate');
+    useOnlineRadio.getState().stop();
+    expect(Math.max(...useAudioBars.getState().bins)).toBe(0);
+    expect(useAudioBars.getState().sampling).toBe('unknown');
+  });
+
+  it('say so when this phone cannot give out the audio', async () => {
+    answer([row('a', 'One 103.5')]);
+    audio.createAudioPlayer.mockImplementationOnce((source: unknown) => {
+      const p = { source, volume: 1, isAudioSamplingSupported: false, setAudioSamplingEnabled: jest.fn(), play: jest.fn(), remove: jest.fn(), addListener: jest.fn(() => ({ remove: jest.fn() })) };
+      return p;
+    });
+    await useOnlineRadio.getState().tune(103.5);
+    expect(useAudioBars.getState().sampling).toBe('off');
+  });
+});
+
+describe('the permission for the signal bars', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAudioBars } = require('../useOnlineRadio');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const expoAudio = require('expo-audio');
+
+  it('is asked for only when the bars are wanted, and until then the radio plays without them', async () => {
+    expoAudio.getRecordingPermissionsAsync.mockResolvedValueOnce({ granted: false });
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    expect(useAudioBars.getState().sampling).toBe('needs-permission');
+    expect(expoAudio.requestRecordingPermissionsAsync).not.toHaveBeenCalled();
+    expect(audio.__players[0].setAudioSamplingEnabled).not.toHaveBeenCalled();
+    expect(audio.__players[0].play).toHaveBeenCalled(); // the station still plays
+  });
+
+  it('starts the bars once it is given', async () => {
+    expoAudio.getRecordingPermissionsAsync.mockResolvedValueOnce({ granted: false });
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    expect(await useOnlineRadio.getState().enableBars()).toBe(true);
+    expect(audio.__players[0].setAudioSamplingEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it('stays off when it is refused', async () => {
+    expoAudio.getRecordingPermissionsAsync.mockResolvedValueOnce({ granted: false });
+    expoAudio.requestRecordingPermissionsAsync.mockResolvedValueOnce({ granted: false });
+    answer([row('a', 'One 103.5')]);
+    await useOnlineRadio.getState().tune(103.5);
+    expect(await useOnlineRadio.getState().enableBars()).toBe(false);
+    expect(useAudioBars.getState().sampling).toBe('needs-permission');
+  });
+});
