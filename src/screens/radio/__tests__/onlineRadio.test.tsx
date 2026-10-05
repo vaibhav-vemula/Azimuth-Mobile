@@ -12,7 +12,7 @@ jest.mock('../../../../modules/rtl-sdr', () => ({
   addStatusListener: jest.fn(),
 }));
 
-const station = { id: 'a', name: 'WTOP 103.5 FM', url: 'https://x/s', country: 'USA', countryCode: 'US', bitrate: 128, codec: 'MP3', votes: 5, tags: '' };
+const station = { id: 'a', name: 'WTOP 103.5 FM', url: 'https://x/s', country: 'USA', countryCode: 'US', bitrate: 128, codec: 'MP3', votes: 5, tags: '', state: '', lat: null, lon: null };
 
 function render() {
   let t!: renderer.ReactTestRenderer;
@@ -73,5 +73,23 @@ describe('the online radio screen', () => {
     const t = render();
     act(() => t.root.findAllByProps({ accessibilityLabel: 'Tune +0.1 megahertz' }).find((n) => typeof n.props.onPress === 'function')!.props.onPress());
     expect(useOnlineRadio.getState()).toMatchObject({ status: 'idle', current: null, mhz: 98.8 });
+  });
+
+  it('offers stations near you, with how far each is', () => {
+    useOnlineRadio.setState({
+      here: { latitudeDeg: 38.9072, longitudeDeg: -77.0369 },
+      nearbyStatus: 'ready',
+      nearby: [{ ...station, id: 'n1', name: 'Near FM', lat: 38.95, lon: -77.03, state: 'DC' }],
+    });
+    const out = text(render());
+    expect(out).toContain('NEAR ME');
+    expect(out).toContain('Near FM');
+    expect(out).toContain('away');
+    expect(out).toContain('Refresh');
+  });
+
+  it('explains when location is missing', () => {
+    useOnlineRadio.setState({ nearbyStatus: 'no-location', nearby: [] });
+    expect(text(render())).toContain('Allow location');
   });
 });

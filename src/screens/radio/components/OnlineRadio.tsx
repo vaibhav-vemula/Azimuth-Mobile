@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '../../../components/GlassCard';
 import { Badge, Button, Row, SectionLabel } from '../../../components/ui';
 import { colors, typography } from '../../../theme';
-import { deviceRegion } from '../../../units/units';
-import { FM_MAX_MHZ, FM_MIN_MHZ, Station, formatMHz } from '../../../radio/online/radioBrowser';
+import { formatDistanceShort } from '../../../mapping/geo';
+import { useUnitSystem } from '../../../units/units';
+import { FM_MAX_MHZ, FM_MIN_MHZ, Here, NEARBY_KM, Station, distanceKm, formatMHz } from '../../../radio/online/radioBrowser';
 import { FrequencyBar } from './FrequencyBar';
 import { AudioBars } from './AudioBars';
 import { OnlineStatus, useOnlineRadio } from '../../../radio/online/useOnlineRadio';
@@ -30,11 +31,11 @@ export function OnlineRadio() {
   const current = useOnlineRadio((s) => s.current);
   const error = useOnlineRadio((s) => s.error);
   const volume = useOnlineRadio((s) => s.volume);
+  const here = useOnlineRadio((s) => s.here);
   const [text, setText] = useState(() => formatMHz(mhz));
   const [typing, setTyping] = useState(false);
   const [query, setQuery] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const country = deviceRegion();
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -45,8 +46,8 @@ export function OnlineRadio() {
 
   const tuneNow = useCallback((value: number) => {
     if (timer.current) clearTimeout(timer.current);
-    void useOnlineRadio.getState().tune(value, country);
-  }, [country]);
+    void useOnlineRadio.getState().tune(value);
+  }, []);
 
   // Turning the dial: the number moves at once and the station is looked up when you stop.
   const nudge = useCallback(
@@ -160,7 +161,9 @@ export function OnlineRadio() {
         </GlassCard>
       ) : null}
 
-      {stations.length > 1 ? <StationList stations={stations} currentId={current?.id ?? null} /> : null}
+      {stations.length > 1 ? <StationList title={`${stations.length} stations`} stations={stations} currentId={current?.id ?? null} here={here} /> : null}
+
+      <NearMe currentId={current?.id ?? null} />
 
       <GlassCard style={{ gap: 10 }}>
         <SectionLabel>Search by name</SectionLabel>
@@ -169,13 +172,13 @@ export function OnlineRadio() {
             style={styles.input}
             value={query}
             onChangeText={setQuery}
-            onSubmitEditing={() => void useOnlineRadio.getState().search(query, country)}
+            onSubmitEditing={() => void useOnlineRadio.getState().search(query)}
             returnKeyType="search"
             placeholder="Station, city or style"
             placeholderTextColor={colors.textTertiary}
             accessibilityLabel="Search stations by name"
           />
-          <Button label="Search" icon="search" variant="secondary" onPress={() => void useOnlineRadio.getState().search(query, country)} style={{ flex: 1 }} />
+          <Button label="Search" icon="search" variant="secondary" onPress={() => void useOnlineRadio.getState().search(query)} style={{ flex: 1 }} />
         </Row>
         <Text style={styles.note}>Online mode plays internet streams of radio stations. It is not the signal from your dongle; switch to Dongle for that.</Text>
       </GlassCard>
@@ -183,24 +186,55 @@ export function OnlineRadio() {
   );
 }
 
-function StationList({ stations, currentId }: { stations: Station[]; currentId: string | null }) {
+/** The distance to a station in the user's units, or nothing if either position is unknown. */
+function awayText(station: Station, here: Here | null): string | null {
+  const km = here ? distanceKm(station, here) : null;
+  return km === null ? null : `${formatDistanceShort(km * 1000)} away`;
+}
+
+function StationList({ title, stations, currentId, here, limit = 12 }: { title: string; stations: Station[]; currentId: string | null; here: Here | null; limit?: number }) {
+  useUnitSystem(); // redraw when the unit setting changes
   return (
     <GlassCard style={{ gap: 4 }}>
-      <SectionLabel>{`${stations.length} stations`}</SectionLabel>
-      {stations.slice(0, 12).map((s) => (
-        <Pressable key={s.id} onPress={() => void useOnlineRadio.getState().play(s)} accessibilityRole="button" accessibilityLabel={`Play ${s.name}`} style={({ pressed }) => [styles.row, s.id === currentId && styles.rowActive, pressed && styles.pressed]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle} numberOfLines={1}>
-              {s.name}
-            </Text>
-            <Text style={styles.rowMeta} numberOfLines={1}>
-              {[s.country, s.codec].filter(Boolean).join(' · ')}
-            </Text>
-          </View>
-          {s.id === currentId ? <Ionicons name="volume-high" size={18} color={colors.success} /> : <Ionicons name="play" size={16} color={colors.textTertiary} />}
-        </Pressable>
-      ))}
+      <SectionLabel>{title}</SectionLabel>
+      {stations.slice(0, limit).map((s) => {
+        const away = awayText(s, here);
+        return (
+          <Pressable key={s.id} onPress={() => void useOnlineRadio.getState().play(s)} accessibilityRole="button" accessibilityLabel={`Play ${s.name}`} style={({ pressed }) => [styles.row, s.id === currentId && styles.rowActive, pressed && styles.pressed]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle} numberOfLines={1}>
+                {s.name}
+              </Text>
+              <Text style={styles.rowMeta} numberOfLines={1}>
+                {[away, s.state || s.country, s.codec].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+            {s.id === currentId ? <Ionicons name="volume-high" size={18} color={colors.success} /> : <Ionicons name="play" size={16} color={colors.textTertiary} />}
+          </Pressable>
+        );
+      })}
     </GlassCard>
+  );
+}
+
+/** Stations around the listener, whatever their frequency. */
+function NearMe({ currentId }: { currentId: string | null }) {
+  const nearby = useOnlineRadio((s) => s.nearby);
+  const status = useOnlineRadio((s) => s.nearbyStatus);
+  const here = useOnlineRadio((s) => s.here);
+  useUnitSystem();
+
+  return (
+    <>
+      <GlassCard style={{ gap: 10 }}>
+        <SectionLabel>Near me</SectionLabel>
+        <Text style={styles.note}>Stations broadcasting within about {formatDistanceShort(NEARBY_KM * 1000)} of where you are. When you tune a frequency, the nearest station on it plays first.</Text>
+        <Button label={status === 'loading' ? 'Looking…' : nearby.length > 0 ? 'Refresh' : 'Find stations near me'} icon="location" variant="secondary" loading={status === 'loading'} onPress={() => void useOnlineRadio.getState().findNearby()} />
+        {status === 'no-location' ? <Text style={styles.note}>Allow location for Azimuth to find stations near you.</Text> : null}
+        {status === 'empty' ? <Text style={styles.note}>No stations with a known position were found near you. Try the frequency dial or the name search.</Text> : null}
+      </GlassCard>
+      {nearby.length > 0 ? <StationList title={`${nearby.length} near you`} stations={nearby} currentId={currentId} here={here} limit={25} /> : null}
+    </>
   );
 }
 

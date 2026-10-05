@@ -1,6 +1,6 @@
 import { clampFm, formatMHz, nameHasFrequency, rankStations, searchByFrequency, searchByName, stationFromRow, Station } from '../radioBrowser';
 
-const station = (over: Partial<Station> = {}): Station => ({ id: 'a', name: 'WTOP 103.5 FM', url: 'https://x/stream', country: 'USA', countryCode: 'US', bitrate: 128, codec: 'MP3', votes: 10, tags: '', ...over });
+const station = (over: Partial<Station> = {}): Station => ({ id: 'a', name: 'WTOP 103.5 FM', url: 'https://x/stream', country: 'USA', countryCode: 'US', bitrate: 128, codec: 'MP3', votes: 10, tags: '', state: '', lat: null, lon: null, ...over });
 const row = (over: Record<string, unknown> = {}) => ({ stationuuid: 'u1', name: 'WTOP 103.5 FM', url_resolved: 'https://stream.example/wtop', country: 'The United States Of America', countrycode: 'us', bitrate: 128, codec: 'MP3', votes: 50, tags: 'news', lastcheckok: 1, ...over });
 const reply = (rows: unknown, ok = true) => jest.fn(async () => ({ ok, status: ok ? 200 : 503, json: async () => rows })) as unknown as typeof fetch;
 
@@ -94,5 +94,48 @@ describe('searching', () => {
     expect(f).not.toHaveBeenCalled();
     expect(await searchByName('  wtop ', { fetchImpl: f })).toHaveLength(1);
     expect((f as jest.Mock).mock.calls[0][0]).toContain('name=wtop');
+  });
+});
+
+describe('stations near you', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { distanceKm, searchNearby, NEARBY_KM } = require('../radioBrowser');
+  const DC = { latitudeDeg: 38.9072, longitudeDeg: -77.0369 };
+  const geo = (id: string, lat: number | null, lon: number | null, over: Record<string, unknown> = {}) => row({ stationuuid: id, name: `S${id}`, url_resolved: `https://stream.example/${id}`, geo_lat: lat, geo_long: lon, ...over });
+
+  it('measures the distance to a station, and has none when the station has no position', () => {
+    expect(distanceKm(station({ lat: 38.9072, lon: -77.0369 }), DC)).toBeCloseTo(0, 3);
+    expect(distanceKm(station({ lat: 39.2904, lon: -76.6122 }), DC)).toBeGreaterThan(50); // Baltimore
+    expect(distanceKm(station({ lat: 39.2904, lon: -76.6122 }), DC)).toBeLessThan(60);
+    expect(distanceKm(station(), DC)).toBeNull();
+  });
+
+  it('reads the position out of a row, ignoring nonsense', () => {
+    expect(stationFromRow(geo('1', 38.9, -77.0))).toMatchObject({ lat: 38.9, lon: -77 });
+    expect(stationFromRow(geo('2', null, null))).toMatchObject({ lat: null, lon: null });
+    expect(stationFromRow(geo('3', 999, 0))).toMatchObject({ lat: null });
+  });
+
+  it('puts the nearest station first, even when a faraway one has more votes', () => {
+    const near = station({ id: 'near', lat: 39.0, lon: -77.1, votes: 1 });
+    const far = station({ id: 'far', lat: 34.05, lon: -118.24, votes: 900 }); // Los Angeles
+    const unknown = station({ id: 'unknown', votes: 5000 });
+    expect(rankStations([unknown, far, near], 'US', DC).map((s) => s.id)).toEqual(['near', 'far', 'unknown']);
+    expect(rankStations([unknown, far, near], 'US').map((s) => s.id)).toEqual(['unknown', 'far', 'near']); // no position: by votes
+  });
+
+  it('ranks a frequency search by distance when it knows where you are', async () => {
+    const f = reply([geo('la', 34.05, -118.24, { name: 'KIIS 103.5', votes: 500 }), geo('dc', 38.95, -77.03, { name: 'WTOP 103.5', votes: 10 })]);
+    const found = await searchByFrequency(103.5, { here: DC, countryCode: 'US', fetchImpl: f });
+    expect(found.map((s) => s.id)).toEqual(['dc', 'la']);
+  });
+
+  it('lists only stations within reach, nearest first', async () => {
+    const f = reply([geo('far', 34.05, -118.24), geo('mid', 39.29, -76.61), geo('near', 38.95, -77.03), geo('nopos', null, null)]);
+    const found = await searchNearby(DC, { countryCode: 'US', fetchImpl: f });
+    expect(found.map((s: Station) => s.id)).toEqual(['near', 'mid']);
+    expect((f as jest.Mock).mock.calls[0][0]).toContain('has_geo_info=true');
+    expect((f as jest.Mock).mock.calls[0][0]).toContain('countrycode=US');
+    expect(NEARBY_KM).toBeGreaterThan(50);
   });
 });

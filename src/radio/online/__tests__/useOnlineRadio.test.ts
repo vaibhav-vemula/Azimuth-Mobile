@@ -13,6 +13,7 @@ jest.mock('../../../../modules/rtl-sdr', () => ({
 const audio = require('expo-audio') as { __players: any[]; createAudioPlayer: jest.Mock };
 
 const row = (id: string, name: string, votes = 10) => ({ stationuuid: id, name, url_resolved: `https://stream.example/${id}`, country: 'USA', countrycode: 'US', bitrate: 128, codec: 'MP3', votes, lastcheckok: 1 });
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const answer = (rows: unknown[]) => {
   global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => rows })) as unknown as typeof fetch;
 };
@@ -27,7 +28,7 @@ beforeEach(() => {
 describe('online radio', () => {
   it('tunes a frequency by playing the best station that names it', async () => {
     answer([row('a', 'Low 103.5', 5), row('b', 'Top 103.5', 90), row('c', 'Elsewhere 99.1', 500)]);
-    await useOnlineRadio.getState().tune(103.5, 'US');
+    await useOnlineRadio.getState().tune(103.5);
     const s = useOnlineRadio.getState();
     expect(s.mhz).toBe(103.5);
     expect(s.current?.id).toBe('b');
@@ -75,6 +76,7 @@ describe('online radio', () => {
     let release!: (v: unknown) => void;
     global.fetch = jest.fn(() => new Promise((resolve) => (release = resolve))) as unknown as typeof fetch;
     const slow = useOnlineRadio.getState().tune(99.1);
+    await flush(); // the position lookup finishes and the directory is asked
     answer([row('n', 'New 103.5')]);
     await useOnlineRadio.getState().tune(103.5);
     release({ ok: true, status: 200, json: async () => [row('old', 'Old 99.1')] });
@@ -105,7 +107,7 @@ describe('online radio', () => {
 
   it('searches by name without playing anything', async () => {
     answer([row('a', 'Jazz FM'), row('b', 'Smooth Jazz')]);
-    await useOnlineRadio.getState().search('jazz', 'US');
+    await useOnlineRadio.getState().search('jazz');
     expect(useOnlineRadio.getState().stations).toHaveLength(2);
     expect(audio.createAudioPlayer).not.toHaveBeenCalled();
   });
@@ -121,7 +123,8 @@ describe('changing the frequency', () => {
     let release!: (v: unknown) => void;
     global.fetch = jest.fn(() => new Promise((resolve) => (release = resolve))) as unknown as typeof fetch;
     const next = useOnlineRadio.getState().tune(99.1); // the lookup is still pending
-    expect(old.removed).toBe(true);
+    expect(old.removed).toBe(true); // already silent, before anything has been found
+    await flush();
     expect(useOnlineRadio.getState()).toMatchObject({ status: 'searching', current: null });
 
     release({ ok: true, status: 200, json: async () => [row('n', 'New 99.1')] });
@@ -269,5 +272,57 @@ describe('the simulated bars', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('local stations', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { setLocator } = require('../useOnlineRadio');
+  const DC = { here: { latitudeDeg: 38.9072, longitudeDeg: -77.0369 }, countryCode: 'US' };
+  const geo = (id: string, name: string, lat: number | null, lon: number | null, votes = 10) => ({ ...row(id, name, votes), geo_lat: lat, geo_long: lon });
+
+  afterEach(() => setLocator(null));
+
+  it('tuning plays the station nearest you on that frequency', async () => {
+    setLocator(async () => DC);
+    answer([geo('la', 'KIIS 103.5', 34.05, -118.24, 900), geo('dc', 'WTOP 103.5', 38.95, -77.03, 5)]);
+    await useOnlineRadio.getState().tune(103.5);
+    expect(useOnlineRadio.getState().current?.id).toBe('dc');
+    expect(useOnlineRadio.getState().here).toEqual(DC.here);
+  });
+
+  it('still tunes, by votes, when the position is not known', async () => {
+    setLocator(async () => null);
+    answer([geo('la', 'KIIS 103.5', 34.05, -118.24, 900), geo('dc', 'WTOP 103.5', 38.95, -77.03, 5)]);
+    await useOnlineRadio.getState().tune(103.5);
+    expect(useOnlineRadio.getState().current?.id).toBe('la');
+  });
+
+  it('finds the stations near you', async () => {
+    setLocator(async () => DC);
+    answer([geo('far', 'Far FM', 34.05, -118.24), geo('near', 'Near FM', 38.95, -77.03)]);
+    await useOnlineRadio.getState().findNearby();
+    const s = useOnlineRadio.getState();
+    expect(s.nearbyStatus).toBe('ready');
+    expect(s.nearby.map((x) => x.id)).toEqual(['near']);
+  });
+
+  it('says so when there is no location, and when nothing is near', async () => {
+    setLocator(async () => null);
+    await useOnlineRadio.getState().findNearby();
+    expect(useOnlineRadio.getState().nearbyStatus).toBe('no-location');
+    setLocator(async () => DC);
+    answer([geo('far', 'Far FM', 34.05, -118.24)]);
+    await useOnlineRadio.getState().findNearby();
+    expect(useOnlineRadio.getState().nearbyStatus).toBe('empty');
+  });
+
+  it('shows a plain error when the directory cannot be reached', async () => {
+    setLocator(async () => DC);
+    global.fetch = jest.fn(async () => {
+      throw new Error('offline');
+    }) as unknown as typeof fetch;
+    await useOnlineRadio.getState().findNearby();
+    expect(useOnlineRadio.getState().nearbyStatus).toBe('error');
   });
 });

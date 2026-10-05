@@ -3,7 +3,9 @@ import { createAudioPlayer, getRecordingPermissionsAsync, requestRecordingPermis
 import type { AudioPlayer } from 'expo-audio';
 import { createMMKV } from 'react-native-mmkv';
 import { useReceiver } from '../../receiver/useReceiver';
-import { Station, clampFm, formatMHz, searchByFrequency, searchByName } from './radioBrowser';
+import * as Location from 'expo-location';
+import { Here, Station, clampFm, formatMHz, searchByFrequency, searchByName, searchNearby } from './radioBrowser';
+import { deviceRegion } from '../../units/units';
 import { EMPTY_BINS, audioBins, monoFrames, simulatedBins, smoothBins } from './audioSpectrum';
 
 const storage = createMMKV({ id: 'azimuth-radio' });
@@ -26,6 +28,50 @@ interface BarsState {
 export const useAudioBars = create<BarsState>(() => ({ bins: EMPTY_BINS, sampling: 'unknown' }));
 const BARS_INTERVAL_MS = 50;
 
+/** Where the listener is, so the radio can favour stations near them. */
+export interface Place {
+  here: Here;
+  countryCode: string | null;
+}
+
+async function locateWithPhone(): Promise<Place | null> {
+  try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    if (!permission.granted) return null;
+    const fix = (await Location.getLastKnownPositionAsync()) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+    if (!fix) return null;
+    const here = { latitudeDeg: fix.coords.latitude, longitudeDeg: fix.coords.longitude };
+    let countryCode: string | null = null;
+    try {
+      const [place] = await Location.reverseGeocodeAsync(fix.coords);
+      countryCode = place?.isoCountryCode ?? null;
+    } catch {
+      // No geocoder on this phone: the phone's region setting is the next best sign of the country.
+    }
+    return { here, countryCode: countryCode ?? deviceRegion() };
+  } catch {
+    return null;
+  }
+}
+
+let locator: () => Promise<Place | null> = locateWithPhone;
+let placeCache: { at: number; value: Place | null } | null = null;
+const PLACE_TTL_MS = 5 * 60_000;
+
+/** Replaces how the position is found (used by tests). */
+export function setLocator(fn: (() => Promise<Place | null>) | null) {
+  locator = fn ?? locateWithPhone;
+  placeCache = null;
+}
+
+/** The listener's position, kept for a few minutes so each tune does not ask the GPS again. */
+async function locate(): Promise<Place | null> {
+  if (placeCache && Date.now() - placeCache.at < PLACE_TTL_MS) return placeCache.value;
+  const value = await locator();
+  placeCache = { at: Date.now(), value };
+  return value;
+}
+
 export type OnlineStatus = 'idle' | 'searching' | 'connecting' | 'playing' | 'nomatch' | 'error';
 
 interface OnlineRadioState {
@@ -33,13 +79,19 @@ interface OnlineRadioState {
   status: OnlineStatus;
   /** Stations found for the frequency (or the name searched), best first. */
   stations: Station[];
+  /** Where the listener is, once known. */
+  here: Here | null;
+  /** Stations near the listener, nearest first, and how that search went. */
+  nearby: Station[];
+  nearbyStatus: 'idle' | 'loading' | 'ready' | 'empty' | 'no-location' | 'error';
+  findNearby: () => Promise<void>;
   current: Station | null;
   error: string | null;
   volume: number;
   setFrequency: (mhz: number) => void;
   /** Looks for stations on the frequency and plays the best one. */
-  tune: (mhz?: number, countryCode?: string | null) => Promise<void>;
-  search: (text: string, countryCode?: string | null) => Promise<void>;
+  tune: (mhz?: number) => Promise<void>;
+  search: (text: string) => Promise<void>;
   play: (station: Station) => Promise<void>;
   stop: () => void;
   setVolume: (volume: number) => void;
@@ -160,6 +212,9 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
   mhz: savedFrequency(),
   status: 'idle',
   stations: [],
+  here: null,
+  nearby: [],
+  nearbyStatus: 'idle',
   current: null,
   error: null,
   volume: savedVolume(),
@@ -170,7 +225,20 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     set({ mhz: next });
   },
 
-  tune: async (mhz, countryCode = null) => {
+  findNearby: async () => {
+    set({ nearbyStatus: 'loading', nearby: [] });
+    try {
+      const place = await locate();
+      if (!place) return set({ nearbyStatus: 'no-location' });
+      set({ here: place.here });
+      const stations = await searchNearby(place.here, { countryCode: place.countryCode });
+      set({ nearby: stations, nearbyStatus: stations.length === 0 ? 'empty' : 'ready' });
+    } catch (e) {
+      set({ nearbyStatus: 'error', error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+
+  tune: async (mhz) => {
     const target = clampFm(mhz ?? get().mhz);
     get().setFrequency(target);
     const mine = ++request;
@@ -178,7 +246,10 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     releasePlayer();
     set({ status: 'searching', error: null, stations: [], current: null });
     try {
-      const stations = await searchByFrequency(target, { countryCode });
+      const place = await locate();
+      if (mine !== request) return;
+      if (place) set({ here: place.here });
+      const stations = await searchByFrequency(target, { countryCode: place?.countryCode ?? null, here: place?.here ?? null });
       if (mine !== request) return;
       set({ stations });
       if (stations.length === 0) {
@@ -193,11 +264,13 @@ export const useOnlineRadio = create<OnlineRadioState>((set, get) => ({
     }
   },
 
-  search: async (text, countryCode = null) => {
+  search: async (text) => {
     const mine = ++request;
     set({ status: 'searching', error: null, stations: [] });
     try {
-      const stations = await searchByName(text, { countryCode });
+      const place = await locate();
+      if (mine !== request) return;
+      const stations = await searchByName(text, { countryCode: place?.countryCode ?? null, here: place?.here ?? null });
       if (mine !== request) return;
       set({ stations, status: stations.length === 0 ? 'nomatch' : 'idle' });
     } catch (e) {

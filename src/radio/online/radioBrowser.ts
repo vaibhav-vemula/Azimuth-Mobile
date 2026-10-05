@@ -15,6 +15,16 @@ export interface Station {
   codec: string;
   votes: number;
   tags: string;
+  /** The state or region the station says it is in. */
+  state: string;
+  /** Where the transmitter or studio is, when the directory knows. */
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface Here {
+  latitudeDeg: number;
+  longitudeDeg: number;
 }
 
 export const FM_MIN_MHZ = 87.5;
@@ -55,6 +65,9 @@ interface Row {
   codec?: string;
   votes?: number;
   tags?: string;
+  state?: string;
+  geo_lat?: number | null;
+  geo_long?: number | null;
   lastcheckok?: number;
 }
 
@@ -71,13 +84,37 @@ export function stationFromRow(row: Row): Station | null {
     codec: row.codec ?? '',
     votes: Number(row.votes) || 0,
     tags: row.tags ?? '',
+    state: row.state ?? '',
+    lat: typeof row.geo_lat === 'number' && Math.abs(row.geo_lat) <= 90 ? row.geo_lat : null,
+    lon: typeof row.geo_long === 'number' && Math.abs(row.geo_long) <= 180 ? row.geo_long : null,
   };
 }
 
-/** Best first: stations from the listener's own country, then the most voted for, then the clearest stream. */
-export function rankStations(stations: Station[], countryCode: string | null): Station[] {
+/** Great-circle distance from a place to a station, in kilometres, or null if the station has no position. */
+export function distanceKm(station: Station, here: Here): number | null {
+  if (station.lat === null || station.lon === null) return null;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(station.lat - here.latitudeDeg);
+  const dLon = rad(station.lon - here.longitudeDeg);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(here.latitudeDeg)) * Math.cos(rad(station.lat)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Best first. With a position: stations whose position is known come first, nearest first (a 103.5 in your own city beats
+ * a 103.5 two states away). Then stations from your own country, then the most voted for, then the clearest stream.
+ */
+export function rankStations(stations: Station[], countryCode: string | null, here: Here | null = null): Station[] {
   const home = countryCode?.toUpperCase() ?? null;
+  const dist = new Map<string, number | null>();
+  if (here) for (const s of stations) dist.set(s.id, distanceKm(s, here));
   return [...stations].sort((a, b) => {
+    if (here) {
+      const da = dist.get(a.id) ?? null;
+      const db = dist.get(b.id) ?? null;
+      if (da !== null && db !== null && Math.abs(da - db) > 1) return da - db;
+      if ((da === null) !== (db === null)) return da === null ? 1 : -1;
+    }
     const ha = home && a.countryCode === home ? 1 : 0;
     const hb = home && b.countryCode === home ? 1 : 0;
     if (ha !== hb) return hb - ha;
@@ -113,22 +150,24 @@ const SEARCH = '/json/stations/search?hidebroken=true&order=votes&reverse=true&l
 export interface SearchOptions {
   /** The listener's country (two letters), so local stations come first. */
   countryCode?: string | null;
+  /** The listener's position, so the nearest stations come first. */
+  here?: Here | null;
   fetchImpl?: FetchFn;
 }
 
 /** Stations whose name mentions this FM frequency, best first. */
-export async function searchByFrequency(mhz: number, { countryCode = null, fetchImpl = fetch }: SearchOptions = {}): Promise<Station[]> {
+export async function searchByFrequency(mhz: number, { countryCode = null, here = null, fetchImpl = fetch }: SearchOptions = {}): Promise<Station[]> {
   const rows = await query(`${SEARCH}&name=${encodeURIComponent(formatMHz(mhz))}`, fetchImpl);
   const stations = rows.map(stationFromRow).filter((s): s is Station => s !== null && nameHasFrequency(s.name, mhz));
-  return rankStations(dedupe(stations), countryCode);
+  return rankStations(dedupe(stations), countryCode, here);
 }
 
 /** Stations matching a name or word, best first. */
-export async function searchByName(text: string, { countryCode = null, fetchImpl = fetch }: SearchOptions = {}): Promise<Station[]> {
+export async function searchByName(text: string, { countryCode = null, here = null, fetchImpl = fetch }: SearchOptions = {}): Promise<Station[]> {
   const term = text.trim();
   if (term.length < 2) return [];
   const rows = await query(`${SEARCH}&name=${encodeURIComponent(term)}`, fetchImpl);
-  return rankStations(dedupe(rows.map(stationFromRow).filter((s): s is Station => s !== null)), countryCode);
+  return rankStations(dedupe(rows.map(stationFromRow).filter((s): s is Station => s !== null)), countryCode, here);
 }
 
 /** The same stream listed twice (different names for one address) is shown once. */
@@ -140,4 +179,22 @@ function dedupe(stations: Station[]): Station[] {
     seen.add(key);
     return true;
   });
+}
+
+/** How far "near me" reaches. FM carries roughly this far from a transmitter. */
+export const NEARBY_KM = 120;
+
+/**
+ * Stations around a place, nearest first, whatever their frequency. The directory cannot be asked "within X km", so the
+ * stations that have a position are fetched for the country and the near ones kept.
+ */
+export async function searchNearby(here: Here, { countryCode = null, fetchImpl = fetch, radiusKm = NEARBY_KM }: SearchOptions & { radiusKm?: number } = {}): Promise<Station[]> {
+  const country = countryCode ? `&countrycode=${encodeURIComponent(countryCode.toUpperCase())}` : '';
+  const rows = await query(`/json/stations/search?hidebroken=true&has_geo_info=true&order=votes&reverse=true&limit=1500${country}`, fetchImpl);
+  const stations = dedupe(rows.map(stationFromRow).filter((s): s is Station => s !== null));
+  return stations
+    .map((s) => ({ s, d: distanceKm(s, here) }))
+    .filter((x): x is { s: Station; d: number } => x.d !== null && x.d <= radiusKm)
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.s);
 }
