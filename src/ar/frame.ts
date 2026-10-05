@@ -20,6 +20,16 @@ import {
 export const AR_VERTICAL_FOV_DEG = 58;
 /** The chest is drawn (as a beam of light) from up to this far away. */
 export const VISIBLE_RANGE_M = 200;
+/** While you stand still, a change smaller than this (GPS noise) does not move the chest. */
+export const HOLD_M = 2.5;
+
+/** Metres between two places given as distance and bearing from the same point. */
+function gapBetweenM(d1: number, b1: number, d2: number, b2: number): number {
+  const r1 = (b1 * Math.PI) / 180;
+  const r2 = (b2 * Math.PI) / 180;
+  return Math.hypot(d1 * Math.sin(r1) - d2 * Math.sin(r2), d1 * Math.cos(r1) - d2 * Math.cos(r2));
+}
+
 /** GPS jumps in steps; smoothing over about this long keeps the chest from jittering. */
 const SMOOTHING_SECONDS = 0.45;
 
@@ -37,6 +47,8 @@ export interface FrameInput {
   screenAspect: number;
   /** Which way to draw the chest while you stand closer than the nearest drawing distance, where GPS cannot give a direction. */
   nearBearingDeg?: number | null;
+  /** You are standing still: the chest stays exactly where it is unless the new position is clearly different. */
+  stationary?: boolean;
 }
 
 export interface FrameOutput {
@@ -62,9 +74,19 @@ export function computeFrame(i: FrameInput): FrameOutput | null {
   if (!i.user) return null;
   const raw = toChest(i.user, i.target);
   const alpha = 1 - Math.exp(-Math.max(0, i.dtSec) / SMOOTHING_SECONDS);
-  const distanceM = smoothValue(i.previous.distanceM, raw.distanceM, alpha);
   const anchored = typeof i.nearBearingDeg === 'number' && raw.distanceM < MIN_RENDER_M;
-  const bearing = anchored ? (i.nearBearingDeg as number) : smoothAngleDeg(i.previous.bearingDeg, raw.bearingDeg, alpha);
+  const rawBearing = anchored ? (i.nearBearingDeg as number) : raw.bearingDeg;
+  const prev = i.previous;
+  let distanceM: number;
+  let bearing: number;
+  if (prev.distanceM !== null && prev.bearingDeg !== null && i.stationary && gapBetweenM(prev.distanceM, prev.bearingDeg, raw.distanceM, rawBearing) < HOLD_M) {
+    // Standing still and the new reading is only GPS noise away: do not move the chest at all.
+    distanceM = prev.distanceM;
+    bearing = prev.bearingDeg;
+  } else {
+    distanceM = smoothValue(prev.distanceM, raw.distanceM, alpha);
+    bearing = anchored ? rawBearing : smoothAngleDeg(prev.bearingDeg, raw.bearingDeg, alpha);
+  }
 
   const oriented = i.device !== null;
   const camera = i.device ? cameraQuaternion(i.device, i.declinationDeg) : IDENTITY;

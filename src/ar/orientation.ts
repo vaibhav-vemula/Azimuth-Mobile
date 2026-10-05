@@ -101,10 +101,10 @@ export function offsetEnu(from: LatLon, to: LatLon): { east: number; north: numb
 }
 
 /** How far the chest is drawn from you, however far it really is. Near is kept at a size you can see and tap; far is kept in view. */
-export const MIN_RENDER_M = 4;
+export const MIN_RENDER_M = 5;
 export const MAX_RENDER_M = 40;
 /** The phone is about this far above the ground. */
-export const CAMERA_HEIGHT_M = 1.4;
+export const CAMERA_HEIGHT_M = 1.3;
 /** Close enough to look for the chest in AR, and to open it. */
 export const AR_RANGE_M = 60;
 export const OPEN_RANGE_M = 30;

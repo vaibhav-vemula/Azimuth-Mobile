@@ -18,8 +18,9 @@ import { CHEST_KIND } from '../screens/chests/chestInfo';
 import { ChestScene, createChestScene } from './chestScene';
 import { useChestClaim } from './claim';
 import { createRendererOn } from './glSupport';
+import { PositionFilter } from './stabilize';
 import { FrameOutput, computeFrame } from './frame';
-import { OPEN_RANGE_M, Quat } from './orientation';
+import { MIN_RENDER_M, OPEN_RANGE_M, Quat } from './orientation';
 
 interface Props {
   visible: boolean;
@@ -87,11 +88,23 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
   const stopped = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  user.current = pose.position;
   ready.current = claim.ready;
   targetRef.current = target;
-  const nearBearing = useRef<number | null>(chest.spec.facingDeg ?? null);
-  nearBearing.current = chest.spec.facingDeg ?? null;
+
+  // GPS wanders by a few metres even when you stand still. Each fix goes through a filter that weighs it by its accuracy, so
+  // the chest does not drift across the ground, and the filter also says whether you are standing still.
+  const positionFilter = useRef(new PositionFilter()).current;
+  const stationary = useRef(true);
+  useEffect(() => {
+    if (!pose.position) return;
+    user.current = positionFilter.update(pose.position, pose.accuracyM, Date.now());
+    stationary.current = positionFilter.speed() < 0.35;
+  }, [pose.position, pose.accuracyM, positionFilter]);
+
+  // When you are closer than the nearest drawing distance, GPS cannot tell which way the chest lies, so it is drawn straight
+  // ahead of the way the camera pointed when the view opened, and then stays there. (Reset with "Put it in front of me".)
+  const nearBearing = useRef<number | null>(null);
+  const forgetPlacement = useRef(false);
 
   const showToast = useCallback((text: string) => {
     setToast(text);
@@ -154,6 +167,10 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
           renderer.dispose();
           return;
         }
+        if (forgetPlacement.current) {
+          forgetPlacement.current = false;
+          previous = { distanceM: null, bearingDeg: null };
+        }
         const now = Date.now();
         const dt = Math.min(0.1, (now - last) / 1000);
         last = now;
@@ -164,12 +181,14 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
           user: user.current,
           target: targetRef.current,
           nearBearingDeg: nearBearing.current,
+          stationary: stationary.current,
           previous,
           dtSec: dt,
           ready: ready.current,
           screenAspect: size.current.w / Math.max(1, size.current.h),
         });
         if (f) {
+          if (nearBearing.current === null && f.oriented && f.distanceM < MIN_RENDER_M) nearBearing.current = f.headingDeg;
           previous = f.next;
           frameRef.current = f;
           scene.setView(f.camera);
@@ -309,6 +328,7 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
                     : claim.hint}
             </Text>
             {canOpen ? <Button label="Open chest" icon="cube-outline" onPress={() => void openIt()} /> : null}
+            {chest.spec.test === true ? <Button label="Put it in front of me" variant="secondary" icon="locate-outline" onPress={() => { nearBearing.current = frameRef.current?.headingDeg ?? null; forgetPlacement.current = true; }} /> : null}
           </View>
         )}
       </View>

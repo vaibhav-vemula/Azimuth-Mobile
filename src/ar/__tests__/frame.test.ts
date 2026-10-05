@@ -117,3 +117,31 @@ describe('a chest right where you stand', () => {
     expect(f.bearingDeg).toBeCloseTo(0, 0);
   });
 });
+
+describe('a chest that must not move', () => {
+  const settled = () => computeFrame(base({ target: east(20), previous: { distanceM: null, bearingDeg: null }, stationary: true }))!;
+
+  it('stays put while you stand still and the GPS wanders by a metre or two', () => {
+    const first = settled();
+    let previous = first.next;
+    for (const wobble of [east(21), east(19), { ...east(20), latitudeDeg: here.latitudeDeg + 1 / 111320 }, { ...east(20), latitudeDeg: here.latitudeDeg - 1.5 / 111320 }]) {
+      const f = computeFrame(base({ target: wobble, previous, stationary: true }))!;
+      expect(f.distanceM).toBe(first.distanceM);
+      expect(f.bearingDeg).toBe(first.bearingDeg);
+      expect(f.world).toEqual(first.world);
+      previous = f.next;
+    }
+  });
+
+  it('does move when the change is real, even standing still', () => {
+    const first = settled();
+    const f = computeFrame(base({ target: east(30), previous: first.next, stationary: true, dtSec: 1 }))!;
+    expect(f.distanceM).toBeGreaterThan(first.distanceM);
+  });
+
+  it('moves with you when you are walking', () => {
+    const first = settled();
+    const f = computeFrame(base({ target: east(21), previous: first.next, stationary: false, dtSec: 1 }))!;
+    expect(f.distanceM).not.toBe(first.distanceM);
+  });
+});

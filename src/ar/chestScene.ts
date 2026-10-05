@@ -200,8 +200,9 @@ export function createChestScene(): ChestScene {
 
   const chest = new THREE.Group();
   scene.add(chest);
+  let yawAt: [number, number] | null = null;
   /** A chest is about a metre wide; drawn larger so it reads well on a phone screen. */
-  const CHEST_SCALE = 1.45;
+  const CHEST_SCALE = 1.9;
   chest.scale.setScalar(CHEST_SCALE);
 
   const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => {
@@ -381,8 +382,11 @@ export function createChestScene(): ChestScene {
     setChest: (position, visible) => {
       chest.position.set(position[0], position[1], position[2]);
       chest.visible = visible;
-      // Face the chest toward the camera, so the front (lock side, +z) is what you see.
-      chest.rotation.y = Math.atan2(-position[0], -position[2]);
+      // Face the chest toward you the first time it is placed, then leave it: a chest on the ground does not turn as you move.
+      if (!yawAt || Math.hypot(position[0] - yawAt[0], position[2] - yawAt[1]) > 3) {
+        chest.rotation.y = Math.atan2(-position[0], -position[2]);
+        yawAt = [position[0], position[2]];
+      }
       innerLight.position.set(position[0], position[1] + 0.8, position[2]);
     },
     setMood: (next) => {
@@ -403,12 +407,10 @@ export function createChestScene(): ChestScene {
         lidPivot.rotation.x = LID_OPEN_RAD * easeOutBack(Math.min(1, progress * 1.15));
       }
 
-      // Idle: the chest breathes, the halo pulses.
-      const bob = opening ? 0 : Math.sin(time * 1.6) * 0.025;
-      body.position.y = bob;
-      lidPivot.position.y = 0.56 + bob;
+      // Idle: the chest sits still on the ground; only the light under it pulses.
+      body.position.y = 0;
+      lidPivot.position.y = 0.56;
       halo.material.opacity = (0.55 + 0.25 * Math.sin(time * 2.2)) * m.glow * (opening ? 1.4 : 1);
-      halo.scale.setScalar(1 + 0.06 * Math.sin(time * 2.2));
       beamMat.opacity = 0.7 * m.beam * (opening ? 1 + progress : 1);
       inside.material.opacity = opening ? Math.min(1, progress * 2.2) * 0.7 : 0;
       innerLight.intensity = opening ? progress * 2.6 : m.glow * 1.1;
