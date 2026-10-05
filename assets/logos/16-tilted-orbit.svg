@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img">
+<defs>
+<linearGradient id="bgf16" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A1020"/><stop offset="1" stop-color="#04070E"/></linearGradient>
+<linearGradient id="af16" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#8FD8E6"/></linearGradient>
+<linearGradient id="rf16" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#2EE6C5"/></linearGradient>
+</defs>
+<rect width="200" height="200" rx="46" fill="url(#bgf16)"/>
+<g transform="rotate(-22 100 120)"><path d="M30 120 A70 22 0 0 1 170 120" fill="none" stroke="url(#rf16)" stroke-opacity=".5" stroke-width="6" stroke-linecap="round"/></g>
+<path d="M54 160 L100 46 L146 160" fill="none" stroke="url(#af16)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+<g transform="rotate(-22 100 120)"><path d="M30 120 A70 22 0 0 0 170 120" fill="none" stroke="url(#rf16)" stroke-width="7" stroke-linecap="round"/></g>
+<circle cx="164.9" cy="93.8" r="11" fill="#FFB020"/><circle cx="164.9" cy="93.8" r="4.5" fill="#04070E"/>
+</svg>

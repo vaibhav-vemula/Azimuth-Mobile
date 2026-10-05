@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img">
+<defs>
+<linearGradient id="bgf14" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A1020"/><stop offset="1" stop-color="#04070E"/></linearGradient>
+<linearGradient id="af14" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#4DD0E1"/></linearGradient>
+<linearGradient id="rf14" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#4DD0E1"/></linearGradient>
+</defs>
+<rect width="200" height="200" rx="46" fill="url(#bgf14)"/>
+<path d="M30 126 A70 21 0 0 1 170 126" fill="none" stroke="url(#rf14)" stroke-opacity=".55" stroke-width="6" stroke-linecap="round"/>
+<path d="M100 28 L162 170 L136 170 L124 144 L76 144 L64 170 L38 170 Z M100 84 L113 116 L87 116 Z" fill="url(#af14)" fill-rule="evenodd" stroke="url(#af14)" stroke-width="4" stroke-linejoin="round"/>
+<path d="M100 84 L113 116 L87 116 Z" fill="#FFB020"/>
+<path d="M30 126 A70 21 0 0 0 170 126" fill="none" stroke="url(#rf14)" stroke-width="7" stroke-linecap="round"/>
+<circle cx="170" cy="126" r="11" fill="#FFB020"/><circle cx="170" cy="126" r="4.5" fill="#04070E"/>
+</svg>

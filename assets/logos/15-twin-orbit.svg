@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img">
+<defs>
+<linearGradient id="bgf15" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A1020"/><stop offset="1" stop-color="#04070E"/></linearGradient>
+<linearGradient id="af15" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#8FD8E6"/></linearGradient>
+<linearGradient id="rf15" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#4DD0E1"/></linearGradient>
+</defs>
+<rect width="200" height="200" rx="46" fill="url(#bgf15)"/>
+<g transform="rotate(-24 100 112)"><path d="M32 112 A68 21 0 0 1 168 112" fill="none" stroke="url(#rf15)" stroke-opacity=".5" stroke-width="5" stroke-linecap="round"/></g><g transform="rotate(24 100 112)"><path d="M32 112 A68 21 0 0 1 168 112" fill="none" stroke="url(#rf15)" stroke-opacity=".5" stroke-width="5" stroke-linecap="round"/></g>
+<path d="M54 160 L100 46 L146 160" fill="none" stroke="url(#af15)" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+<g transform="rotate(-24 100 112)"><path d="M32 112 A68 21 0 0 0 168 112" fill="none" stroke="url(#rf15)" stroke-width="6" stroke-linecap="round"/></g><g transform="rotate(24 100 112)"><path d="M32 112 A68 21 0 0 0 168 112" fill="none" stroke="url(#rf15)" stroke-width="5" stroke-linecap="round"/></g>
+<circle cx="162.1" cy="84.3" r="10.5" fill="#FFB020"/><circle cx="162.1" cy="84.3" r="4.2" fill="#04070E"/>
+</svg>
