@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { addOrientationListener, startOrientation, stopOrientation } from '../../modules/signal-scan';
 import { smoothAngleDeg, walkingHeadingDeg } from '../ar/orientation';
+import { useUnits } from '../units/units';
 import { compassNeedsCalibration, useHeadingStore } from './headingStore';
 import type { LatLon } from './hexGrid';
 
@@ -63,10 +64,12 @@ export function useDevicePose(active: boolean): DevicePose {
         const last = await Location.getLastKnownPositionAsync();
         if (last && !cancelled) {
           setPosition({ latitudeDeg: last.coords.latitude, longitudeDeg: last.coords.longitude });
+          useUnits.getState().noteLocation(last.coords.latitude, last.coords.longitude);
           setAccuracyM(last.coords.accuracy);
         }
         posSub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: 2 }, (loc) => {
           setPosition({ latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude });
+          useUnits.getState().noteLocation(loc.coords.latitude, loc.coords.longitude);
           setAccuracyM(loc.coords.accuracy);
           setMocked(loc.mocked === true);
         });

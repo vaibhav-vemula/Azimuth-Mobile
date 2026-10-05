@@ -63,7 +63,7 @@ export default function SettingsScreen() {
       <GlassCard style={{ gap: 12 }}>
         <SectionLabel>Units</SectionLabel>
         <Text style={styles.subtitle}>
-          Distances on the map, in chests and in session stats. Automatic follows your phone's region: miles and feet in the US, Canada and the UK, kilometres and metres elsewhere.
+          Distances on the map, in chests and in session stats. Automatic follows the country you are in: miles and feet in the US and Canada, kilometres and metres elsewhere. Until your location is known it goes by your phone's region setting.
         </Text>
         <Row style={{ flexWrap: 'wrap' }}>
           <Chip label="Automatic" selected={unitPreference === 'auto'} onPress={() => setUnitPreference('auto')} />

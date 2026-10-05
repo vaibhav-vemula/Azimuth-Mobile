@@ -11,6 +11,7 @@ import { ConnectScreen } from './src/screens/onboarding/ConnectScreen';
 import { useWallet } from './src/wallet/useWallet';
 import { useMapping } from './src/mapping/useMapping';
 import { initBackup } from './src/backup/useBackup';
+import { initUnitsFromLocation } from './src/units/locate';
 
 export default function App() {
   const { fontsLoaded } = useAppFonts();
@@ -25,6 +26,7 @@ export default function App() {
     useWallet.getState().restore();
     useMapping.getState().load();
     initBackup();
+    void initUnitsFromLocation();
   }, []);
 
   if (!fontsLoaded) {

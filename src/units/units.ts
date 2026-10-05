@@ -14,6 +14,41 @@ export function regionOfLocale(locale: string | null | undefined): string | null
   return match ? match[1].toUpperCase() : null;
 }
 
+type Point = [number, number]; // longitude, latitude
+
+/**
+ * A rough outline of the contiguous United States and Canada (the Mexico border is followed, the other edges are
+ * generous), plus boxes for Alaska, Hawaii and Puerto Rico. It only has to tell "miles country" from "kilometres
+ * country", so a few kilometres of error at a border does not matter.
+ */
+const NORTH_AMERICA: Point[] = [
+  [-125.5, 32.4], [-117.1, 32.52], [-114.75, 32.72], [-114.81, 32.49], [-111.07, 31.33], [-108.2, 31.33], [-108.2, 31.78], [-106.53, 31.78],
+  [-106.2, 31.4], [-104.5, 29.6], [-103.15, 28.97], [-102.7, 29.7], [-101.4, 29.77], [-100.3, 28.3], [-99.5, 27.5], [-99.1, 26.4], [-98.2, 26.05], [-97.5, 25.87], [-97.15, 25.95],
+  [-97.0, 25.0], [-80.0, 24.4], [-52.0, 24.4], [-52.0, 84.0], [-141.0, 84.0], [-141.0, 60.0], [-133.0, 53.4], [-129.8, 50.5], [-125.5, 48.3],
+];
+const MILES_BOXES: [number, number, number, number][] = [
+  [-170, 51, -129.5, 71.6], // Alaska: west, south, east, north
+  [-160.5, 18.8, -154.7, 22.4], // Hawaii
+  [-67.5, 17.6, -64.5, 18.7], // Puerto Rico and the Virgin Islands
+];
+
+function inPolygon(lon: number, lat: number, polygon: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** True when a place is in the United States or Canada (and their territories), where miles and feet are used. */
+export function inMilesCountry(latitudeDeg: number, longitudeDeg: number): boolean {
+  if (!Number.isFinite(latitudeDeg) || !Number.isFinite(longitudeDeg)) return false;
+  if (MILES_BOXES.some(([w, s, e, n]) => longitudeDeg >= w && longitudeDeg <= e && latitudeDeg >= s && latitudeDeg <= n)) return true;
+  return inPolygon(longitudeDeg, latitudeDeg, NORTH_AMERICA);
+}
+
 export function systemForRegion(region: string | null): UnitSystem {
   return region && MILES_REGIONS.has(region) ? 'imperial' : 'metric';
 }
@@ -33,6 +68,12 @@ function deviceRegion(): string | null {
 
 const storage = createMMKV({ id: 'azimuth-prefs' });
 const KEY = 'units';
+const PLACE_KEY = 'placeSystem';
+
+function loadPlaceSystem(): UnitSystem | null {
+  const saved = storage.getString(PLACE_KEY);
+  return saved === 'metric' || saved === 'imperial' ? saved : null;
+}
 
 function loadPreference(): UnitPreference {
   const saved = storage.getString(KEY);
@@ -41,11 +82,23 @@ function loadPreference(): UnitPreference {
 
 interface UnitsState {
   preference: UnitPreference;
+  /** The system for the country the phone was last seen in. Beats the phone's region setting under "Automatic". */
+  place: UnitSystem | null;
   setPreference: (preference: UnitPreference) => void;
+  /** Tells the app where the phone is, so "Automatic" follows the country. */
+  noteLocation: (latitudeDeg: number, longitudeDeg: number) => void;
 }
 
 export const useUnits = create<UnitsState>((set) => ({
   preference: loadPreference(),
+  place: loadPlaceSystem(),
+  noteLocation: (latitudeDeg, longitudeDeg) => {
+    if (!Number.isFinite(latitudeDeg) || !Number.isFinite(longitudeDeg)) return;
+    const place: UnitSystem = inMilesCountry(latitudeDeg, longitudeDeg) ? 'imperial' : 'metric';
+    if (place === useUnits.getState().place) return;
+    storage.set(PLACE_KEY, place);
+    useUnits.setState({ place });
+  },
   setPreference: (preference) => {
     if (preference === 'auto') storage.remove(KEY);
     else storage.set(KEY, preference);
@@ -53,20 +106,23 @@ export const useUnits = create<UnitsState>((set) => ({
   },
 }));
 
-export function resolveSystem(preference: UnitPreference, region: string | null): UnitSystem {
-  return preference === 'auto' ? systemForRegion(region) : preference;
+/** "Automatic" goes by the country the phone is in, and by its region setting until it has been located. */
+export function resolveSystem(preference: UnitPreference, region: string | null, place: UnitSystem | null = null): UnitSystem {
+  return preference === 'auto' ? place ?? systemForRegion(region) : preference;
 }
 
 let cachedRegion: string | null | undefined;
 /** The system in use now. Components that show distances should also call useUnitSystem so they redraw when it changes. */
 export function currentSystem(): UnitSystem {
   if (cachedRegion === undefined) cachedRegion = deviceRegion();
-  return resolveSystem(useUnits.getState().preference, cachedRegion);
+  const { preference, place } = useUnits.getState();
+  return resolveSystem(preference, cachedRegion, place);
 }
 
 export function useUnitSystem(): UnitSystem {
   const preference = useUnits((s) => s.preference);
-  return resolveSystem(preference, cachedRegion === undefined ? (cachedRegion = deviceRegion()) : cachedRegion);
+  const place = useUnits((s) => s.place);
+  return resolveSystem(preference, cachedRegion === undefined ? (cachedRegion = deviceRegion()) : cachedRegion, place);
 }
 
 const M_PER_FT = 0.3048;

@@ -76,3 +76,62 @@ describe('the setting', () => {
     expect(useUnits.getState().preference).toBe('auto');
   });
 });
+
+describe('which country a place is in', () => {
+  const { inMilesCountry } = require('../units');
+  const cities: [string, number, number, boolean][] = [
+    ['Washington, DC', 38.9072, -77.0369, true],
+    ['New York', 40.7128, -74.006, true],
+    ['Los Angeles', 34.0522, -118.2437, true],
+    ['San Diego', 32.7157, -117.1611, true],
+    ['Miami', 25.7617, -80.1918, true],
+    ['Houston', 29.7604, -95.3698, true],
+    ['El Paso', 31.7619, -106.485, true],
+    ['Brownsville', 25.9, -97.5, true],
+    ['Seattle', 47.6062, -122.3321, true],
+    ['Anchorage', 61.2181, -149.9003, true],
+    ['Honolulu', 21.3069, -157.8583, true],
+    ['San Juan', 18.4655, -66.1057, true],
+    ['Toronto', 43.6532, -79.3832, true],
+    ['Vancouver', 49.2827, -123.1207, true],
+    ['Montreal', 45.5017, -73.5673, true],
+    ["St. John's", 47.5615, -52.7126, true],
+    ['Yellowknife', 62.454, -114.3718, true],
+    ['Mexico City', 19.4326, -99.1332, false],
+    ['Monterrey', 25.6866, -100.3161, false],
+    ['Ciudad Juarez', 31.7, -106.49, false],
+    ['Matamoros', 25.85, -97.5, false],
+    ['Havana', 23.1136, -82.3666, false],
+    ['Bogota', 4.711, -74.0721, false],
+    ['London', 51.5074, -0.1278, false],
+    ['Reykjavik', 64.1466, -21.9426, false],
+    ['Delhi', 28.6139, 77.209, false],
+    ['Sydney', -33.8688, 151.2093, false],
+  ];
+  it.each(cities)('%s', (_name, lat, lon, expected) => {
+    expect(inMilesCountry(lat, lon)).toBe(expected);
+  });
+});
+
+describe('Automatic goes by where the phone is', () => {
+  it('prefers the country over the phone region, and falls back to the region before it is located', () => {
+    expect(resolveSystem('auto', 'IN', 'imperial')).toBe('imperial'); // a phone set to India, used in the US
+    expect(resolveSystem('auto', 'US', 'metric')).toBe('metric'); // a US phone taken abroad
+    expect(resolveSystem('auto', 'US', null)).toBe('imperial');
+    expect(resolveSystem('auto', 'IN', null)).toBe('metric');
+  });
+
+  it('never overrides a choice made in Settings', () => {
+    expect(resolveSystem('metric', 'US', 'imperial')).toBe('metric');
+    expect(resolveSystem('imperial', 'DE', 'metric')).toBe('imperial');
+  });
+
+  it('is updated when the phone reports where it is', () => {
+    const { useUnits: units } = require('../units');
+    units.getState().setPreference('auto');
+    units.getState().noteLocation(38.9072, -77.0369);
+    expect(units.getState().place).toBe('imperial');
+    units.getState().noteLocation(28.6139, 77.209);
+    expect(units.getState().place).toBe('metric');
+  });
+});
