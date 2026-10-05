@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img">
+<defs><linearGradient id="bgf31" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0E1730"/><stop offset="1" stop-color="#04070E"/></linearGradient><clipPath id="cpf31"><rect width="200" height="200" rx="46"/></clipPath><linearGradient id="bzf31" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6D7F9C"/><stop offset="0.5" stop-color="#27344D"/><stop offset="1" stop-color="#0A101D"/></linearGradient><linearGradient id="fcf31" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#10264A"/><stop offset="1" stop-color="#04070E"/></linearGradient><linearGradient id="swf31" gradientUnits="userSpaceOnUse" x1="149.4" y1="73.7" x2="100" y2="44"><stop offset="0" stop-color="#2EE6C5" stop-opacity="0"/><stop offset="1" stop-color="#2EE6C5" stop-opacity=".8"/></linearGradient><filter id="shf31" x="-30%" y="-30%" width="160%" height="170%"><feGaussianBlur stdDeviation="7"/></filter><linearGradient id="glf31" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".30"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient></defs>
+<g clip-path="url(#cpf31)"><rect width="200" height="200" fill="url(#bgf31)"/><ellipse cx="100" cy="112" rx="74" ry="70" fill="#000" opacity=".55" filter="url(#shf31)"/>
+<circle cx="100" cy="100" r="76" fill="url(#bzf31)"/>
+<circle cx="100" cy="100" r="66" fill="url(#fcf31)"/>
+<circle cx="100" cy="100" r="56" fill="none" stroke="#2EE6C5" stroke-opacity=".35" stroke-width="2.5"/>
+<circle cx="100" cy="100" r="36" fill="none" stroke="#2EE6C5" stroke-opacity=".35" stroke-width="2.5"/>
+<circle cx="100" cy="100" r="16" fill="none" stroke="#2EE6C5" stroke-opacity=".35" stroke-width="2.5"/>
+<path d="M100 100 L100.0 44.0 A56 56 0 0 1 149.4 73.7 Z" fill="url(#swf31)"/>
+<line x1="100" y1="100" x2="100" y2="44" stroke="#2EE6C5" stroke-width="3.5" stroke-linecap="round"/>
+<circle cx="121.2" cy="68.5" r="9" fill="#FFB020"/><circle cx="121.2" cy="68.5" r="16" fill="#FFB020" fill-opacity=".2"/>
+<circle cx="100" cy="100" r="5" fill="#E8F1FB"/>
+<path d="M44 78 A62 62 0 0 1 128 42" fill="none" stroke="url(#glf31)" stroke-width="10" stroke-linecap="round" opacity=".5"/></g>
+</svg>
