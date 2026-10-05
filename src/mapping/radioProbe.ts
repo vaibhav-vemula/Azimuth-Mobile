@@ -4,18 +4,21 @@ import { useReceiver } from '../receiver/useReceiver';
 import { useCapture } from '../capture/useCapture';
 import { withTimeout } from '../utils/async';
 import {
-  NOAA_TUNE_HZ,
+  RADIO_WINDOWS_HZ,
+  WindowSummary,
+  combineWindows,
   PROBE_GAIN_DB,
   PROBE_SAMPLE_RATE_HZ,
   RadioReading,
   SondeReading,
   nearestGain,
   sondeTuneHz,
-  toReading,
   toSondeReading,
 } from './radio';
 
-const SETTLE_MS = 400;
+const SETTLE_MS = 300;
+/** Per window when sweeping: about 4 s for five windows once a minute. */
+const SWEEP_MEASURE_MS = 500;
 const MEASURE_MS = 900;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -93,10 +96,50 @@ async function measureAt(tuneHz: number): Promise<Averaged | ProbeSkip> {
   }
 }
 
-/** One NOAA Weather Radio reading. */
+/**
+ * Measures several windows in one go: holds the dongle, retunes for each, averages a short stretch of spectrum, then
+ * releases it. Windows that gave too few frames are dropped. Skips when the dongle is in use for something else.
+ */
+async function sweep(windowsHz: readonly number[]): Promise<{ windows: WindowSummary[]; gainDb: number } | ProbeSkip> {
+  if (!isConnected() && !(await ensureDongle())) return 'no-dongle';
+  const receiver = useReceiver.getState();
+  const capturing = useCapture.getState().phase;
+  if (capturing === 'preparing' || capturing === 'recording' || capturing === 'finishing') return 'busy';
+  if (receiver.status === 'streaming' || receiver.listening || receiver.streamAction) return 'busy';
+
+  const windows: WindowSummary[] = [];
+  try {
+    await setSampleRate(PROBE_SAMPLE_RATE_HZ);
+    const gain = nearestGain(useReceiver.getState().gains, PROBE_GAIN_DB);
+    if (gain === null) return 'no-dongle';
+    await tune(windowsHz[0]);
+    await setGain(gain);
+    await useReceiver.getState().startReceiving();
+    for (const hz of windowsHz) {
+      await tune(hz);
+      await sleep(SETTLE_MS);
+      frameCollector.reset();
+      await sleep(SWEEP_MEASURE_MS);
+      const summary = frameCollector.snapshot();
+      if (summary.frames >= 3) windows.push({ hz, bins: summary.bins, rms: summary.rms, clip: summary.clip });
+    }
+    return windows.length > 0 ? { windows, gainDb: gain } : 'busy';
+  } catch {
+    return 'busy';
+  } finally {
+    try {
+      await useReceiver.getState().stopReceiving();
+    } catch {
+      // Leave the dongle as it is; the Radio tab shows its own errors.
+    }
+  }
+}
+
+/** One radio reading: how much radio energy there is here, across several bands, plus whether NOAA Weather Radio is heard. */
 export async function probeRadio(): Promise<RadioReading | ProbeSkip> {
-  const out = await measureAt(NOAA_TUNE_HZ);
-  return typeof out === 'string' ? out : toReading(out, out.gainDb);
+  const out = await sweep(RADIO_WINDOWS_HZ);
+  if (typeof out === 'string') return out;
+  return combineWindows(out.windows, out.gainDb) ?? 'busy';
 }
 
 /** Listens for a specific radiosonde frequency. */

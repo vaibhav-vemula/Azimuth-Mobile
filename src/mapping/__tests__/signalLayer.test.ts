@@ -140,30 +140,29 @@ describe('vision ring', () => {
   });
 });
 
-describe('radio coverage layer', () => {
+describe('radio signal layer', () => {
   const { addReading, level, legendFor } = require('../signalLayer');
-  const scan = (radio?: { carrier: boolean; peakDb: number }) => ({
+  const scan = (rms?: number) => ({
     cellular: { available: true, cells: [] },
     wifi: { available: true, count: 1 },
-    ...(radio ? { radio: { band: 'noaa', rms: 0.1, clip: 0, gainDb: 28, ...radio } } : {}),
+    ...(rms === undefined ? {} : { radio: { band: 'noaa', peakDb: 0, carrier: false, rms, clip: 0, gainDb: 28 } }),
   });
 
   it('has no colour where the dongle never took a reading', () => {
-    const s = addReading(undefined, scan(), 1);
-    expect(level('radio', s)).toBeNull();
+    expect(level('radio', addReading(undefined, scan(), 1))).toBeNull();
   });
 
-  it('is dark where the weather radio was not heard and bright where it is strong', () => {
-    const quiet = addReading(undefined, scan({ carrier: false, peakDb: 0 }), 1);
-    const loud = addReading(undefined, scan({ carrier: true, peakDb: 30 }), 1);
-    expect(level('radio', quiet)).toBe(0);
-    expect(level('radio', loud)).toBe(1);
+  it('is dark where little radio was measured and bright where there is a lot, with no NOAA needed', () => {
+    expect(level('radio', addReading(undefined, scan(0.001), 1))).toBe(0); // -60 dBFS
+    expect(level('radio', addReading(undefined, scan(0.2), 1))).toBe(1); // -14 dBFS
+    expect(level('radio', addReading(undefined, scan(0.0316), 1))).toBeCloseTo(0.6, 1); // -30 dBFS
   });
 
   it('averages the readings taken in one spot', () => {
-    let s = addReading(undefined, scan({ carrier: true, peakDb: 30 }), 1);
-    s = addReading(s, scan({ carrier: false, peakDb: 0 }), 2);
-    expect(level('radio', s)).toBeCloseTo(0.5, 5);
+    let s = addReading(undefined, scan(0.2), 1);
+    s = addReading(s, scan(0.001), 2);
+    expect(level('radio', s)).toBeGreaterThan(0.2);
+    expect(level('radio', s)).toBeLessThan(0.8);
   });
 
   it('has a legend', () => {

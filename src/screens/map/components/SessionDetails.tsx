@@ -9,6 +9,7 @@ import { useSubmission } from '../../../network/useSubmission';
 import { useWallet } from '../../../wallet/useWallet';
 import { exploredAreaKm2 } from '../../../mapping/explore';
 import { hexCenter, parseCellId } from '../../../mapping/hexGrid';
+import { levelDbfs } from '../../../mapping/radio';
 import { useUnitSystem } from '../../../units/units';
 import { Quality, cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, techLabel } from '../../../mapping/hudFormat';
 
@@ -100,9 +101,9 @@ function LiveStats() {
       <StatCard
         icon="radio"
         color="#4FC3F7"
-        title="Radio (NOAA Weather Radio)"
-        big={!radioEnabled ? 'Off' : !dongle ? 'No dongle' : lastScan?.radio ? (lastScan.radio.carrier ? 'Received' : 'No carrier') : radioStatus === 'skipped' ? 'Busy' : 'Waiting'}
-        bigLabel={lastScan?.radio ? `${lastScan.radio.peakDb.toFixed(0)} dB over the noise · gain ${lastScan.radio.gainDb} dB` : 'needs an RTL-SDR plugged in'}
+        title="Radio signal (RTL-SDR)"
+        big={!radioEnabled ? 'Off' : !dongle ? 'No dongle' : lastScan?.radio ? `${levelDbfs(lastScan.radio.rms).toFixed(0)} dBFS` : radioStatus === 'skipped' ? 'Busy' : 'Waiting'}
+        bigLabel={lastScan?.radio ? `across ${lastScan.radio.windows ?? 1} bands · gain ${lastScan.radio.gainDb} dB` : 'plug an RTL-SDR in, then start mapping'}
         small
       >
         <View style={styles.toggle}>

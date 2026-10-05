@@ -1,5 +1,6 @@
 import type { MappedScan } from './aggregate';
 import { hexCenter, parseCellId } from './hexGrid';
+import { levelDbfs } from './radio';
 
 /**
  * The signal map is drawn on its own grid of 20 m (projected) hexagons, about 16 m across on the ground at Washington,
@@ -29,7 +30,7 @@ export interface CellSignal {
   /** Bluetooth devices seen: sum and number of readings. */
   bs: number;
   bn: number;
-  /** Dongle (NOAA Weather Radio) readings: how many, how many heard a carrier, and the sum of their strength above the noise (dB). */
+  /** Dongle readings: how many, how many heard NOAA Weather Radio, and the sum of their overall radio level (dB below full scale). */
   rn?: number;
   rc?: number;
   rs?: number;
@@ -60,7 +61,7 @@ export function addReading(prev: CellSignal | undefined, scan: MappedScan, now: 
   if (scan.radio) {
     s.rn = (s.rn ?? 0) + 1;
     s.rc = (s.rc ?? 0) + (scan.radio.carrier ? 1 : 0);
-    s.rs = (s.rs ?? 0) + scan.radio.peakDb;
+    s.rs = (s.rs ?? 0) + levelDbfs(scan.radio.rms);
   }
   return s;
 }
@@ -70,8 +71,8 @@ export const CELLULAR_RANGE = { weak: -120, strong: -75 } as const;
 /** Networks or devices at which the density colour is at its maximum. */
 export const WIFI_FULL = 25;
 export const BLUETOOTH_FULL = 30;
-/** NOAA strength above the noise, in dB, at which the radio colour is at its maximum. */
-export const RADIO_FULL_DB = 30;
+/** Overall radio level, in dB below full scale at the fixed gain, at the bottom and top of the colour scale. */
+export const RADIO_RANGE_DBFS = { weak: -45, strong: -20 } as const;
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
@@ -83,7 +84,7 @@ export function level(layer: SignalLayer, s: CellSignal): number | null {
   }
   if (layer === 'wifi') return s.wn > 0 ? clamp01(s.ws / s.wn / WIFI_FULL) : null;
   if (layer === 'bluetooth') return s.bn > 0 ? clamp01(s.bs / s.bn / BLUETOOTH_FULL) : null;
-  if (layer === 'radio') return s.rn ? clamp01(((s.rs ?? 0) / s.rn) / RADIO_FULL_DB) : null;
+  if (layer === 'radio') return s.rn ? clamp01(((s.rs ?? 0) / s.rn - RADIO_RANGE_DBFS.weak) / (RADIO_RANGE_DBFS.strong - RADIO_RANGE_DBFS.weak)) : null;
   return null;
 }
 
@@ -108,7 +109,7 @@ const RAMPS: Record<Exclude<SignalLayer, 'off'>, Stop[]> = {
     [0.5, [90, 150, 240]],
     [1, [255, 128, 171]],
   ],
-  // Radio: dark where the weather radio was not heard, then cyan to bright yellow where it is strong.
+  // Radio: dark where little radio energy was measured, then cyan to bright yellow where there is a lot.
   radio: [
     [0, [38, 58, 110]],
     [0.4, [41, 182, 246]],
@@ -145,7 +146,7 @@ export function legendFor(layer: Exclude<SignalLayer, 'off'>): Legend {
   const ends = (l: Exclude<SignalLayer, 'off'>) => ({ low: toHex(rampColour(l, 0)), high: toHex(rampColour(l, 1)) });
   if (layer === 'cellular') return { title: 'Cellular signal', ...ends(layer), lowLabel: 'No signal', highLabel: 'Strong' };
   if (layer === 'wifi') return { title: 'Wi-Fi networks nearby', ...ends(layer), lowLabel: 'Few', highLabel: 'Many' };
-  if (layer === 'radio') return { title: 'Radio coverage (NOAA Weather Radio)', ...ends(layer), lowLabel: 'Not heard', highLabel: 'Strong' };
+  if (layer === 'radio') return { title: 'Radio signal strength', ...ends(layer), lowLabel: 'Quiet', highLabel: 'Strong' };
   return { title: 'Bluetooth devices nearby', ...ends(layer), lowLabel: 'Few', highLabel: 'Many' };
 }
 

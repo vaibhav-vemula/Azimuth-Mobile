@@ -1,4 +1,4 @@
-import { NOAA_CHANNELS_HZ, analyzeNoaa, nearestGain, noaaBin, toReading } from '../radio';
+import { NOAA_CHANNELS_HZ, analyzeNoaa, nearestGain, noaaBin, NOAA_TUNE_HZ, RADIO_WINDOWS_HZ, combineWindows, levelDbfs } from '../radio';
 import { addScan, emptyBucket, summarize } from '../aggregate';
 import type { ScanResult } from '../../../modules/signal-scan';
 
@@ -52,8 +52,8 @@ describe('radio helpers and aggregation', () => {
     const bins = flat();
     bins[noaaBin(162_475_000)] = 0.6;
     const bucket = emptyBucket('c', 0);
-    addScan(bucket, { ...phone, radio: toReading({ bins, rms: 0.1, clip: 0 }, 28) });
-    addScan(bucket, { ...phone, radio: toReading({ bins: flat(), rms: 0.12, clip: 0 }, 28) });
+    addScan(bucket, { ...phone, radio: combineWindows([{ hz: NOAA_TUNE_HZ, bins, rms: 0.1, clip: 0 }], 28)! });
+    addScan(bucket, { ...phone, radio: combineWindows([{ hz: NOAA_TUNE_HZ, bins: flat(), rms: 0.12, clip: 0 }], 28)! });
     expect(bucket.radio?.samples).toBe(2);
     expect(bucket.radio?.carriers).toBe(1);
     expect(summarize([bucket]).noaaReception).toBe(0.5);
@@ -105,5 +105,38 @@ describe('sonde listening', () => {
   it('builds a reading with the settings used', () => {
     const r = toSondeReading({ bins: flat(), rms: 0.1, clip: 0 }, f, 28);
     expect(r).toMatchObject({ frequencyHz: f, detected: false, gainDb: 28 });
+  });
+});
+
+describe('radio level across bands', () => {
+  const flatBins = new Array(64).fill(0.3);
+
+  it('listens in five windows that include the weather radio one', () => {
+    expect(RADIO_WINDOWS_HZ).toHaveLength(5);
+    expect(RADIO_WINDOWS_HZ).toContain(NOAA_TUNE_HZ);
+  });
+
+  it('turns a raw level into dB below full scale', () => {
+    expect(levelDbfs(1)).toBeCloseTo(0, 5);
+    expect(levelDbfs(0.1)).toBeCloseTo(-20, 5);
+    expect(levelDbfs(0)).toBe(-80);
+  });
+
+  it('combines windows by power, takes the worst clipping, and does not need NOAA to be heard', () => {
+    const r = combineWindows(
+      [
+        { hz: 98_000_000, bins: flatBins, rms: 0.3, clip: 0 },
+        { hz: 751_000_000, bins: flatBins, rms: 0.1, clip: 0.02 },
+      ],
+      28
+    )!;
+    expect(r.rms).toBeCloseTo(Math.sqrt((0.09 + 0.01) / 2), 4);
+    expect(r.clip).toBe(0.02);
+    expect(r.windows).toBe(2);
+    expect(r.carrier).toBe(false);
+  });
+
+  it('gives nothing when no window was measured', () => {
+    expect(combineWindows([], 28)).toBeNull();
   });
 });
