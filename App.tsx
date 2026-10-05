@@ -10,6 +10,7 @@ import { SplashScreen } from './src/screens/onboarding/SplashScreen';
 import { ConnectScreen } from './src/screens/onboarding/ConnectScreen';
 import { useWallet } from './src/wallet/useWallet';
 import { useMapping } from './src/mapping/useMapping';
+import { initBackup } from './src/backup/useBackup';
 
 export default function App() {
   const { fontsLoaded } = useAppFonts();
@@ -23,6 +24,7 @@ export default function App() {
     useCapture.getState().init();
     useWallet.getState().restore();
     useMapping.getState().load();
+    initBackup();
   }, []);
 
   if (!fontsLoaded) {

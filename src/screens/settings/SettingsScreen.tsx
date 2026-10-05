@@ -1,3 +1,4 @@
+import { BackupCard } from './BackupCard';
 import { useUnits } from '../../units/units';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
@@ -56,6 +57,8 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.subtitle}>Location, predictions and storage</Text>
       </View>
+
+      <BackupCard />
 
       <GlassCard style={{ gap: 12 }}>
         <SectionLabel>Units</SectionLabel>

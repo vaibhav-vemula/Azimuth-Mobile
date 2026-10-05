@@ -91,6 +91,26 @@ export function createSupabaseApi(config: { url: string; key: string; fetchImpl?
       return (res.json as Row[]).map(chestFromRow);
     },
 
+    /** Adds an encrypted progress backup. The server cannot read it; see server/supabase/schema_backup.sql. */
+    async putBackup(node: string, tag: string, payload: string): Promise<void> {
+      const res = await call('POST', '/backups', { node, tag, payload }, { prefer: 'return=minimal' });
+      if (res.status === 201 || res.status === 200 || res.status === 204) return;
+      const msg = messageOf(res.json);
+      if (res.status === 404 || /backups/i.test(msg) && /not find|does not exist/i.test(msg)) throw new Error('Backup is not set up on the server yet (run schema_backup.sql in Supabase).');
+      if (/too many|busy/i.test(msg)) throw new Error(msg);
+      if (/violates check/i.test(msg)) throw new Error('The backup is too large to store.');
+      throw new Error(msg || `The server refused the backup (HTTP ${res.status}).`);
+    },
+
+    /** The newest backup for this wallet and tag, or null if there is none. */
+    async fetchBackup(node: string, tag: string): Promise<{ payload: string; createdMs: number } | null> {
+      const res = await call('POST', '/rpc/fetch_backup', { p_node: node, p_tag: tag });
+      if (res.status === 404) throw new Error('Backup is not set up on the server yet (run schema_backup.sql in Supabase).');
+      if (res.status !== 200) throw new Error(messageOf(res.json) || `Could not look for a backup (HTTP ${res.status}).`);
+      const j = res.json as { payload?: string; created_ms?: number } | null;
+      return j && typeof j.payload === 'string' ? { payload: j.payload, createdMs: Number(j.created_ms) || 0 } : null;
+    },
+
     async fetchNodeSummary(address: string): Promise<NodeSummary> {
       const res = await call('POST', '/rpc/node_summary', { p_node: address });
       if (res.status !== 200 || !res.json) throw new Error(messageOf(res.json) || `Could not load earnings (HTTP ${res.status}).`);

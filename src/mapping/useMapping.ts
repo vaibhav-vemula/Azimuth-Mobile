@@ -9,6 +9,7 @@ import type { Report } from '../reports/report';
 import { cellIdAt, distanceM, neighbors, parseCellId, cellId as toCellId } from './hexGrid';
 import type { LatLon } from './hexGrid';
 import { requestMappingPermissions } from './permissions';
+import { Snapshot, mergeSnapshots } from '../backup/snapshot';
 import { ensureDongle, probeRadio, probeSonde } from './radioProbe';
 import { MAX_REVEAL_ACCURACY_M, cellsWithin } from './explore';
 import { stepDistance } from './hudFormat';
@@ -84,6 +85,10 @@ interface MappingState {
   setRadioEnabled: (enabled: boolean) => void;
   setHome: (home: HomeExclusion | null) => void;
   clearFog: () => void;
+  /** The map progress as a snapshot, for backup. */
+  progress: () => Snapshot;
+  /** Merges a backup into this phone's progress (cells are only added). Only when no session is running. */
+  importProgress: (snapshot: Snapshot) => boolean;
   /** Clears the fog around a position. Returns how many new cells were cleared. */
   revealAt: (position: LatLon) => number;
   /** Readings recorded so far this session in or next to the given cell. */
@@ -400,6 +405,21 @@ export const useMapping = create<MappingState>((set, get) => ({
       checks: recorder.checks(),
       chest,
     });
+  },
+
+  progress: () => {
+    const s = get();
+    return { v: 1 as const, savedMs: Date.now(), explored: s.explored, visited: s.visited, signals: s.signals };
+  },
+
+  importProgress: (snapshot) => {
+    if (get().status !== 'idle') return false;
+    const merged = mergeSnapshots(get().progress(), snapshot);
+    saveVisited(merged.visited);
+    saveExplored(merged.explored);
+    saveSignals(merged.signals);
+    set({ visited: merged.visited, explored: merged.explored, signals: merged.signals });
+    return true;
   },
 
   clearFog: () => {

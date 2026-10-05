@@ -99,6 +99,12 @@ function createSupabaseSink({ url, serviceKey, fetchImpl = fetch }) {
     /** Replaces the stored readings for a wallet with a deletion marker. */
     async eraseNode(node) {
       await call('PATCH', `/reports?node=eq.${encodeURIComponent(node)}`, { body: { deleted: true }, summary: {} }, { prefer: 'return=minimal' });
+      // The encrypted progress backups of that wallet go too (the table exists once schema_backup.sql has been run).
+      try {
+        await call('DELETE', `/backups?node=eq.${encodeURIComponent(node)}`, undefined, { prefer: 'return=minimal' });
+      } catch (e) {
+        if (!/HTTP 404/.test(String(e && e.message))) throw e;
+      }
     },
 
     /** Rewards you approved in the dashboard that have not been paid. */

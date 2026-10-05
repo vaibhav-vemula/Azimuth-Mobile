@@ -18,7 +18,7 @@
   <p class="draft"><strong>Draft.</strong> This text describes what the software does. It has not been reviewed by a lawyer, and the contact details and legal sections below must be completed before publication.</p>
 
   <h2>What Azimuth collects</h2>
-  <p>Azimuth collects signal measurements only while you have started a mapping session, a satellite recording, or opened a chest. While mapping, a notification is shown. Separately, while a mapping session is running the app remembers on your phone, and only on your phone, the ground you have walked so that the fog stays cleared, and a local signal map of what your phone measured where. Neither is ever sent anywhere.</p>
+  <p>Azimuth collects signal measurements only while you have started a mapping session, a satellite recording, or opened a chest. While mapping, a notification is shown. Separately, while a mapping session is running the app remembers on your phone, and only on your phone, the ground you have walked so that the fog stays cleared, and a local signal map of what your phone measured where. Neither is part of any report. If you turn on <strong>Back up your map</strong> in Settings, a copy is encrypted on your phone with a key made from your wallet's signature and the scrambled copy is stored for you; we cannot read it. Android's own automatic backup, if it is on for your phone, may also keep a copy of this progress in your Google account.</p>
   <ul>
     <li><strong>Signal measurements</strong>: how many Wi-Fi networks and Bluetooth devices are nearby and how strong they are, the strength and type of cellular signal and the cell tower identifier, GPS signal quality, and, if you plug in a radio dongle, the strength of certain radio signals.</li>
     <li><strong>Place</strong>: your position is converted on your phone into a map cell about 100 metres across. Only the cell, rounded to a 15-minute window, is sent. Your exact position and trail are not sent.</li>
@@ -35,13 +35,13 @@
   </ul>
 
   <h2>Where it is stored</h2>
-  <p>Your fog map and trail are stored only on your phone. Reports are sent to the Azimuth verifier, which stores them to check them, to pay rewards and to build a coverage map in which places are shown at cell level. Reward payments are public on the Solana blockchain.</p>
+  <p>Your fog map and trail are stored on your phone, and, only if you turn on backup, as an encrypted copy that only your wallet can open. Reports are sent to the Azimuth verifier, which stores them to check them, to pay rewards and to build a coverage map in which places are shown at cell level. Reward payments are public on the Solana blockchain.</p>
 
   <h2>Your choices</h2>
   <ul>
     <li>Mapping is off until you start it. You can stop at any time.</li>
     <li>Set a home exclusion zone so nothing is recorded near your home.</li>
-    <li>In Profile, <strong>Erase fog map on this phone</strong> clears local history, and <strong>Delete my data from the network</strong> erases the readings and places held for your wallet. The request is signed by your wallet.</li>
+    <li>In Profile, <strong>Erase fog map on this phone</strong> clears local history, and <strong>Delete my data from the network</strong> erases the readings and places held for your wallet, and any encrypted map backup. The request is signed by your wallet.</li>
     <li>Information that is kept after deletion: report fingerprints (to stop replays), chest claim records, the link between a Seeker and a wallet (to stop one device acting as many), and the earnings ledger. These contain no readings or places. [Retention period to be stated.]</li>
   </ul>
 
