@@ -1,4 +1,4 @@
-import { cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatWalked, stepDistance } from '../hudFormat';
+import { cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, stepDistance, techLabel } from '../hudFormat';
 
 describe('time', () => {
   it('shows minutes and seconds, then hours', () => {
@@ -47,5 +47,14 @@ describe('distance walked', () => {
     expect(stepDistance(14, 10)).toBe(14);
     expect(stepDistance(900, 5)).toBe(0); // 180 m/s
     expect(stepDistance(NaN, 5)).toBe(0);
+  });
+});
+
+describe('tower labels', () => {
+  it('names the technologies and formats the network code', () => {
+    expect(['lte', 'nr', 'wcdma', 'gsm', 'cdma'].map(techLabel)).toEqual(['4G LTE', '5G', '3G', '2G', 'CDMA']);
+    expect(formatPlmn('310260')).toBe('310-260');
+    expect(formatPlmn('31026')).toBe('310-26');
+    expect(formatPlmn('')).toBe('unknown network');
   });
 });

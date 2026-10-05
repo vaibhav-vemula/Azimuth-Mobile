@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { Animated, PanResponder, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { colors } from '../../../theme';
+import { Animated, Easing, PanResponder, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, typography } from '../../../theme';
 
 const HANDLE_H = 26;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -17,13 +18,15 @@ interface Props {
   openFraction?: number;
   /** Tells the screen how tall the collapsed sheet is, so other controls can sit above it. */
   onCollapsedHeight?: (height: number) => void;
+  /** Raise this number to make the sheet rise part of the way for a moment, to show there is more under it. */
+  peekSignal?: number;
 }
 
 /**
  * A bottom sheet that rests as a small bar and is swiped up for the full contents, like a maps app. Drag the handle up or
  * down, or tap it to toggle. The header (including the main button) stays in view.
  */
-export function MapSheet({ open, onOpenChange, header, children, openFraction = 0.62, onCollapsedHeight }: Props) {
+export function MapSheet({ open, onOpenChange, header, children, openFraction = 0.62, onCollapsedHeight, peekSignal = 0 }: Props) {
   const { height: screenH } = useWindowDimensions();
   const openH = Math.round(screenH * openFraction);
   const [headerH, setHeaderH] = useState(120);
@@ -39,6 +42,11 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
   openRef.current = open;
   changeRef.current = onOpenChange;
 
+  /** How far to rise when peeking: enough to show the first rows of the contents. */
+  const peekRise = Math.min(Math.max(0, openH - collapsedH), 250);
+  const peekRef = useRef(peekRise);
+  peekRef.current = peekRise;
+
   const settle = (toOpen: boolean) => {
     Animated.spring(ty, { toValue: toOpen ? 0 : offsetRef.current, useNativeDriver: true, bounciness: 3, speed: 14 }).start();
   };
@@ -46,6 +54,21 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
   // Follow the prop (for example when a session ends and the summary should show) and the measured height.
   useEffect(() => settle(open), [open, offset]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onCollapsedHeight?.(collapsedH), [collapsedH, onCollapsedHeight]);
+
+  // A short peek: rise, wait, settle back, unless the player has taken over by then.
+  const firstSignal = useRef(true);
+  useEffect(() => {
+    if (firstSignal.current) {
+      firstSignal.current = false;
+      return;
+    }
+    if (openRef.current || peekSignal === 0) return;
+    Animated.sequence([
+      Animated.timing(ty, { toValue: Math.max(0, offsetRef.current - peekRef.current), duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.delay(2600),
+      Animated.timing(ty, { toValue: offsetRef.current, duration: 520, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, [peekSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pan = useRef(
     PanResponder.create({
@@ -106,4 +129,32 @@ const styles = StyleSheet.create({
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.surfaceBorder },
   body: { flex: 1 },
   bodyContent: { paddingHorizontal: 14, paddingBottom: 24, gap: 12 },
+});
+
+/** A small chevron that bobs upward with a line of text, to show that the sheet can be pulled up. */
+export function SwipeHint({ text }: { text: string }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(t, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(t, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <View style={hintStyles.row} pointerEvents="none">
+      <Animated.View style={{ transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [2, -3] }) }] }}>
+        <Ionicons name="chevron-up" size={16} color={colors.accent} />
+      </Animated.View>
+      <Text style={hintStyles.text}>{text}</Text>
+    </View>
+  );
+}
+
+const hintStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  text: { ...typography.caption, color: colors.accent },
 });

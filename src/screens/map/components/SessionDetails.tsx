@@ -9,8 +9,7 @@ import { useSubmission } from '../../../network/useSubmission';
 import { useWallet } from '../../../wallet/useWallet';
 import { exploredAreaKm2 } from '../../../mapping/explore';
 import { hexCenter, parseCellId } from '../../../mapping/hexGrid';
-import { Quality, cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatWalked } from '../../../mapping/hudFormat';
-import { useElapsed } from '../../../mapping/useElapsed';
+import { Quality, cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, techLabel } from '../../../mapping/hudFormat';
 
 const QUALITY_COLOR: Record<Quality, string> = {
   none: colors.danger,
@@ -28,26 +27,26 @@ export function SessionDetails() {
 }
 
 function LiveStats() {
-  const startedAtMs = useMapping((s) => s.startedAtMs);
   const cleared = useMapping((s) => s.sessionClearedCells);
   const walked = useMapping((s) => s.sessionDistanceM);
   const scans = useMapping((s) => s.scansThisSession);
   const newCells = useMapping((s) => s.newCellsThisSession);
+  const totals = useMapping((s) => s.sessionTotals);
   const lastScan = useMapping((s) => s.lastScan);
   const radioEnabled = useMapping((s) => s.radioEnabled);
   const radioStatus = useMapping((s) => s.radioStatus);
   const setRadioEnabled = useMapping((s) => s.setRadioEnabled);
   const cell = useMapping((s) => s.currentCellId);
   const dongle = useReceiver((s) => s.status !== 'disconnected' && s.status !== 'error');
-  const elapsed = useElapsed(startedAtMs);
 
-  const best = lastScan?.cellular.cells.length ? Math.max(...lastScan.cellular.cells.map((c) => c.dbm)) : null;
-  const quality = cellularQuality(best);
-  const bars = cellularBars(best);
   const parsed = cell ? parseCellId(cell) : null;
   const lat = parsed ? hexCenter(parsed.hex, parsed.sizeM).latitudeDeg : 38.9;
   const area = formatAreaParts(exploredAreaKm2(cleared, lat));
   const dist = formatWalked(walked);
+
+  const best = lastScan?.cellular.cells.length ? Math.max(...lastScan.cellular.cells.map((c) => c.dbm)) : null;
+  const quality = cellularQuality(best);
+  const techs = (['nr', 'lte', 'wcdma', 'gsm'] as const).filter((t) => totals.towersByTech[t] > 0);
 
   return (
     <>
@@ -58,36 +57,60 @@ function LiveStats() {
         <Tile value={String(newCells)} label="New cells" />
       </View>
 
-      <View style={styles.headRow}>
-        <SectionLabel>Live signals</SectionLabel>
-        <Text style={styles.note}>Session {formatElapsed(elapsed)}</Text>
-      </View>
-      <View style={styles.signals}>
-        <Signal
-          label="Cellular"
-          value={lastScan?.cellular.available ? (best === null ? 'No signal' : `${Math.round(best)} dBm`) : 'No access'}
-          sub={lastScan ? `${lastScan.cellular.cells.length} ${lastScan.cellular.cells.length === 1 ? 'cell' : 'cells'}` : undefined}
-          color={QUALITY_COLOR[quality]}
-          visual={<Bars count={bars} color={QUALITY_COLOR[quality]} />}
+      <StatCard icon="cellular" color={QUALITY_COLOR[quality]} title="Cell towers" big={String(totals.towers)} bigLabel={totals.towers === 1 ? 'tower heard' : 'different towers heard'}>
+        {techs.length > 0 ? (
+          <View style={styles.chips}>
+            {techs.map((t) => (
+              <View key={t} style={styles.chip}>
+                <Text style={styles.chipText}>
+                  {techLabel(t)} · {totals.towersByTech[t]}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <Row label="Connected to" value={totals.serving ? `${techLabel(totals.serving.tech)} · channel ${totals.serving.channel}` : lastScan?.cellular.available ? 'No signal right now' : 'No access'} />
+        {totals.serving ? <Row label="Network" value={formatPlmn(totals.serving.plmn)} /> : null}
+        <Row
+          label="Signal now"
+          value={best === null ? '—' : `${Math.round(best)} dBm`}
+          right={<Bars count={cellularBars(best)} color={QUALITY_COLOR[quality]} />}
         />
-        <Signal icon="wifi-outline" label="Wi-Fi" value={lastScan?.wifi.available ? `${lastScan.wifi.count ?? 0} networks` : 'No access'} sub={lastScan?.wifi.strongestDbm != null ? `strongest ${Math.round(lastScan.wifi.strongestDbm)} dBm` : undefined} color="#B388FF" />
-        <Signal icon="bluetooth-outline" label="Bluetooth" value={lastScan?.bluetooth?.available ? `${lastScan.bluetooth.count ?? 0} devices` : lastScan ? 'Next scan soon' : '—'} color="#FF80AB" />
-        <Signal icon="navigate-outline" label="GPS" value={lastScan?.gnss.used != null ? `${lastScan.gnss.used} satellites` : '—'} sub={lastScan?.gnss.avgCn0Used != null ? `${lastScan.gnss.avgCn0Used.toFixed(0)} dB-Hz` : undefined} color={colors.accent} />
-        <Signal
-          icon="radio-outline"
-          label="Radio (NOAA)"
-          value={!radioEnabled ? 'Off' : !dongle ? 'No dongle' : lastScan?.radio ? (lastScan.radio.carrier ? `Received · ${lastScan.radio.peakDb.toFixed(0)} dB` : 'No carrier') : radioStatus === 'skipped' ? 'Busy, retrying' : 'Next reading soon'}
-          sub={lastScan?.radio ? `gain ${lastScan.radio.gainDb} dB` : undefined}
-          color="#4FC3F7"
-        />
-      </View>
+        <Row label="Session range" value={totals.cellularMin === null ? '—' : `${Math.round(totals.cellularMin)} to ${Math.round(totals.cellularMax ?? 0)} dBm (avg ${Math.round(totals.cellularAvg ?? 0)})`} />
+        <Row label="Dead spots" value={`${totals.deadReadings} ${totals.deadReadings === 1 ? 'reading' : 'readings'} with no signal`} />
+      </StatCard>
 
-      <View style={styles.toggle}>
-        <Text style={styles.toggleText}>Take dongle readings when an RTL-SDR is plugged in</Text>
-        <Switch value={radioEnabled} onValueChange={setRadioEnabled} trackColor={{ true: colors.accent, false: colors.surfaceBorder }} />
-      </View>
+      <StatCard icon="wifi" color="#B388FF" title="Wi-Fi" big={String(totals.wifiUnique)} bigLabel={totals.wifiUnique === 1 ? 'network seen' : 'different networks seen'}>
+        <Row label="Around you now" value={lastScan?.wifi.available ? `${totals.wifiNow}` : 'No access'} />
+        <Row label="Bands now" value={`2.4 GHz ${totals.wifiBands.ghz24} · 5 GHz ${totals.wifiBands.ghz5} · 6 GHz ${totals.wifiBands.ghz6}`} />
+        <Row label="Strongest this session" value={totals.wifiStrongestDbm === null ? '—' : `${Math.round(totals.wifiStrongestDbm)} dBm`} />
+      </StatCard>
+
+      <StatCard icon="bluetooth" color="#FF80AB" title="Bluetooth" big={String(totals.bluetoothUnique)} bigLabel={totals.bluetoothUnique === 1 ? 'device seen' : 'different devices seen'}>
+        <Row label="Around you now" value={lastScan?.bluetooth?.available ? `${totals.bluetoothNow}` : lastScan ? 'Next scan soon' : '—'} />
+        <Row label="Most at once" value={String(totals.bluetoothPeak)} />
+      </StatCard>
+
+      <StatCard icon="navigate" color={colors.accent} title="GPS" big={totals.gpsUsed === null ? '—' : String(totals.gpsUsed)} bigLabel="satellites in use">
+        <Row label="Best signal" value={totals.gpsBestCn0 === null ? '—' : `${totals.gpsBestCn0.toFixed(0)} dB-Hz`} />
+      </StatCard>
+
+      <StatCard
+        icon="radio"
+        color="#4FC3F7"
+        title="Radio (NOAA Weather Radio)"
+        big={!radioEnabled ? 'Off' : !dongle ? 'No dongle' : lastScan?.radio ? (lastScan.radio.carrier ? 'Received' : 'No carrier') : radioStatus === 'skipped' ? 'Busy' : 'Waiting'}
+        bigLabel={lastScan?.radio ? `${lastScan.radio.peakDb.toFixed(0)} dB over the noise · gain ${lastScan.radio.gainDb} dB` : 'needs an RTL-SDR plugged in'}
+        small
+      >
+        <View style={styles.toggle}>
+          <Text style={styles.toggleText}>Take dongle readings when an RTL-SDR is plugged in</Text>
+          <Switch value={radioEnabled} onValueChange={setRadioEnabled} trackColor={{ true: colors.accent, false: colors.surfaceBorder }} />
+        </View>
+      </StatCard>
+
       <Text style={styles.note}>
-        A reading is taken about every {Math.round(SCAN_INTERVAL_MS / 1000)} seconds, and the fog clears as you walk. Android limits Wi-Fi scans, so some readings reuse the last result. Only counts and signal levels are kept, never network names or device addresses.
+        A reading is taken about every {Math.round(SCAN_INTERVAL_MS / 1000)} seconds, and the fog clears as you walk. Android limits Wi-Fi scans, so some readings reuse the last result. Different networks and devices are counted without keeping their names or addresses, and those counts stay on your phone.
       </Text>
     </>
   );
@@ -142,6 +165,38 @@ function LastSession() {
   );
 }
 
+function StatCard({ icon, color, title, big, bigLabel, small, children }: { icon: keyof typeof Ionicons.glyphMap; color: string; title: string; big: string; bigLabel: string; small?: boolean; children?: React.ReactNode }) {
+  return (
+    <View style={styles.statCard}>
+      <View style={styles.statHead}>
+        <View style={[styles.statIcon, { backgroundColor: `${color}22` }]}>
+          <Ionicons name={icon} size={18} color={color} />
+        </View>
+        <Text style={styles.statTitle}>{title.toUpperCase()}</Text>
+      </View>
+      <View style={styles.bigRow}>
+        <Text style={[styles.big, small && styles.bigSmall, { color }]}>{big}</Text>
+        <Text style={styles.bigLabel}>{bigLabel}</Text>
+      </View>
+      {children ? <View style={styles.statBody}>{children}</View> : null}
+    </View>
+  );
+}
+
+function Row({ label, value, right }: { label: string; value: string; right?: React.ReactNode }) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.rowValueBox}>
+        <Text style={styles.rowValue} numberOfLines={2}>
+          {value}
+        </Text>
+        {right}
+      </View>
+    </View>
+  );
+}
+
 function Tile({ value, unit, label, accent }: { value: string; unit?: string; label: string; accent?: boolean }) {
   return (
     <View style={[styles.tile, accent && styles.tileAccent]}>
@@ -189,6 +244,22 @@ const styles = StyleSheet.create({
   tileUnit: { ...typography.caption, color: colors.textSecondary },
   tileLabel: { ...typography.label, fontSize: 10, color: colors.textTertiary },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statCard: { backgroundColor: 'rgba(255,255,255,0.045)', borderRadius: 18, padding: 14, gap: 10, borderColor: colors.surfaceBorder, borderWidth: 1 },
+  statHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  statTitle: { ...typography.label, color: colors.textSecondary },
+  bigRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+  big: { ...typography.display, fontSize: 38, fontVariant: ['tabular-nums'], lineHeight: 44 },
+  bigSmall: { fontSize: 24, lineHeight: 30 },
+  bigLabel: { ...typography.caption, color: colors.textSecondary, flexShrink: 1 },
+  statBody: { gap: 8, borderTopColor: colors.surfaceBorder, borderTopWidth: StyleSheet.hairlineWidth * 2, paddingTop: 10 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
+  chipText: { ...typography.caption, color: colors.textPrimary },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  rowLabel: { ...typography.caption, color: colors.textSecondary, flexShrink: 0 },
+  rowValueBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+  rowValue: { ...typography.caption, color: colors.textPrimary, textAlign: 'right', flexShrink: 1 },
   signals: { gap: 8 },
   signal: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 10 },
   signalIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

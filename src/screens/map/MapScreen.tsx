@@ -11,7 +11,8 @@ import { SessionDetails } from './components/SessionDetails';
 import { SignalChips, SignalLegend } from './components/SignalControls';
 import { SignalLayer, signalPoints } from '../../mapping/signalLayer';
 import { Sheet } from './components/Sheet';
-import { MapSheet } from './components/MapSheet';
+import { MapSheet, SwipeHint } from './components/MapSheet';
+import { MiniStats, SheetTimer } from './components/SheetHeaderParts';
 import { ChestCard } from '../chests/ChestCard';
 import { hexCenter, parseCellId } from '../../mapping/hexGrid';
 import type { LatLon } from '../../mapping/hexGrid';
@@ -20,8 +21,6 @@ import { nearestOf } from '../../mapping/geo';
 import { ChestARView } from '../../ar/ChestARView';
 import { chestPoint } from '../../ar/orientation';
 import { exploredAreaKm2, formatArea } from '../../mapping/explore';
-import { formatElapsed } from '../../mapping/hudFormat';
-import { useElapsed } from '../../mapping/useElapsed';
 import { useMapping } from '../../mapping/useMapping';
 import { useDevicePose } from '../../mapping/useDevicePose';
 import { useChests } from '../../network/useChests';
@@ -62,8 +61,8 @@ export default function MapScreen() {
   const [arChest, setArChest] = useState<Chest | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetHeight, setSheetHeight] = useState(150);
-  const startedAtMs = useMapping((s) => s.startedAtMs);
-  const elapsed = useElapsed(startedAtMs);
+  const [peekSignal, setPeekSignal] = useState(0);
+  const [sheetSeen, setSheetSeen] = useState(false);
   const [selected, setSelected] = useState<Chest | null>(null);
   const [following, setFollowing] = useState(true);
   const [layer, setLayer] = useState<SignalLayer>('cellular');
@@ -124,7 +123,10 @@ export default function MapScreen() {
       if (!report && address) Alert.alert('Nothing recorded', 'No usable readings were collected this time.');
       else if (report) setSheetOpen(true);
     } else {
-      await start();
+      setSheetSeen(false);
+      const ok = await start();
+      // Show there is more under the bar: the sheet rises for a moment.
+      if (ok) setPeekSignal((n) => n + 1);
     }
   }, [running, stop, start, address]);
 
@@ -263,8 +265,12 @@ export default function MapScreen() {
       {/* Mapping sheet: a small bar with the timer and the main button; swipe it up for the full stats */}
       <MapSheet
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(o) => {
+          setSheetOpen(o);
+          if (o) setSheetSeen(true);
+        }}
         onCollapsedHeight={setSheetHeight}
+        peekSignal={peekSignal}
         header={
           <View style={styles.sheetHeader}>
             <View style={styles.sheetTitleRow}>
@@ -273,7 +279,7 @@ export default function MapScreen() {
                   <View style={styles.sheetDot} />
                   <Text style={styles.liveLabel}>MAPPING</Text>
                   <Text style={styles.sheetStat}>{areaLabelSession}</Text>
-                  <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
+                  <SheetTimer />
                 </>
               ) : (
                 <>
@@ -284,6 +290,8 @@ export default function MapScreen() {
                 </>
               )}
             </View>
+            {running ? <MiniStats /> : null}
+            {running && !sheetSeen && !sheetOpen ? <SwipeHint text="Swipe up for all your stats" /> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Button
               label={running ? 'Stop mapping' : 'Start mapping'}

@@ -46,3 +46,15 @@ export function stepDistance(metres: number, secondsApart: number): number {
   if (secondsApart > 0 && metres / secondsApart > 70) return 0; // faster than any vehicle we map from: a bad fix
   return metres;
 }
+
+const TECH_NAMES: Record<string, string> = { lte: '4G LTE', nr: '5G', wcdma: '3G', gsm: '2G' };
+
+/** "4G LTE", "5G", "3G", "2G"; anything unknown is shown as it came. */
+export function techLabel(tech: string): string {
+  return TECH_NAMES[tech] ?? tech.toUpperCase();
+}
+
+/** The mobile network's code as "310-260" (country and network), which is how it is usually written. */
+export function formatPlmn(plmn: string): string {
+  return /^\d{5,6}$/.test(plmn) ? `${plmn.slice(0, 3)}-${plmn.slice(3)}` : plmn || 'unknown network';
+}
