@@ -34,7 +34,7 @@ export const useChests = create<ChestsState>((set, get) => ({
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   },
-  addTestChest: (position, metresNorth = 6) => {
+  addTestChest: (position, metresNorth = 12) => {
     const at = { latitudeDeg: position.latitudeDeg + metresNorth / METRES_PER_DEGREE, longitudeDeg: position.longitudeDeg };
     const chest: Chest = {
       id: `test-${Date.now()}`,

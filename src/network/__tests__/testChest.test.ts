@@ -15,8 +15,8 @@ describe('the test chest', () => {
     expect(chest.spec.minSamples).toBe(1);
     expect(chest.cellId).toMatch(/^h\d+:-?\d+:-?\d+$/);
     const at = { latitudeDeg: chest.spec.lat!, longitudeDeg: chest.spec.lon! };
-    expect(distanceM(HERE, at)).toBeGreaterThan(5);
-    expect(distanceM(HERE, at)).toBeLessThan(7);
+    expect(distanceM(HERE, at)).toBeGreaterThan(11);
+    expect(distanceM(HERE, at)).toBeLessThan(13);
     expect(at.longitudeDeg).toBe(HERE.longitudeDeg);
   });
 
