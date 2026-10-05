@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
+import { addOrientationListener, startOrientation, stopOrientation } from '../../modules/signal-scan';
+import { smoothAngleDeg, walkingHeadingDeg } from '../ar/orientation';
 import type { LatLon } from './hexGrid';
+
+/** The heading is refreshed this often (the sensor reports about 60 times a second; a screen needs far fewer). */
+const HEADING_INTERVAL_MS = 50;
+/** How much of each new reading is taken: lower is steadier, higher follows a turn faster. */
+const HEADING_SMOOTHING = 0.35;
 
 export type LocationPermission = 'unknown' | 'granted' | 'denied';
 
@@ -9,7 +16,7 @@ export interface DevicePose {
   accuracyM: number | null;
   /** The phone reported this position as a mock location. */
   mocked: boolean;
-  /** Compass heading in degrees from true north, when the phone has a compass. */
+  /** The direction you are facing, in degrees from true north, however you hold the phone. Null without a compass. */
   heading: number | null;
   permission: LocationPermission;
   request: () => Promise<void>;
@@ -20,11 +27,14 @@ export interface DevicePose {
  * and it stops when `active` is false (for example when the Map tab is not showing).
  */
 export function useDevicePose(active: boolean): DevicePose {
+  /** True once the rotation sensor is delivering, so the older compass reading is not needed. */
+  const sensorHeadingRef = useRef(false);
   const [permission, setPermission] = useState<LocationPermission>('unknown');
   const [position, setPosition] = useState<LatLon | null>(null);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [mocked, setMocked] = useState(false);
+  const hasFix = position !== null;
 
   const request = useCallback(async () => {
     const result = await Location.requestForegroundPermissionsAsync();
@@ -60,10 +70,15 @@ export function useDevicePose(active: boolean): DevicePose {
           setAccuracyM(loc.coords.accuracy);
           setMocked(loc.mocked === true);
         });
-        headSub = await Location.watchHeadingAsync((h) => {
-          const value = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
-          setHeading(Number.isFinite(value) ? value : null);
-        });
+        // The older compass reading is only a fallback for phones without a rotation sensor; it is unreliable when the
+        // phone is held upright.
+        if (!sensorHeadingRef.current) {
+          headSub = await Location.watchHeadingAsync((h) => {
+            if (sensorHeadingRef.current) return;
+            const value = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
+            setHeading(Number.isFinite(value) ? value : null);
+          });
+        }
       } catch {
         // No fix yet, or no compass: the map simply shows less.
       }
@@ -79,6 +94,34 @@ export function useDevicePose(active: boolean): DevicePose {
       headSub?.remove();
     };
   }, [active, permission]);
+
+  // Heading from the rotation sensor: follows the phone as you turn it, flat or upright.
+  const latest = useRef<LatLon | null>(null);
+  latest.current = position;
+  useEffect(() => {
+    if (!active || permission !== 'granted' || !hasFix || !latest.current) return;
+    let cancelled = false;
+    let last = 0;
+    let smoothed: number | null = null;
+    const sub = addOrientationListener((e) => {
+      const now = Date.now();
+      if (now - last < HEADING_INTERVAL_MS) return;
+      last = now;
+      smoothed = smoothAngleDeg(smoothed, walkingHeadingDeg({ w: e.w, x: e.x, y: e.y, z: e.z }, e.declinationDeg), HEADING_SMOOTHING);
+      sensorHeadingRef.current = true;
+      setHeading(smoothed);
+    });
+    startOrientation(latest.current.latitudeDeg, latest.current.longitudeDeg).catch(() => {
+      if (!cancelled) {
+        sensorHeadingRef.current = false;
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+      void stopOrientation().catch(() => undefined);
+    };
+  }, [active, permission, hasFix]);
 
   return { position, accuracyM, mocked, heading, permission, request };
 }

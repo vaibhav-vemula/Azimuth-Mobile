@@ -3,7 +3,7 @@ import renderer, { act } from 'react-test-renderer';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
-import { NearestChestCard, ARRIVED_M } from '../components/NearestChestCard';
+import { ARRIVED_M, ChestCompass } from '../components/ChestCompass';
 import { DirectionArrow } from '../components/DirectionArrow';
 import type { Chest } from '../../../network/api';
 
@@ -15,41 +15,43 @@ function text(node: renderer.ReactTestRenderer): string {
     n.children.forEach((c) => (typeof c === 'string' ? out.push(c) : walk(c)));
   };
   walk(node.root);
-  return out.join('');
+  return out.join('|');
 }
 
-function render(props: Partial<React.ComponentProps<typeof NearestChestCard>> = {}) {
+function render(props: Partial<React.ComponentProps<typeof ChestCompass>> = {}) {
   let tree!: renderer.ReactTestRenderer;
   act(() => {
-    tree = renderer.create(<NearestChestCard chest={chest} distanceM={420} bearingDeg={90} headingDeg={0} mappingRunning={false} onPress={() => undefined} {...props} />);
+    tree = renderer.create(<ChestCompass chest={chest} distanceM={420} bearingDeg={90} headingDeg={0} onPress={() => undefined} onAr={() => undefined} {...props} />);
   });
   return tree;
 }
 
-describe('NearestChestCard', () => {
-  it('shows the chest, how far it is, the reward and which way to go', () => {
+describe('ChestCompass', () => {
+  it('shows only an arrow, how far it is, which way, and the reward', () => {
     const t = text(render());
-    expect(t).toContain('Wi-Fi at Main St Cafe');
     expect(t).toContain('420 m');
-    expect(t).toContain('0.5 USDC');
     expect(t).toContain('E');
-    expect(t).toContain('follow the arrow');
+    expect(t).toContain('0.5');
+    expect(t).not.toContain('Wi-Fi at Main St Cafe'); // compact: no title
   });
 
-  it('says so when there is no compass', () => {
-    expect(text(render({ headingDeg: null }))).toContain('north-up');
-  });
-
-  it('tells you to start mapping when you arrive without it, and to keep going when mapping', () => {
-    expect(text(render({ distanceM: ARRIVED_M - 10 }))).toContain('Start mapping to take the readings');
-    expect(text(render({ distanceM: ARRIVED_M - 10, mappingRunning: true }))).toContain('Keep mapping');
+  it('says you are there once you arrive', () => {
+    expect(text(render({ distanceM: ARRIVED_M - 10 }))).toContain('You are here');
   });
 
   it('is pressable', () => {
     const onPress = jest.fn();
     const t = render({ onPress });
-    act(() => t.root.findByProps({ accessibilityRole: 'button' }).props.onPress());
+    act(() => t.root.findByProps({ accessibilityLabel: 'Nearest chest: Wi-Fi at Main St Cafe' }).props.onPress());
     expect(onPress).toHaveBeenCalled();
+  });
+
+  it('offers the camera only when the chest is within AR range', () => {
+    expect(render({ distanceM: 420 }).root.findAllByProps({ accessibilityLabel: 'Find the chest in AR' })).toHaveLength(0);
+    const onAr = jest.fn();
+    const near = render({ distanceM: 45, onAr });
+    act(() => near.root.findByProps({ accessibilityLabel: 'Find the chest in AR' }).props.onPress());
+    expect(onAr).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -61,8 +63,7 @@ describe('DirectionArrow', () => {
         t = renderer.create(<DirectionArrow bearingDeg={90} headingDeg={heading} />);
       });
       const rotating = t.root.findAll((n) => Array.isArray(n.props?.style?.transform) || false);
-      const rot = rotating.map((n) => n.props.style.transform?.[0]?.rotate).find(Boolean) as string;
-      return rot;
+      return rotating.map((n) => n.props.style.transform?.[0]?.rotate).find(Boolean) as string;
     };
     expect(rotationOf(0)).toBe('90deg');
     expect(rotationOf(90)).toBe('0deg');

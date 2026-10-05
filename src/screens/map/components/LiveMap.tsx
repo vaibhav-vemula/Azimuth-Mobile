@@ -55,8 +55,6 @@ interface Props {
   /** Points tinted by measured signal, drawn as soft glows on mapped ground. */
   signal: GeoJSON.FeatureCollection<GeoJSON.Point>;
   fogStyle: FogStyle;
-  /** Straight line from the user to this place. */
-  routeTo: LatLon | null;
   following: boolean;
   onFollowingChange: (following: boolean) => void;
   onChestPress: (chest: Chest) => void;
@@ -68,9 +66,9 @@ const lngLat = (p: LatLon): [number, number] => [p.longitudeDeg, p.latitudeDeg];
 
 /**
  * The home map: a real street map under a layer of fog. Ground you have walked is cleared, with a soft edge where
- * the fog begins. Chests sit on top; the nearest one has a dashed line from you.
+ * the fog begins. Chests sit on top; 
  */
-export function LiveMap({ position, headingDeg, explored, chests, nearestId, signal, fogStyle, routeTo, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
+export function LiveMap({ position, headingDeg, explored, chests, nearestId, signal, fogStyle, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
   const camera = useRef<CameraRef>(null);
   const firstFix = useRef(true);
   const mapStyle = useMapStyle(onLoadState);
@@ -81,11 +79,6 @@ export function LiveMap({ position, headingDeg, explored, chests, nearestId, sig
     () => (position ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: circleRing(position, VISION_RADIUS_M) } } : null),
     [position]
   );
-  const route = useMemo<GeoJSON.Feature<GeoJSON.LineString> | null>(
-    () => (position && routeTo ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [lngLat(position), lngLat(routeTo)] } } : null),
-    [position, routeTo]
-  );
-
   useImperativeHandle(
     ref,
     () => ({
@@ -178,13 +171,6 @@ export function LiveMap({ position, headingDeg, explored, chests, nearestId, sig
         {vision ? (
           <GeoJSONSource id="vision" data={vision}>
             <Layer id="vision-ring" type="line" paint={{ 'line-color': RIM, 'line-width': 1.2, 'line-opacity': 0.55, 'line-dasharray': [2, 3] }} />
-          </GeoJSONSource>
-        ) : null}
-
-        {route ? (
-          <GeoJSONSource id="route" data={route}>
-            <Layer id="route-glow" type="line" layout={{ 'line-cap': 'round' }} paint={{ 'line-color': colors.warning, 'line-width': 9, 'line-blur': 8, 'line-opacity': 0.35 }} />
-            <Layer id="route-line" type="line" layout={{ 'line-cap': 'round' }} paint={{ 'line-color': colors.warning, 'line-width': 3, 'line-dasharray': [1.2, 2] }} />
           </GeoJSONSource>
         ) : null}
 

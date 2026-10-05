@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui';
 import { colors, typography } from '../../theme';
 import { LiveMap, LiveMapHandle, MapChest, MapLoadState } from './components/LiveMap';
-import { NearestChestCard } from './components/NearestChestCard';
+import { ChestCompass } from './components/ChestCompass';
 import { SessionDetails } from './components/SessionDetails';
 import { SignalChips, SignalLegend } from './components/SignalControls';
 import { SignalLayer, signalPoints } from '../../mapping/signalLayer';
@@ -16,6 +16,8 @@ import { hexCenter, parseCellId } from '../../mapping/hexGrid';
 import type { LatLon } from '../../mapping/hexGrid';
 import { distanceM } from '../../mapping/hexGrid';
 import { nearestOf } from '../../mapping/geo';
+import { ChestARView } from '../../ar/ChestARView';
+import { chestPoint } from '../../ar/orientation';
 import { MAX_REVEAL_ACCURACY_M, exploredAreaKm2, formatArea } from '../../mapping/explore';
 import { useMapping } from '../../mapping/useMapping';
 import { useDevicePose } from '../../mapping/useDevicePose';
@@ -55,6 +57,7 @@ export default function MapScreen() {
   const refreshChests = useChests((s) => s.refresh);
 
   const [panel, setPanel] = useState<Panel>('none');
+  const [arChest, setArChest] = useState<Chest | null>(null);
   const [selected, setSelected] = useState<Chest | null>(null);
   const [following, setFollowing] = useState(true);
   const [layer, setLayer] = useState<SignalLayer>('cellular');
@@ -96,14 +99,18 @@ export default function MapScreen() {
   const exploredSet = useMemo(() => new Set(Object.keys(explored)), [explored]);
   const areaLabel = useMemo(() => formatArea(exploredAreaKm2(exploredSet.size, here?.latitudeDeg ?? 38.9)), [exploredSet, here]);
 
+  // Chests are only shown while mapping is on.
   const mapChests = useMemo<MapChest[]>(
     () =>
-      chests.flatMap((chest) => {
+      !running
+        ? []
+        : chests.flatMap((chest) => {
         const parsed = parseCellId(chest.cellId);
         if (!parsed || chest.remaining <= 0 || chest.expiresMs <= Date.now()) return [];
-        return [{ chest, position: hexCenter(parsed.hex, parsed.sizeM) }];
+        // Exact coordinates when the requester gave them; otherwise the centre of the chest's cell.
+        return [{ chest, position: chestPoint(chest.spec, hexCenter(parsed.hex, parsed.sizeM)) }];
       }),
-    [chests]
+    [chests, running]
   );
 
   const nearest = useMemo(() => (here ? nearestOf(here, mapChests.map((m) => ({ item: m.chest, position: m.position }))) : null), [here, mapChests]);
@@ -126,11 +133,17 @@ export default function MapScreen() {
 
   const closePanel = useCallback(() => setPanel('none'), []);
 
+  const positionOf = useCallback(
+    (chest: Chest): LatLon | null => {
+      const parsed = parseCellId(chest.cellId);
+      return parsed ? chestPoint(chest.spec, hexCenter(parsed.hex, parsed.sizeM)) : null;
+    },
+    []
+  );
   const selectedDistance = useMemo(() => {
-    if (!selected || !here) return null;
-    const parsed = parseCellId(selected.cellId);
-    return parsed ? distanceM(here, hexCenter(parsed.hex, parsed.sizeM)) : null;
-  }, [selected, here]);
+    const at = selected ? positionOf(selected) : null;
+    return at && here ? distanceM(here, at) : null;
+  }, [selected, here, positionOf]);
 
   return (
     <View style={styles.root}>
@@ -144,7 +157,6 @@ export default function MapScreen() {
         nearestId={nearest?.item.id ?? null}
         signal={signalData}
         fogStyle={fogStyle}
-        routeTo={nearestPosition}
         following={following}
         onFollowingChange={setFollowing}
         onChestPress={openChest}
@@ -176,7 +188,7 @@ export default function MapScreen() {
           {running ? <View style={styles.liveDot} /> : null}
         </View>
         <View style={styles.topButtons}>
-          <RoundButton icon="cube-outline" label="All chests" badge={mapChests.length} onPress={() => setPanel('chests')} />
+          {running ? <RoundButton icon="cube-outline" label="All chests" badge={mapChests.length} onPress={() => setPanel('chests')} /> : null}
           <RoundButton icon="stats-chart-outline" label="Session details" badge={lastReport && !running ? 1 : 0} onPress={() => setPanel('details')} />
         </View>
       </View>
@@ -186,9 +198,26 @@ export default function MapScreen() {
         <SignalChips value={layer} onChange={setLayer} />
       </View>
 
+      {/* Nearest chest: an arrow toward it and how far away, under the signal chips */}
+      {nearest ? (
+        <View style={[styles.compassRow, { top: insets.top + 108 }]} pointerEvents="box-none">
+          <ChestCompass
+            chest={nearest.item}
+            distanceM={nearest.distanceM}
+            bearingDeg={nearest.bearingDeg}
+            headingDeg={pose.heading}
+            onPress={() => {
+              openChest(nearest.item);
+              if (nearestPosition) mapRef.current?.showBoth(nearestPosition);
+            }}
+            onAr={() => setArChest(nearest.item)}
+          />
+        </View>
+      ) : null}
+
       {/* Map status: never leave a blank screen unexplained */}
       {loadState === 'failed' ? (
-        <View style={[styles.notice, { top: insets.top + 118 }]}>
+        <View style={[styles.notice, { top: insets.top + 168 }]}>
           <Ionicons name="cloud-offline-outline" size={22} color={colors.warning} />
           <View style={{ flex: 1 }}>
             <Text style={styles.noticeTitle}>The map could not load</Text>
@@ -197,12 +226,12 @@ export default function MapScreen() {
           <Button compact label="Retry" onPress={() => { setLoadState('loading'); setMapKey((k) => k + 1); }} />
         </View>
       ) : loadState === 'loading' ? (
-        <View style={[styles.chip, { top: insets.top + 118 }]} pointerEvents="none">
+        <View style={[styles.chip, { top: insets.top + 168 }]} pointerEvents="none">
           <Ionicons name="map-outline" size={14} color={colors.textSecondary} />
           <Text style={styles.chipText}>{slow ? 'Still loading the map. Check your internet connection.' : 'Loading the map…'}</Text>
         </View>
       ) : pose.permission === 'granted' && !pose.position ? (
-        <View style={[styles.chip, { top: insets.top + 118 }]} pointerEvents="none">
+        <View style={[styles.chip, { top: insets.top + 168 }]} pointerEvents="none">
           <Ionicons name="locate-outline" size={14} color={colors.accent} />
           <Text style={styles.chipText}>Finding your location…</Text>
         </View>
@@ -210,7 +239,7 @@ export default function MapScreen() {
 
       {/* Location prompt */}
       {pose.permission !== 'granted' ? (
-        <View style={[styles.prompt, { top: insets.top + 112 }]}>
+        <View style={[styles.prompt, { top: insets.top + 168 }]}>
           <Ionicons name="locate-outline" size={20} color={colors.accent} />
           <Text style={styles.promptText}>Turn on location to see yourself on the map.</Text>
           <Button compact label="Turn on" onPress={() => void pose.request()} />
@@ -227,34 +256,12 @@ export default function MapScreen() {
       {/* Bottom panel */}
       <View style={styles.bottom} pointerEvents="box-none">
         {layer !== 'off' ? <SignalLegend layer={layer} hasData={signalData.features.length > 0} /> : null}
-        {nearest ? (
-          <NearestChestCard
-            chest={nearest.item}
-            distanceM={nearest.distanceM}
-            bearingDeg={nearest.bearingDeg}
-            headingDeg={pose.heading}
-            mappingRunning={running}
-            onPress={() => {
-              openChest(nearest.item);
-              if (nearestPosition) mapRef.current?.showBoth(nearestPosition);
-            }}
-          />
-        ) : (
-          <View style={styles.empty}>
-            <Ionicons name={verifierConfigured ? 'cube-outline' : 'cloud-offline-outline'} size={18} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>
-              {!verifierConfigured
-                ? 'Chests are off in this build. Mapping and the fog still work.'
-                : chestError
-                  ? 'Could not load chests. Pull the list to retry.'
-                  : loadingChests
-                    ? 'Looking for chests…'
-                    : here
-                      ? 'No chests open right now. Walk around to clear the fog.'
-                      : 'Turn on location to find chests near you.'}
-            </Text>
+        {!running && chests.length > 0 ? (
+          <View style={styles.hintChip}>
+            <Ionicons name="cube-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.emptyText}>Start mapping to see chests near you.</Text>
           </View>
-        )}
+        ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button
@@ -290,8 +297,20 @@ export default function MapScreen() {
       </Sheet>
 
       <Sheet visible={panel === 'chest' && !!selected} title="Chest" onClose={closePanel}>
-        {selected ? <ChestCard chest={selected} distance={selectedDistance} mappingRunning={running} scans={scans} /> : null}
+        {selected ? (
+          <ChestCard
+            chest={selected}
+            distance={selectedDistance}
+            mappingRunning={running}
+            scans={scans}
+            onAr={() => {
+              setPanel('none');
+              setArChest(selected);
+            }}
+          />
+        ) : null}
       </Sheet>
+      <ChestARView visible={!!arChest} chest={arChest} target={arChest ? positionOf(arChest) : null} mappingRunning={running} scans={scans} onClose={() => setArChest(null)} />
     </View>
   );
 }
@@ -312,6 +331,8 @@ function RoundButton({ icon, label, badge, onPress }: { icon: keyof typeof Ionic
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   layerRow: { position: 'absolute', left: 12, right: 12 },
+  compassRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  hintChip: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(11,15,26,0.9)', borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
   top: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(11,15,26,0.92)', borderColor: colors.accentMuted, borderWidth: 1, borderRadius: 999, paddingVertical: 6, paddingLeft: 8, paddingRight: 16 },
   pillIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accentFaint, alignItems: 'center', justifyContent: 'center' },
