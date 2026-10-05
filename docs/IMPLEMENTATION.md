@@ -21,10 +21,22 @@ The Map tab is a real street map (OpenFreeMap vector tiles, no API key) recolour
 - **Clearing:** while the Map is open, the ground within about 60 m of you is cleared and stays cleared, shown by a dashed ring around you. Cleared ground is kept on the phone only (`explored`, in local storage) and is never uploaded. Clearing does not need "Start mapping"; starting a session additionally records signal readings and keeps working with the screen off. Fixes worse than 40 m, or flagged as mock locations, never clear anything.
 - **The edge:** a neon rim with a soft fade and glow marks where mapped ground meets unmapped ground. It is drawn from cleared ground stored as 5 m hex cells (`src/mapping/fog.ts`): the cells are merged into one outline, traced into closed loops and smoothed, then cut out of a world-sized polygon. Small cells keep the bubble round (a bubble of big hex cells is itself a hexagon); merging avoids seams; islands of fog inside cleared ground are handled. The cells are an internal storage detail and are never drawn.
 - **Signal map:** while you map, each reading is painted as a soft glowing blob where it was taken, so a walk becomes a heat trail (`src/mapping/signalLayer.ts`). Chips choose what to tint by: Cellular (red is no signal, green is strong), Wi-Fi networks, Bluetooth devices, or Off, with a legend. The blob keeps the same size on the ground at every zoom. It is drawn under the fog, so it only shows on mapped ground. This data stays on the phone.
-- **Chests** appear on the map as glowing pins. The nearest one has a card with an arrow that turns with the phone's compass, a distance, and a dashed line from you to it. Tapping opens the chest. There is no separate Chests tab.
+- **Chests** appear on the map as glowing pins, but **only while mapping is on**. The nearest one is shown at the top of the screen, under the signal chips, as an arrow that points toward it (turning with the phone's compass) and its distance. Tapping it opens the chest; within 60 m a camera button opens AR. There is no line drawn to the chest and no separate Chests tab.
 - If the map cannot load, the screen says so and offers Retry, instead of staying blank.
 
 Reporting cells (about 100 m, `h120`) are a separate, coarser grid used for reports and chests. The fog and signal data never leave the phone.
+
+## Finding and opening chests in AR
+
+When you are within 60 m of a chest, the camera button next to the nearest-chest indicator, and the chest sheet, offer **Find it in AR**. This opens the camera with a 3D treasure chest drawn where the chest really is, held still in the world as you turn, with a column of light so you can spot it from across a street.
+
+- **How it stays put** (`src/ar/`): a small native piece (`modules/signal-scan`, `startOrientation`) streams the phone's orientation from Android's rotation-vector sensor (the accelerometer, gyroscope and magnetometer fused, the same one AR apps use) with the magnetic declination for the current position. `orientation.ts` turns that into a camera direction in true north and places the chest along the bearing to its real position. This is "sensor AR": it uses compass and GPS, not camera tracking of surfaces, so it is only as steady as they are.
+- **Drawing:** `chestScene.ts` builds the chest from shapes and generated textures (no model files): wood, iron straps, gold corners, studs, a lock, a domed lid, a glowing ground ring and a light beam. It runs on `expo-gl` with `three`. The camera picture comes from `expo-camera`.
+- **Distance:** the chest is drawn at its real distance, but never closer than 4 m (so it stays big enough to tap) or farther than 40 m (so it stays in view). GPS error is smoothed over about half a second.
+- **Opening:** tap the chest. It opens only when you are within 30 m *and* have the readings the chest needs (the same rules as opening it from the card). The lid lifts, light and gold coins burst out, and then the wallet signs and the submission goes to review. If you tap too early, the screen says what is missing.
+- **Exact positions:** chests made with `create-chest` or the requester console store exact coordinates, so AR and the map put them where requested. Older chests fall back to the centre of their 100 m cell.
+- **Fallbacks:** without camera permission the screen asks for it. If the phone has no rotation sensor, or 3D cannot start, it says so and offers a plain "Open chest" button with the same rules.
+- **Not verified:** the sensor stream, the camera overlay, `three` on `expo-gl`, and the steadiness of the chest have not run on a phone. The 3D look was checked by rendering the same scene in desktop Chrome, and the maths (heading, tilt, declination, projection) is unit tested.
 
 ## How a report travels
 
@@ -144,7 +156,7 @@ Server environment variables:
 ## Verified, and what is not
 
 **Verified by tests in this repository**
-- App logic: 270 Jest tests (hex grid, aggregation, session rules, radio analysis, report building and signing format, wallet store with a mocked wallet, existing radio and capture suites).
+- App logic: 335 Jest tests (hex grid, aggregation, session rules, radio analysis, report building and signing format, wallet store with a mocked wallet, existing radio and capture suites).
 - Verifier, review job and admin portal: 65 tests, including the independent signature check, tampering and replay, plausibility limits, rate limits, daily subsidy cap, SGT gate and one-SGT-one-node rule, each chest kind, orbit physics against real Meteor TLEs, sonde selection and claims, data deletion, and the HTTP API.
 - Escrow program and payout script: 15 tests on a real local validator. Escrow: full escrow on creation, pay-once per node, verifier-only settlement, no overpay, no wrong-owner payout, no payout after expiry, refund only after expiry plus grace, the settlement script, and the weekly payout (grouping, dry run, spending cap, treasury balance check, once-only payment, and recovery when marking fails after sending).
 - Builds: the app builds as a debug APK with both native modules; the escrow program builds for SBF.

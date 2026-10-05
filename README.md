@@ -19,7 +19,7 @@ Built and verified without hardware in the loop: the full app compiles for Andro
 
 | Tab | What it does |
 |-----|--------------|
-| **Map** (home) | A real street map covered in fog. Turn on mapping and walk: the fog clears where you go. Open chests appear on the map; the nearest one has an arrow and distance. Live readings, and sign and submit a session, are in the Mapping panel. |
+| **Map** (home) | A real street map covered in fog. Turn on mapping and walk: the fog clears where you go. While mapping is on, open chests appear on the map; the nearest one shows as an arrow and distance at the top, and within 60 m you can find it in **AR**: the camera shows a 3D chest where it really is, and you tap it to open it. Live readings, and sign and submit a session, are in the Mapping panel. |
 | **Profile** | Wallet, Seeker check, earnings, privacy and data deletion, plus links to Recordings and Settings. |
 | **Radio** | Connect the dongle, tune any frequency 0.5 MHz to 1.766 GHz (HF via the V4 upconverter), live spectrum, mono wideband-FM audio with volume. |
 | **Satellites** | Next passes for M2-3 and M2-4 (peak elevation, direction, quality, countdown), reminders, and per-pass detail: ground-track map with coverage footprint, polar sky plot, a time scrubber, and a **Capture** button. |
