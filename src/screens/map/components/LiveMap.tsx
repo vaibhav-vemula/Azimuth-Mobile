@@ -73,7 +73,8 @@ const lngLat = (p: LatLon): [number, number] => [p.longitudeDeg, p.latitudeDeg];
  */
 function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, showVision, following, onFollowingChange, onChestPress, onLoadState, ref }: Props) {
   const camera = useRef<CameraRef>(null);
-  const firstFix = useRef(true);
+  const didZoom = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
   const mapStyle = useMapStyle(onLoadState);
 
   // Rebuilding the fog shape is the heaviest thing here; while you walk it only needs to keep up a couple of times a second.
@@ -106,16 +107,17 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
     [position, onFollowingChange]
   );
 
-  // Fly to the first fix, then keep the user centred while following.
+  // Zoom in to you once there is both a position and a map to move. (The first fix often arrives before the map has
+  // loaded; waiting for both is what makes it zoom in reliably.) Afterwards, keep you centred while following.
   useEffect(() => {
-    if (!position) return;
-    if (firstFix.current) {
-      firstFix.current = false;
+    if (!position || !mapReady) return;
+    if (!didZoom.current) {
+      didZoom.current = true;
       camera.current?.flyTo({ center: lngLat(position), zoom: START_ZOOM, duration: 900 });
     } else if (following) {
       camera.current?.easeTo({ center: lngLat(position), duration: 500 });
     }
-  }, [position, following]);
+  }, [position, following, mapReady]);
 
   // Until the themed style is ready, show the map colour instead of an empty screen.
   if (!mapStyle) return <View style={[styles.fill, { backgroundColor: MAP_COLORS.land }]} />;
@@ -130,8 +132,14 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
         compassPosition={{ top: 132, right: 14 }}
         attribution
         attributionPosition={{ bottom: 6, left: 8 }}
-        onDidFinishLoadingMap={() => onLoadState('ready')}
-        onDidFailLoadingMap={() => onLoadState('failed')}
+        onDidFinishLoadingMap={() => {
+          setMapReady(true);
+          onLoadState('ready');
+        }}
+        onDidFailLoadingMap={() => {
+          setMapReady(false);
+          onLoadState('failed');
+        }}
         onRegionDidChange={(e) => {
           if (e.nativeEvent.userInteraction) onFollowingChange(false);
         }}

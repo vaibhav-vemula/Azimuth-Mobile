@@ -248,12 +248,16 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {/* Recenter */}
-      {!following && pose.position ? (
-        <Pressable style={[styles.recenter, { bottom: sheetHeight + 14 }]} onPress={() => mapRef.current?.recenter()} accessibilityRole="button" accessibilityLabel="Recenter on me">
-          <Ionicons name="locate" size={22} color={colors.accent} />
-        </Pressable>
-      ) : null}
+      {/* Location button: always there. Tap to fly to you at street zoom; it lights up while the map follows you. */}
+      <Pressable
+        style={[styles.recenter, { bottom: sheetHeight + 14 }, !pose.position && styles.recenterOff]}
+        onPress={() => mapRef.current?.recenter()}
+        disabled={!pose.position}
+        accessibilityRole="button"
+        accessibilityLabel="Go to my location"
+      >
+        <Ionicons name={following ? 'locate' : 'locate-outline'} size={24} color={following ? colors.accent : colors.textPrimary} />
+      </Pressable>
 
       {/* Legend for the signal colours, above the sheet */}
       {layer !== 'off' ? (
@@ -382,6 +386,7 @@ const styles = StyleSheet.create({
   prompt: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(11,15,26,0.94)', borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 12 },
   promptText: { ...typography.caption, color: colors.textPrimary, flex: 1 },
   recenter: { position: 'absolute', right: 14, width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(11,15,26,0.94)', borderColor: colors.surfaceBorder, borderWidth: 1 },
+  recenterOff: { opacity: 0.4 },
   legendWrap: { position: 'absolute', left: 12 },
   sheetHeader: { paddingHorizontal: 14, paddingBottom: 12, gap: 10 },
   sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 30 },

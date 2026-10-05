@@ -4,7 +4,7 @@ import renderer, { act } from 'react-test-renderer';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import { ARRIVED_M, ChestCompass } from '../components/ChestCompass';
-import { DirectionArrow } from '../components/DirectionArrow';
+import { ARROW_PATH, DirectionArrow } from '../components/DirectionArrow';
 import type { Chest } from '../../../network/api';
 
 const chest: Chest = { id: 'c1', title: 'Wi-Fi at Main St Cafe', kind: 'wifi-quality', cellId: 'h120:1:1', rewardUsdc: 0.5, remaining: 3, expiresMs: Date.now() + 3 * 3600_000, requester: 'Cafe', requires: 'phone', spec: {} };
@@ -68,5 +68,21 @@ describe('DirectionArrow', () => {
     expect(rotationOf(0)).toBe('90deg');
     expect(rotationOf(90)).toBe('0deg');
     expect(rotationOf(null)).toBe('90deg');
+  });
+});
+
+describe('the arrow shape', () => {
+  const points = [...ARROW_PATH.matchAll(/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+
+  it('has its tip at the top centre, so turning it by zero degrees points straight up', () => {
+    const top = points.reduce((a, b) => (b[1] < a[1] ? b : a));
+    expect(top[0]).toBe(50);
+    expect(points.filter((p) => p[1] === top[1])).toHaveLength(1); // one tip, not an edge
+  });
+
+  it('is symmetric about the vertical centre line, so it does not lean to either side', () => {
+    const left = points.filter((p) => p[0] < 50).map((p) => 100 - p[0]).sort();
+    const right = points.filter((p) => p[0] > 50).map((p) => p[0]).sort();
+    expect(left).toEqual(right);
   });
 });
