@@ -146,3 +146,14 @@ export function saveSessionCells(id: string, cells: string[]): void {
 export function removeSessionCells(id: string): void {
   storage.remove(sessionCellsKey(id));
 }
+
+const BACKFILLED = 'sessionsBackfilled';
+
+/** Whether sessions mapped before history existed have already been rebuilt from the fog map. */
+export function loadBackfilled(): boolean {
+  return storage.getBoolean(BACKFILLED) ?? false;
+}
+
+export function saveBackfilled(done: boolean): void {
+  storage.set(BACKFILLED, done);
+}

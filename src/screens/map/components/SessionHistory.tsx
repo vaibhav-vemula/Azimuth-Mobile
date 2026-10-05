@@ -7,18 +7,19 @@ import { formatElapsed } from '../../../mapping/hudFormat';
 import { areaParts, walkedParts, useUnitSystem } from '../../../units/units';
 
 /** Past mapping sessions, newest first. Tap one to see the ground it cleared outlined on the map. */
-export function SessionHistory() {
+export function SessionHistory({ skipFirst = false }: { skipFirst?: boolean }) {
   useUnitSystem(); // redraw when the unit setting changes
   const sessions = useMapping((s) => s.sessions);
   const selectedId = useSessionView((s) => s.selectedId);
   const show = useSessionView((s) => s.show);
   const remove = useMapping((s) => s.removeSession);
 
-  if (sessions.length === 0) return null;
+  const shown = skipFirst ? sessions.slice(1) : sessions;
+  if (shown.length === 0) return null;
   return (
     <View style={styles.wrap}>
-      <Text style={styles.heading}>SESSION HISTORY</Text>
-      {sessions.map((r) => (
+      <Text style={styles.heading}>{skipFirst ? 'EARLIER SESSIONS' : 'SESSION HISTORY'}</Text>
+      {shown.map((r) => (
         <Row
           key={r.id}
           record={r}
@@ -55,19 +56,27 @@ function Row({ record: r, selected, onShow, onDelete }: { record: SessionRecord;
         </Pressable>
       </View>
       <Text style={styles.summary}>
-        {formatElapsed(r.durationSec)} · {dist.value} {dist.unit} · {area.value} {area.unit} cleared
+        {formatElapsed(r.durationSec)} {r.estimated ? '' : `· ${dist.value} ${dist.unit} `}· {area.value} {area.unit} cleared
       </Text>
-      <View style={styles.chips}>
-        <Stat icon="cellular" color="#3DDC84" value={r.towers} label="towers" />
-        <Stat icon="wifi" color="#B388FF" value={r.wifi} label="Wi-Fi" />
-        <Stat icon="bluetooth" color="#FF80AB" value={r.bluetooth} label="Bluetooth" />
-        {r.radioDbfs !== null ? <Stat icon="radio" color="#4FC3F7" value={`${r.radioDbfs} dBFS`} label="radio" /> : null}
-      </View>
+      <SessionChips record={r} />
       <View style={styles.foot}>
         <Ionicons name={selected ? 'eye' : 'map-outline'} size={13} color={selected ? '#FFC857' : colors.textTertiary} />
         <Text style={[styles.footText, selected && { color: '#FFC857' }]}>{selected ? 'Showing on the map. Tap to hide.' : 'Tap to show on the map'}</Text>
       </View>
     </Pressable>
+  );
+}
+
+/** Towers, Wi-Fi, Bluetooth and radio for a session, as icons and numbers. A rebuilt session has none of these, so it says so. */
+export function SessionChips({ record: r }: { record: SessionRecord }) {
+  if (r.estimated) return <Text style={styles.note}>Rebuilt from your fog map. Mapped before sessions were recorded, so there are no signal counts.</Text>;
+  return (
+    <View style={styles.chips}>
+      <Stat icon="cellular" color="#3DDC84" value={r.towers} label="towers" />
+      <Stat icon="wifi" color="#B388FF" value={r.wifi} label="Wi-Fi" />
+      <Stat icon="bluetooth" color="#FF80AB" value={r.bluetooth} label="Bluetooth" />
+      {r.radioDbfs !== null ? <Stat icon="radio" color="#4FC3F7" value={`${r.radioDbfs} dBFS`} label="radio" /> : null}
+    </View>
   );
 }
 
@@ -89,6 +98,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   date: { ...typography.subheading, fontSize: 15, color: colors.textPrimary },
   summary: { ...typography.caption, color: colors.textSecondary },
+  note: { ...typography.caption, fontSize: 11, color: colors.textTertiary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
   statText: { ...typography.caption, fontSize: 12, fontVariant: ['tabular-nums'] },

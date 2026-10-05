@@ -3,6 +3,7 @@ import bs58 from 'bs58';
 import type { Report, SignedReport } from '../reports/report';
 import { signReport } from '../wallet/signReport';
 import { useWallet } from '../wallet/useWallet';
+import { useMapping } from '../mapping/useMapping';
 import { submitReport } from './api';
 import { verifierConfigured } from './config';
 
@@ -57,6 +58,7 @@ export function useSubmission() {
         const signed = await sign(report);
         setState({ phase: 'sending' });
         const result = await submitReport(signed);
+        if (result.accepted) useMapping.getState().reportSent();
         setState({ phase: 'done', accepted: result.accepted, pending: !!result.pending, message: rewardMessage(result.accepted, result.reasons, result.reward, result.pending) });
       } catch (e) {
         setState({ phase: 'error', message: e instanceof Error ? e.message : String(e) });

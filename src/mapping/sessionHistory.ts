@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { SessionTotals } from './sessionStats';
+import { exploredAreaKm2 } from './explore';
+import { hexCenter, parseCellId } from './hexGrid';
 
 /** The summary of one finished mapping session. Kept on the phone (and in the encrypted backup, if on). No route is kept. */
 export interface SessionRecord {
@@ -21,6 +23,8 @@ export interface SessionRecord {
   bluetooth: number;
   /** Average overall radio level in dB below full scale, or null if no dongle readings were taken. */
   radioDbfs: number | null;
+  /** Rebuilt from the fog map's timestamps for a session mapped before history existed: only date, length, area and cleared cells are known. */
+  estimated?: boolean;
 }
 
 /** Cells beyond this are dropped from a session's saved area, so one very long session cannot fill the phone. */
@@ -55,6 +59,54 @@ export function buildSessionRecord(input: {
     bluetooth: input.totals.bluetoothUnique,
     radioDbfs: input.radioLevelN > 0 ? Math.round(input.radioLevelSum / input.radioLevelN) : null,
   };
+}
+
+/** A pause longer than this between newly cleared cells means a different session. */
+const SESSION_GAP_MS = 30 * 60_000;
+/** Groups smaller than this are noise (a few cells cleared in passing), not a session. */
+const MIN_RECONSTRUCTED_CELLS = 20;
+
+/**
+ * Sessions mapped before history was kept still left a trace: every cleared fog cell remembers when it was first
+ * cleared. Cells cleared within half an hour of each other came from one session, so the old sessions can be rebuilt.
+ * Only the date, length, area and cleared cells are known. `before` is the time the first real record starts, so a
+ * session is never listed twice.
+ */
+export function reconstructSessions(explored: Record<string, number>, before = Infinity): { record: SessionRecord; cells: string[] }[] {
+  const entries = Object.entries(explored)
+    .filter(([, t]) => Number.isFinite(t) && t > 0 && t < before)
+    .sort((a, b) => a[1] - b[1]);
+  const groups: [string, number][][] = [];
+  for (const entry of entries) {
+    const last = groups[groups.length - 1];
+    if (last && entry[1] - last[last.length - 1][1] <= SESSION_GAP_MS) last.push(entry);
+    else groups.push([entry]);
+  }
+  return groups
+    .filter((g) => g.length >= MIN_RECONSTRUCTED_CELLS)
+    .map((g) => {
+      const startedMs = g[0][1];
+      const endedMs = g[g.length - 1][1];
+      const first = parseCellId(g[0][0]);
+      const lat = first ? hexCenter(first.hex, first.sizeM).latitudeDeg : 38.9;
+      const record: SessionRecord = {
+        id: String(startedMs),
+        startedMs,
+        endedMs,
+        durationSec: Math.round((endedMs - startedMs) / 1000),
+        distanceM: 0,
+        clearedCells: g.length,
+        areaKm2: exploredAreaKm2(g.length, lat),
+        newCells: 0,
+        readings: 0,
+        towers: 0,
+        wifi: 0,
+        bluetooth: 0,
+        radioDbfs: null,
+        estimated: true,
+      };
+      return { record, cells: g.map(([id]) => id) };
+    });
 }
 
 /** Newest first, one entry per id. */

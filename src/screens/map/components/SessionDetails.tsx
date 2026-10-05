@@ -10,7 +10,8 @@ import { useWallet } from '../../../wallet/useWallet';
 import { exploredAreaKm2 } from '../../../mapping/explore';
 import { hexCenter, parseCellId } from '../../../mapping/hexGrid';
 import { levelDbfs } from '../../../mapping/radio';
-import { SessionHistory } from './SessionHistory';
+import { SessionChips, SessionHistory } from './SessionHistory';
+import { sessionDate, useSessionView } from '../../../mapping/sessionHistory';
 import { useUnitSystem } from '../../../units/units';
 import { Quality, cellularBars, cellularQuality, formatAreaParts, formatElapsed, formatPlmn, formatWalked, techLabel } from '../../../mapping/hudFormat';
 
@@ -33,7 +34,7 @@ export function SessionDetails() {
       ) : (
         <>
           <LastSession />
-          <SessionHistory />
+          <SessionHistory skipFirst />
         </>
       )}
     </View>
@@ -130,26 +131,48 @@ function LiveStats() {
 }
 
 function LastSession() {
+  useUnitSystem(); // redraw when the unit setting changes
   const lastReport = useMapping((s) => s.lastReport);
+  const latest = useMapping((s) => s.sessions[0] ?? null);
   const address = useWallet((s) => s.address);
   const submission = useSubmission();
+  const viewing = useSessionView((s) => s.selectedId);
 
-  if (!lastReport) {
+  if (!latest && !lastReport) {
     return (
       <GlassCard style={styles.card}>
         <Text style={styles.note}>Nothing recorded yet. Start mapping and walk around: the fog clears where you go, and the readings you take can be submitted afterwards.</Text>
       </GlassCard>
     );
   }
+  const area = latest ? formatAreaParts(latest.areaKm2) : null;
+  const dist = latest ? formatWalked(latest.distanceM) : null;
   return (
     <GlassCard style={styles.card}>
-      <SectionLabel>Last session</SectionLabel>
-      <View style={styles.tiles}>
-        <Tile value={String(new Set(lastReport.buckets.map((b) => b.cellId)).size)} label="Cells" />
-        <Tile value={String(lastReport.checks.samples)} label="Readings" />
-        <Tile value={formatElapsed(lastReport.checks.durationSec)} label="Duration" />
-      </View>
-      {submission.state.phase === 'done' ? (
+      <SectionLabel>{latest ? `Last session · ${sessionDate(latest.startedMs)}` : 'Last session'}</SectionLabel>
+      {latest && area && dist ? (
+        <>
+          <View style={styles.tiles}>
+            <Tile icon="time-outline" value={formatElapsed(latest.durationSec)} label="Duration" />
+            {latest.estimated ? null : <Tile icon="walk" value={dist.value} unit={dist.unit} label="Walked" />}
+            <Tile icon="map" value={area.value} unit={area.unit} label="Cleared" accent />
+          </View>
+          <SessionChips record={latest} />
+          <Button
+            label={viewing === latest.id ? 'Hide from the map' : 'Show on the map'}
+            variant="secondary"
+            icon={viewing === latest.id ? 'eye-off-outline' : 'map-outline'}
+            onPress={() => useSessionView.getState().show(viewing === latest.id ? null : latest.id)}
+          />
+        </>
+      ) : null}
+      {!lastReport ? (
+        <Text style={styles.note}>
+          {latest?.estimated
+            ? 'This session was mapped before readings were kept, so there is nothing to submit for it.'
+            : 'Nothing left to submit for this session. It was already sent, or no wallet was connected when it ended.'}
+        </Text>
+      ) : submission.state.phase === 'done' ? (
         <>
           <Badge label={submission.state.pending ? 'Submitted for review' : submission.state.accepted ? 'Accepted' : 'Rejected'} color={submission.state.accepted ? (submission.state.pending ? colors.accent : colors.success) : colors.danger} />
           <Text style={styles.note}>{submission.state.message}</Text>

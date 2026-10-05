@@ -45,3 +45,38 @@ describe('session dates', () => {
     expect(sessionDate(new Date(2025, 8, 20, 9, 5).getTime(), now)).toMatch(/2025/);
   });
 });
+
+describe('rebuilding sessions mapped before history existed', () => {
+  const { reconstructSessions } = require('../sessionHistory');
+  const MIN = 60_000;
+  const T0 = 1_700_000_000_000;
+  /** n cells cleared one per `step` ms from `start`. */
+  const run = (prefix: string, start: number, n: number, step = 5_000) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`h5:${prefix}:${i}`, start + i * step]));
+
+  it('finds each walk by the pauses between them', () => {
+    const explored = { ...run('a', T0, 100), ...run('b', T0 + 5 * 3_600_000, 60) };
+    const found = reconstructSessions(explored);
+    expect(found).toHaveLength(2);
+    const [first, second] = found;
+    expect(first.record).toMatchObject({ startedMs: T0, clearedCells: 100, estimated: true, distanceM: 0, readings: 0, radioDbfs: null });
+    expect(first.record.durationSec).toBe(495);
+    expect(first.cells).toHaveLength(100);
+    expect(second.record.clearedCells).toBe(60);
+  });
+
+  it('keeps cells together when the pause is short, and ignores a handful of stray cells', () => {
+    const explored = { ...run('a', T0, 50), ...run('b', T0 + 49 * 5_000 + 20 * MIN, 50), ...run('c', T0 + 10 * 3_600_000, 5) };
+    const found = reconstructSessions(explored);
+    expect(found).toHaveLength(1);
+    expect(found[0].record.clearedCells).toBe(100);
+  });
+
+  it('skips cells from sessions that have real records already', () => {
+    const explored = { ...run('a', T0, 50), ...run('b', T0 + 3_600_000 * 5, 50) };
+    expect(reconstructSessions(explored, T0 + 3_600_000 * 4)).toHaveLength(1);
+  });
+
+  it('gives nothing for an empty fog map', () => {
+    expect(reconstructSessions({})).toEqual([]);
+  });
+});

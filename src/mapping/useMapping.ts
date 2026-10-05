@@ -10,7 +10,7 @@ import { cellIdAt, distanceM, hexCenter, neighbors, parseCellId, cellId as toCel
 import type { LatLon } from './hexGrid';
 import { requestMappingPermissions } from './permissions';
 import { Snapshot, mergeSnapshots } from '../backup/snapshot';
-import { MAX_SESSION_CELLS, SessionRecord, buildSessionRecord, sortSessions } from './sessionHistory';
+import { MAX_SESSION_CELLS, SessionRecord, buildSessionRecord, reconstructSessions, sortSessions } from './sessionHistory';
 import { levelDbfs } from './radio';
 import { ensureDongle, probeRadio, probeSonde } from './radioProbe';
 import { MAX_REVEAL_ACCURACY_M, cellsWithin, exploredAreaKm2 } from './explore';
@@ -39,6 +39,10 @@ import {
   loadSessionCells,
   saveSessionCells,
   removeSessionCells,
+  loadBackfilled,
+  saveBackfilled,
+  loadPending,
+  savePending,
   saveBluetoothEnabled,
   saveHome,
   saveVisited,
@@ -88,6 +92,8 @@ interface MappingState {
   sessions: SessionRecord[];
   /** Removes one finished session from the history (the fog it cleared stays cleared). */
   removeSession: (id: string) => void;
+  /** The finished session's report has been sent, so it no longer needs to be kept. */
+  reportSent: () => void;
 
   load: () => void;
   start: () => Promise<boolean>;
@@ -124,6 +130,17 @@ let scanTimer: ReturnType<typeof setInterval> | null = null;
 function latitudeOf(cellId: string | null): number {
   const parsed = cellId ? parseCellId(cellId) : null;
   return parsed ? hexCenter(parsed.hex, parsed.sizeM).latitudeDeg : 38.9;
+}
+
+/** The report left over from a finished session that was not submitted before the app closed, if it is still readable. */
+function restorePendingReport(): Report | null {
+  try {
+    const raw = loadPending();
+    const parsed = raw ? (JSON.parse(raw) as Partial<Report>) : null;
+    return parsed && parsed.type === 'mapping-session' && typeof parsed.node === 'string' && Array.isArray(parsed.buckets) ? (parsed as Report) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Fog cells this session has cleared (new ones only), and the radio level so far, for the session history. */
@@ -287,7 +304,20 @@ export const useMapping = create<MappingState>((set, get) => ({
   sessions: [],
 
   load: () => {
-    set({ sessions: sortSessions(loadSessions()), visited: loadVisited(), explored: loadExplored(), signals: loadSignals(), fogStyle: loadFogStyle(), home: loadHome(), bluetoothEnabled: loadBluetoothEnabled(), radioEnabled: loadRadioEnabled() });
+    const explored = loadExplored();
+    let sessions = sortSessions(loadSessions());
+    // Sessions mapped before history existed are rebuilt once from the fog map's timestamps.
+    if (!loadBackfilled()) {
+      const oldest = sessions.length > 0 ? sessions[sessions.length - 1].startedMs : Infinity;
+      const rebuilt = reconstructSessions(explored, oldest);
+      for (const { record, cells } of rebuilt) saveSessionCells(record.id, cells.slice(0, MAX_SESSION_CELLS));
+      if (rebuilt.length > 0) {
+        sessions = sortSessions([...sessions, ...rebuilt.map((r) => r.record)]);
+        saveSessions(sessions);
+      }
+      saveBackfilled(true);
+    }
+    set({ lastReport: restorePendingReport(), sessions, visited: loadVisited(), explored, signals: loadSignals(), fogStyle: loadFogStyle(), home: loadHome(), bluetoothEnabled: loadBluetoothEnabled(), radioEnabled: loadRadioEnabled() });
   },
 
   start: async () => {
@@ -296,6 +326,7 @@ export const useMapping = create<MappingState>((set, get) => ({
     sessionCellIds = [];
     radioLevelSum = 0;
     radioLevelN = 0;
+    savePending(null); // a new session replaces the previous unsent report
     try {
       const permissions = await requestMappingPermissions();
       if (!permissions.location) throw new Error('Location permission is needed to place readings on the map.');
@@ -388,6 +419,8 @@ export const useMapping = create<MappingState>((set, get) => ({
       saveSessions(sessions);
     }
     sessionCellIds = [];
+    // Keep a report that has not been sent yet, so it can still be signed and submitted after the app is closed.
+    if (report) savePending(JSON.stringify(report));
     set({ status: 'idle', startedAtMs: null, lastReport: report, sessions });
     return report;
   },
@@ -476,6 +509,8 @@ export const useMapping = create<MappingState>((set, get) => ({
     set({ visited: merged.visited, explored: merged.explored, signals: merged.signals, sessions });
     return true;
   },
+
+  reportSent: () => savePending(null),
 
   removeSession: (id) => {
     const sessions = get().sessions.filter((r) => r.id !== id);
