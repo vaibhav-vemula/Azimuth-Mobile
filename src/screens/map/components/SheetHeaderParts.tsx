@@ -13,23 +13,26 @@ export function SheetTimer() {
 }
 
 /** The four live counters shown even when the sheet is collapsed, as an icon and a number: towers, Wi-Fi, Bluetooth and readings. */
-export function MiniStats() {
+export function MiniStats({ showLabels = false }: { showLabels?: boolean }) {
   const totals = useMapping((s) => s.sessionTotals);
   const readings = useMapping((s) => s.scansThisSession);
   const items: { value: number; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
-    { value: totals.towers, label: 'Cell towers', icon: 'cellular', color: '#3DDC84' },
-    { value: totals.wifiUnique, label: 'Wi-Fi networks', icon: 'wifi', color: '#B388FF' },
-    { value: totals.bluetoothUnique, label: 'Bluetooth devices', icon: 'bluetooth', color: '#FF80AB' },
+    { value: totals.towers, label: 'Towers', icon: 'cellular', color: '#3DDC84' },
+    { value: totals.wifiUnique, label: 'Wi-Fi', icon: 'wifi', color: '#B388FF' },
+    { value: totals.bluetoothUnique, label: 'Bluetooth', icon: 'bluetooth', color: '#FF80AB' },
     { value: readings, label: 'Readings', icon: 'pulse', color: colors.accent },
   ];
   return (
     <View style={styles.row}>
       {items.map((i) => (
-        <View key={i.label} style={styles.item} accessible accessibilityLabel={`${i.label}: ${i.value}`}>
-          <View style={[styles.badge, { backgroundColor: `${i.color}26` }]}>
-            <Ionicons name={i.icon} size={16} color={i.color} />
+        <View key={i.label} style={[styles.item, showLabels && styles.itemStacked]} accessible accessibilityLabel={`${i.label}: ${i.value}`}>
+          <View style={styles.top}>
+            <View style={[styles.badge, { backgroundColor: `${i.color}26` }]}>
+              <Ionicons name={i.icon} size={16} color={i.color} />
+            </View>
+            <Text style={[styles.value, { color: i.color }]}>{i.value}</Text>
           </View>
-          <Text style={[styles.value, { color: i.color }]}>{i.value}</Text>
+          {showLabels ? <Text style={styles.label} numberOfLines={1}>{i.label.toUpperCase()}</Text> : null}
         </View>
       ))}
     </View>
@@ -39,7 +42,10 @@ export function MiniStats() {
 const styles = StyleSheet.create({
   timer: { ...typography.heading, fontSize: 22, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
   row: { flexDirection: 'row', gap: 8 },
-  item: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, paddingVertical: 6, paddingHorizontal: 6 },
+  item: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, paddingVertical: 6, paddingHorizontal: 6 },
+  itemStacked: { paddingVertical: 8 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  label: { ...typography.label, fontSize: 9, color: colors.textTertiary },
   badge: { width: 26, height: 26, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   value: { ...typography.heading, fontSize: 18, fontVariant: ['tabular-nums'] },
 });

@@ -296,7 +296,7 @@ export default function MapScreen() {
                 </>
               )}
             </View>
-            {running ? <MiniStats /> : null}
+            {running ? <MiniStats showLabels={sheetOpen} /> : null}
             {running && !sheetSeen && !sheetOpen ? <SwipeHint text="Swipe up for all your stats" /> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Button

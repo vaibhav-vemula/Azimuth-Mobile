@@ -106,7 +106,10 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
 
   return (
     <Animated.View style={[styles.sheet, { height: openH, transform: [{ translateY: ty }] }]} {...pan.panHandlers}>
-      <View onTouchStart={() => (touchInHeader.current = true)} onLayout={(e) => setHeaderH(Math.ceil(e.nativeEvent.layout.height) - HANDLE_H)}>
+      <View onTouchStart={() => (touchInHeader.current = true)} onLayout={(e) => {
+          // The resting height is what places the sheet, so a header that grows while open (more labels) is not measured.
+          if (!openRef.current) setHeaderH(Math.ceil(e.nativeEvent.layout.height) - HANDLE_H);
+        }}>
         <Pressable style={styles.handleArea} onPress={() => changeRef.current(!openRef.current)} accessibilityRole="button" accessibilityLabel={open ? 'Collapse the mapping panel' : 'Expand the mapping panel'}>
           <View style={styles.handle} />
         </Pressable>
