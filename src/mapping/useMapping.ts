@@ -6,11 +6,12 @@ import type { ScanResult } from '../../modules/signal-scan';
 import { useAppStore } from '../state/useAppStore';
 import { buildReport } from '../reports/report';
 import type { Report } from '../reports/report';
-import { cellIdAt, neighbors, parseCellId, cellId as toCellId } from './hexGrid';
+import { cellIdAt, distanceM, neighbors, parseCellId, cellId as toCellId } from './hexGrid';
 import type { LatLon } from './hexGrid';
 import { requestMappingPermissions } from './permissions';
 import { probeRadio, probeSonde } from './radioProbe';
 import { MAX_REVEAL_ACCURACY_M, cellsWithin } from './explore';
+import { stepDistance } from './hudFormat';
 import { CellSignal, SIGNAL_CELL_M, addReading } from './signalLayer';
 import { useChests } from '../network/useChests';
 import { hexDistance } from './hexGrid';
@@ -55,6 +56,10 @@ interface MappingState {
   currentCellId: string | null;
   newCellsThisSession: number;
   scansThisSession: number;
+  /** Ground covered on foot this session, in metres. */
+  sessionDistanceM: number;
+  /** Fog cells cleared this session (not counting ground that was already clear). */
+  sessionClearedCells: number;
   lastScan: MappedScan | null;
   startedAtMs: number | null;
   bluetoothEnabled: boolean;
@@ -91,6 +96,7 @@ interface MappingState {
 let recorder: SessionRecorder | null = null;
 /** The latest usable position, so a reading can be painted onto the signal map where it was taken. */
 let lastFix: LatLon | null = null;
+let lastFixAtMs = 0;
 let positionWatch: Location.LocationSubscription | null = null;
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let scanning = false;
@@ -229,6 +235,8 @@ export const useMapping = create<MappingState>((set, get) => ({
   currentCellId: null,
   newCellsThisSession: 0,
   scansThisSession: 0,
+  sessionDistanceM: 0,
+  sessionClearedCells: 0,
   lastScan: null,
   startedAtMs: null,
   bluetoothEnabled: true,
@@ -244,7 +252,7 @@ export const useMapping = create<MappingState>((set, get) => ({
 
   start: async () => {
     if (get().status !== 'idle') return false;
-    set({ status: 'starting', error: null, newCellsThisSession: 0, scansThisSession: 0, lastScan: null, lastReport: null });
+    set({ status: 'starting', error: null, newCellsThisSession: 0, scansThisSession: 0, sessionDistanceM: 0, sessionClearedCells: 0, lastScan: null, lastReport: null });
     try {
       const permissions = await requestMappingPermissions();
       if (!permissions.location) throw new Error('Location permission is needed to place readings on the map.');
@@ -261,8 +269,15 @@ export const useMapping = create<MappingState>((set, get) => ({
         { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 5 },
         (loc) => {
           if (loc.mocked !== true && (loc.coords.accuracy ?? 999) <= MAX_REVEAL_ACCURACY_M) {
-            lastFix = { latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude };
-            get().revealAt(lastFix);
+            const fix = { latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude };
+            const step = lastFix ? stepDistance(distanceM(lastFix, fix), (loc.timestamp - lastFixAtMs) / 1000) : 0;
+            lastFix = fix;
+            lastFixAtMs = loc.timestamp;
+            // Clearing the fog happens only here, while a mapping session is running.
+            const cleared = get().revealAt(fix);
+            if (step > 0 || cleared > 0) {
+              set({ sessionDistanceM: get().sessionDistanceM + step, sessionClearedCells: get().sessionClearedCells + cleared });
+            }
           }
           recorder?.addFix({
             latitudeDeg: loc.coords.latitude,
