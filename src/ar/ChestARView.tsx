@@ -17,6 +17,7 @@ import { DirectionArrow } from '../screens/map/components/DirectionArrow';
 import { CHEST_KIND } from '../screens/chests/chestInfo';
 import { ChestScene, createChestScene } from './chestScene';
 import { useChestClaim } from './claim';
+import { createRendererOn } from './glSupport';
 import { FrameOutput, computeFrame } from './frame';
 import { OPEN_RANGE_M, Quat } from './orientation';
 
@@ -129,7 +130,7 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
       const h = gl.drawingBufferHeight;
       // three.js expects a canvas; expo-gl has none, so this gives it the few things it reads.
       const canvas = { width: w, height: h, clientWidth: w, clientHeight: h, style: {}, addEventListener: () => undefined, removeEventListener: () => undefined, getContext: () => gl } as unknown as HTMLCanvasElement;
-      const renderer = new THREE.WebGLRenderer({ canvas, context: gl as unknown as WebGLRenderingContext, antialias: false, alpha: true });
+      const renderer = createRendererOn(gl as unknown as WebGL2RenderingContext, canvas);
       renderer.setPixelRatio(1);
       renderer.setSize(w, h, false);
       renderer.setClearColor(0x000000, 0);
@@ -185,6 +186,8 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
       };
       tick();
     } catch (e) {
+      // Printed for the Metro log, and shown on screen so the cause is not hidden behind a general message.
+      console.warn('[ar] 3D drawing failed to start:', e);
       setGlError(e instanceof Error ? e.message : String(e));
     }
   }, []);
@@ -270,7 +273,7 @@ function Inner({ chest, target, mappingRunning, scans, onClose }: { chest: Chest
         ) : permission === null ? null : failed ? (
           <Panel>
             <Text style={styles.panelTitle}>AR is not available here</Text>
-            <Text style={styles.panelText}>{sensorError ?? 'This phone could not start 3D drawing.'} You can still open the chest without AR.</Text>
+            <Text style={styles.panelText}>{sensorError ?? `This phone could not start 3D drawing${glError ? `: ${glError}` : '.'}`} You can still open the chest without AR.</Text>
             <Text style={styles.panelText}>{claim.hint}</Text>
             <Button label="Open chest" icon="cube-outline" disabled={!claim.ready || !hud.withinOpen} onPress={() => void openIt()} />
           </Panel>
