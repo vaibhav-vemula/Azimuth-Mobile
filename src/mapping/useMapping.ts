@@ -249,7 +249,7 @@ export const useMapping = create<MappingState>((set, get) => ({
   startedAtMs: null,
   bluetoothEnabled: true,
   radioEnabled: true,
-  fogStyle: 'sky',
+  fogStyle: 'terrain',
   radioStatus: 'off',
   home: null,
   lastReport: null,

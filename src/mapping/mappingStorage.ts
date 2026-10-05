@@ -101,7 +101,8 @@ const FOG_STYLE = 'fogStyle';
 
 /** Which look unmapped ground has. */
 export function loadFogStyle(): FogStyle {
-  return storage.getString(FOG_STYLE) === 'terrain' ? 'terrain' : 'sky';
+  // Terrain lines unless the user has chosen the night sky.
+  return storage.getString(FOG_STYLE) === 'sky' ? 'sky' : 'terrain';
 }
 
 export function saveFogStyle(style: FogStyle): void {
