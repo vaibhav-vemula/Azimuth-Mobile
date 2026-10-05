@@ -32,7 +32,6 @@ function LiveStats() {
   useUnitSystem(); // redraw when the unit setting changes
   const cleared = useMapping((s) => s.sessionClearedCells);
   const walked = useMapping((s) => s.sessionDistanceM);
-  const scans = useMapping((s) => s.scansThisSession);
   const newCells = useMapping((s) => s.newCellsThisSession);
   const totals = useMapping((s) => s.sessionTotals);
   const lastScan = useMapping((s) => s.lastScan);
@@ -56,7 +55,6 @@ function LiveStats() {
       <View style={styles.tiles}>
         <Tile icon="map" value={area.value} unit={area.unit} label="Cleared" accent />
         <Tile icon="walk" value={dist.value} unit={dist.unit} label="Walked" />
-        <Tile icon="pulse" value={String(scans)} label="Readings" />
         <Tile icon="sparkles" value={String(newCells)} label="New cells" />
       </View>
 

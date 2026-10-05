@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '../../../theme';
+import { levelDbfs } from '../../../mapping/radio';
 import { formatElapsed } from '../../../mapping/hudFormat';
 import { useElapsed } from '../../../mapping/useElapsed';
 import { useMapping } from '../../../mapping/useMapping';
@@ -12,15 +13,17 @@ export function SheetTimer() {
   return <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>;
 }
 
-/** The four live counters shown even when the sheet is collapsed, as an icon and a number: towers, Wi-Fi, Bluetooth and readings. */
+/** The four live counters shown even when the sheet is collapsed, as an icon and a number: towers, Wi-Fi, Bluetooth and the radio level. */
 export function MiniStats({ showLabels = false }: { showLabels?: boolean }) {
   const totals = useMapping((s) => s.sessionTotals);
-  const readings = useMapping((s) => s.scansThisSession);
-  const items: { value: number; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
+  const radio = useMapping((s) => s.lastScan?.radio);
+  const radioLevel = radio ? Math.round(levelDbfs(radio.rms)) : null;
+  const items: { value: number | string; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
     { value: totals.towers, label: 'Towers', icon: 'cellular', color: '#3DDC84' },
     { value: totals.wifiUnique, label: 'Wi-Fi', icon: 'wifi', color: '#B388FF' },
     { value: totals.bluetoothUnique, label: 'Bluetooth', icon: 'bluetooth', color: '#FF80AB' },
-    { value: readings, label: 'Readings', icon: 'pulse', color: colors.accent },
+    // The latest radio level in dB below full scale; a dash until the dongle has taken a reading.
+    { value: radioLevel === null ? '–' : `${radioLevel}`, label: 'Radio', icon: 'radio', color: '#4FC3F7' },
   ];
   return (
     <View style={styles.row}>
