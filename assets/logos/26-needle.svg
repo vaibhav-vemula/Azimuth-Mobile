@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img">
+<defs>
+<linearGradient id="bgf26" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A1020"/><stop offset="1" stop-color="#04070E"/></linearGradient>
+<linearGradient id="lf26" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#4DD0E1"/></linearGradient><linearGradient id="df26" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4DD0E1"/><stop offset="1" stop-color="#1B6F86"/></linearGradient><linearGradient id="sf26" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#51617A"/><stop offset="1" stop-color="#2A3750"/></linearGradient>
+</defs>
+<rect width="200" height="200" rx="46" fill="url(#bgf26)"/>
+<circle cx="100" cy="100" r="78" fill="none" stroke="#1C2C44" stroke-width="3"/>
+<g transform="rotate(38 100 100)">
+<path d="M100 22 L100 100 L76 100 Z" fill="url(#lf26)"/><path d="M100 22 L124 100 L100 100 Z" fill="url(#df26)"/>
+<path d="M100 178 L100 100 L124 100 Z" fill="url(#sf26)"/><path d="M100 178 L76 100 L100 100 Z" fill="#3A4A66"/>
+</g>
+<circle cx="100" cy="100" r="13" fill="#04070E"/><circle cx="100" cy="100" r="6" fill="#FFB020"/>
+</svg>
