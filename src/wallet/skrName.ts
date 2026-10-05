@@ -35,9 +35,21 @@ export interface DomainLookup {
 }
 
 const clean = (domain: string) => domain.replace(/\.skr$/i, '').trim();
+
+/** A readable .skr name: letters, digits, dashes and underscores before ".skr". Anything else (a hash, raw bytes) is not a name. */
+export function isSkrName(text: string | null | undefined): text is string {
+  return typeof text === 'string' && /^[a-z0-9][a-z0-9_-]{0,62}\.skr$/i.test(text.trim());
+}
+
+/** The wallet's own label for the account, when it is a .skr name (the Seeker's wallet shows the Seeker ID there). */
+export function skrNameFromLabel(label: string | null | undefined): string | null {
+  return isSkrName(label) ? label.trim().toLowerCase() : null;
+}
+
 const asName = (domain: string | undefined | null) => {
   const label = domain ? clean(domain) : '';
-  return label ? `${label}.skr` : null;
+  const name = label ? `${label}.skr` : null;
+  return isSkrName(name) ? name.toLowerCase() : null;
 };
 
 /**

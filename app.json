@@ -56,7 +56,14 @@
       ],
       "./plugins/withAzimuthBackup",
       "expo-audio",
-      "./plugins/withCleartextAudio"
-    ]
+      "./plugins/withCleartextAudio",
+      "./plugins/withArm64Only"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3b620a41-da64-4e7d-84bb-21dbe7582e69"
+      }
+    },
+    "owner": "zemoo25"
   }
 }

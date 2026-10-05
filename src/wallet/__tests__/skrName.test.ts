@@ -73,3 +73,27 @@ describe('remembering the name', () => {
     expect(await resolveSkrName('W4', lookupFor('bob'), t)).toBe('bob.skr');
   });
 });
+
+describe('what counts as a .skr name', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isSkrName, skrNameFromLabel } = require('../skrName');
+
+  it('accepts readable names', () => {
+    for (const ok of ['vaibhav.skr', 'Vaibhav-V_23.skr', 'a.skr', '9lives.SKR']) expect(isSkrName(ok)).toBe(true);
+  });
+
+  it('refuses empty names, spaces, raw bytes and other endings', () => {
+    for (const bad of ['', '.skr', 'vaib hav.skr', 'name.sol', 'x\u0000y.skr', '\ufffd\ufffd12.skr', null, undefined]) expect(isSkrName(bad)).toBe(false);
+  });
+
+  it('is taken from the wallet label when the label is one', () => {
+    expect(skrNameFromLabel('Vaibhav.skr')).toBe('vaibhav.skr');
+    expect(skrNameFromLabel('Seed Vault')).toBeNull();
+    expect(skrNameFromLabel(null)).toBeNull();
+  });
+
+  it('is never produced by the lookup from garbled data', async () => {
+    const garbled = { getMainDomain: async () => ({ tld: 'skr', domain: '\u0000\u0001�' }), getParsedAllUserDomainsFromTld: async () => [{ domain: '\u0003\u0004' }] };
+    expect(await lookupSkrName('A', garbled)).toBeNull();
+  });
+});

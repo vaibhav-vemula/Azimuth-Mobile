@@ -1,0 +1,36 @@
+# What the cloud build leaves out. (This file replaces .gitignore for uploads, so the .gitignore entries are repeated.)
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.kotlin/
+*.jks
+*.p8
+*.p12
+*.key
+.metro-health-check*
+npm-debug.*
+.DS_Store
+*.tsbuildinfo
+/ios
+/android
+.gradle/
+.cxx/
+build/
+*.log
+.env
+.env.*
+!.env.example
+server/.env
+*.db
+*.db-shm
+*.db-wal
+
+# Not part of the app: the review server and admin portal, the Solana programs, the docs and the design files.
+/server
+/onchain
+/docs
+/assets/logos
+/tools
+/scripts

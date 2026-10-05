@@ -8,7 +8,7 @@ import { GlassCard } from '../../components/GlassCard';
 import { Badge, Button, SectionLabel, Stat } from '../../components/ui';
 import { colors, typography } from '../../theme';
 import { shortAddress } from '../../wallet/format';
-import { useSkrName } from '../../wallet/skrName';
+import { skrNameFromLabel, useSkrName } from '../../wallet/skrName';
 import { SOLANA_CHAIN, useWallet } from '../../wallet/useWallet';
 import { useMapping } from '../../mapping/useMapping';
 import { exploredAreaKm2, formatArea } from '../../mapping/explore';
@@ -102,7 +102,11 @@ export default function ProfileScreen() {
   const chestsOpened = summary ? summary.entries.filter((e) => e.kind === 'chest').length : 0;
 
   const connected = status === 'connected' && !!address;
-  const skrName = useSkrName(connected ? address : null);
+  // The Seeker's wallet already gives the account its .skr name as its label (it shows next to the network), so that is the
+  // user name. Only if the label is not a .skr name is the name looked up on-chain.
+  const labelName = skrNameFromLabel(walletName);
+  const lookedUp = useSkrName(connected && !labelName ? address : null);
+  const skrName = labelName ?? lookedUp;
   const initials = skrName ? skrName.slice(0, 2).toUpperCase() : address ? address.slice(0, 2).toUpperCase() : '?';
 
   const confirmDisconnect = () =>
@@ -127,7 +131,8 @@ export default function ProfileScreen() {
             </Text>
             {skrName ? <Text style={styles.muted}>{shortAddress(address!, 5, 5)}</Text> : null}
             <View style={styles.badges}>
-              <Badge label={walletName ?? 'Wallet connected'} color={colors.success} />
+              {/* The wallet's label is the user name above when it is a .skr name, so it is not repeated here. */}
+              <Badge label={labelName ? 'Wallet connected' : walletName ?? 'Wallet connected'} color={colors.success} />
               <Badge label={SOLANA_CHAIN.replace('solana:', '')} color={colors.accent} />
             </View>
           </>
