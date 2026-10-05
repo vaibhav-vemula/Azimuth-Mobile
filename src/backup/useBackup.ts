@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { withTimeout } from '../utils/async';
 import bs58 from 'bs58';
 import { createMMKV } from 'react-native-mmkv';
 import { SUPABASE_KEY, SUPABASE_URL, backendMode } from '../network/config';
@@ -34,10 +35,15 @@ function load(): Saved | null {
 
 const save = (s: Saved | null) => (s ? storage.set(KEY, JSON.stringify(s)) : storage.remove(KEY));
 
+/** Long enough to find the wallet and approve; short enough not to hang forever if it never opens. */
+const SIGN_TIMEOUT_MS = 120_000;
+
 export type BackupPhase = 'idle' | 'unlocking' | 'syncing';
 
 interface BackupState {
   phase: BackupPhase;
+  /** Which wallet request is waiting: 1 or 2 (0 when none). */
+  step: number;
   /** Backup is on for the wallet that is connected now. */
   enabled: boolean;
   lastMs: number | null;
@@ -69,6 +75,7 @@ function current(): Saved | null {
 
 export const useBackup = create<BackupState>((set, get) => ({
   phase: 'idle',
+  step: 0,
   enabled: false,
   lastMs: null,
   message: null,
@@ -82,6 +89,7 @@ export const useBackup = create<BackupState>((set, get) => ({
 
   enable: async () => {
     const address = useWallet.getState().address;
+    console.warn('[backup] turning on; wallet:', address ? 'connected' : 'none', '; online service:', api ? 'configured' : 'missing');
     if (!api) return fail(set, 'Backup needs the online service, which is not configured in this build.');
     if (!address) return fail(set, 'Connect a wallet first.');
     if (get().phase !== 'idle') return false;
@@ -89,17 +97,21 @@ export const useBackup = create<BackupState>((set, get) => ({
     try {
       const base64 = Buffer.from(bs58.decode(address)).toString('base64');
       const text = unlockMessage(address);
-      const first = await signText(text, base64);
+      set({ step: 1 });
+      const first = await withTimeout(signText(text, base64), SIGN_TIMEOUT_MS, 'The wallet did not respond. Open your wallet app, make sure it is unlocked, and try again.');
       // The key comes from this signature, so the wallet must give the same one every time. Ask once more to be sure.
-      const second = await signText(text, base64);
+      set({ step: 2 });
+      const second = await withTimeout(signText(text, base64), SIGN_TIMEOUT_MS, 'The wallet did not respond to the second request. Try again.');
       if (first !== second) throw new Error('This wallet gives a different signature each time, so it cannot unlock a backup safely.');
       const keys = deriveKeys(new Uint8Array(Buffer.from(first, 'base64')));
       save({ node: address, ...keys, lastMs: null });
       get().refresh();
     } catch (e) {
-      return fail(set, /cancel|declin|reject/i.test(errorText(e)) ? 'Cancelled. Backup is still off.' : errorText(e));
+      // Shown on screen, and printed so the cause can be read from the Metro log.
+      console.warn('[backup] unlock failed:', e);
+      return fail(set, /cancel|declin|reject/i.test(errorText(e)) ? 'Cancelled. Backup is still off.' : `Could not unlock backup: ${errorText(e)}`);
     }
-    set({ phase: 'idle' });
+    set({ phase: 'idle', step: 0 });
     return get().syncNow();
   },
 
@@ -145,7 +157,7 @@ export const useBackup = create<BackupState>((set, get) => ({
 }));
 
 function fail(set: (p: Partial<BackupState>) => void, error: string): false {
-  set({ phase: 'idle', error, message: null });
+  set({ phase: 'idle', step: 0, error, message: null });
   return false;
 }
 
