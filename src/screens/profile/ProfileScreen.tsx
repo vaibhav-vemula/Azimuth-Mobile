@@ -9,7 +9,8 @@ import { Badge, Button, SectionLabel, Stat } from '../../components/ui';
 import { colors, typography } from '../../theme';
 import { shortAddress } from '../../wallet/format';
 import { skrNameFromLabel, useSkrName } from '../../wallet/skrName';
-import { SOLANA_CHAIN, useWallet } from '../../wallet/useWallet';
+import { useUnitSystem } from '../../units/units';
+import { useWallet } from '../../wallet/useWallet';
 import { useMapping } from '../../mapping/useMapping';
 import { exploredAreaKm2, formatArea } from '../../mapping/explore';
 import { NodeSummary, deleteMyData, fetchNodeSummary, verifySeeker } from '../../network/api';
@@ -19,6 +20,7 @@ import { directMode, verifierConfigured } from '../../network/config';
 import type { ProfileStackParamList } from '../../navigation/types';
 
 export default function ProfileScreen() {
+  useUnitSystem(); // redraw when the unit setting changes
   const status = useWallet((s) => s.status);
   const address = useWallet((s) => s.address);
   const walletName = useWallet((s) => s.walletName);
@@ -133,7 +135,6 @@ export default function ProfileScreen() {
             <View style={styles.badges}>
               {/* The wallet's label is the user name above when it is a .skr name, so it is not repeated here. */}
               <Badge label={labelName ? 'Wallet connected' : walletName ?? 'Wallet connected'} color={colors.success} />
-              <Badge label={SOLANA_CHAIN.replace('solana:', '')} color={colors.accent} />
             </View>
           </>
         ) : (

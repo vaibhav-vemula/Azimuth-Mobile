@@ -1,4 +1,5 @@
 import { LatLon, cellId, distanceM, hexAt, hexCenter, hexDisk } from './hexGrid';
+import { areaParts, formatQuantity } from '../units/units';
 
 /**
  * The fog uses a finer grid than the reporting cells: a 5 m (projected) hex is about 4 m across on the ground at
@@ -25,6 +26,31 @@ export function cellsWithin(center: LatLon, radiusM = VISION_RADIUS_M, sizeM = F
   return out;
 }
 
+/** Fixes further apart than this are not joined by a line: a gap that long is a signal loss, not a drive. */
+export const MAX_JOIN_M = 2000;
+/** Fixes further apart in time than this are not joined either. */
+export const MAX_JOIN_S = 120;
+/** Along a joined line, the fog is cleared at points this far apart (well under the vision radius, so the line comes out solid). */
+export const JOIN_SPACING_M = 20;
+
+/**
+ * The places between two fixes at which to clear the fog, so that driving clears one continuous road and not a string of
+ * separate circles. Returns points spaced `spacingM` apart along the straight line from `a` to `b`, ending at `b` (`a` itself
+ * is left out: the caller has already cleared it). Nothing is returned for a join that is too long to be real driving.
+ */
+export function pointsAlong(a: LatLon, b: LatLon, seconds: number, spacingM = JOIN_SPACING_M): LatLon[] {
+  const gap = distanceM(a, b);
+  if (!Number.isFinite(gap) || gap <= spacingM) return [];
+  if (gap > MAX_JOIN_M || !(seconds >= 0) || seconds > MAX_JOIN_S) return [];
+  const n = Math.ceil(gap / spacingM);
+  const out: LatLon[] = [];
+  for (let i = 1; i <= n; i += 1) {
+    const t = i / n;
+    out.push({ latitudeDeg: a.latitudeDeg + (b.latitudeDeg - a.latitudeDeg) * t, longitudeDeg: a.longitudeDeg + (b.longitudeDeg - a.longitudeDeg) * t });
+  }
+  return out;
+}
+
 /** Ground area covered by `cells` fog cells at a latitude, in square kilometres. */
 export function exploredAreaKm2(cells: number, latitudeDeg: number, sizeM = FOG_CELL_M): number {
   const side = sizeM * Math.cos(toRad(latitudeDeg));
@@ -32,7 +58,5 @@ export function exploredAreaKm2(cells: number, latitudeDeg: number, sizeM = FOG_
 }
 
 export function formatArea(km2: number): string {
-  if (km2 < 0.01) return `${Math.round(km2 * 1e6).toLocaleString('en-US')} m²`;
-  if (km2 < 10) return `${km2.toFixed(2)} km²`;
-  return `${Math.round(km2).toLocaleString('en-US')} km²`;
+  return formatQuantity(areaParts(km2));
 }

@@ -13,7 +13,7 @@ import { Snapshot, mergeSnapshots } from '../backup/snapshot';
 import { MAX_SESSION_CELLS, SessionRecord, buildSessionRecord, reconstructSessions, sortSessions } from './sessionHistory';
 import { levelDbfs } from './radio';
 import { ensureDongle, probeRadio, probeSonde } from './radioProbe';
-import { MAX_REVEAL_ACCURACY_M, cellsWithin, exploredAreaKm2 } from './explore';
+import { MAX_REVEAL_ACCURACY_M, cellsWithin, exploredAreaKm2, pointsAlong } from './explore';
 import { stepDistance } from './hudFormat';
 import { SessionAccumulator, SessionTotals, emptyTotals, withoutIds } from './sessionStats';
 import { CellSignal, SIGNAL_CELL_M, addReading } from './signalLayer';
@@ -52,6 +52,16 @@ import { HomeExclusion, SessionRecorder } from './session';
 export type MappingStatus = 'idle' | 'starting' | 'running' | 'stopping';
 
 export const SCAN_INTERVAL_MS = 20_000;
+
+/**
+ * How long to wait before the next reading, by how fast you are moving. Walking, every 20 seconds is plenty; in a car that
+ * would be a reading every few hundred metres, which draws as separate dots on the signal map, so readings come more often.
+ */
+export function scanIntervalFor(speedMps: number): number {
+  if (!Number.isFinite(speedMps) || speedMps < 3) return SCAN_INTERVAL_MS;
+  if (speedMps < 10) return 10_000;
+  return 6_000;
+}
 /** Bluetooth scans take about 2 s and use more battery, so they run on every third reading. */
 const BLUETOOTH_EVERY = 3;
 /** A dongle reading takes about 2 s and holds the dongle, so it runs once every three readings (about a minute). */
@@ -108,6 +118,8 @@ interface MappingState {
   importProgress: (snapshot: Snapshot) => boolean;
   /** Clears the fog around a position. Returns how many new cells were cleared. */
   revealAt: (position: LatLon) => number;
+  /** Clears the fog around each of the points on the way and around the new position, in one go. Returns how many new cells were cleared. */
+  revealPath: (between: LatLon[], position: LatLon) => number;
   /** Readings recorded so far this session in or next to the given cell. */
   readingsNear: (cellId: string) => number;
   /** Dongle readings recorded so far this session in or next to the given cell. */
@@ -125,7 +137,9 @@ let lastFixAtMs = 0;
 /** Counts distinct towers, networks and devices for the session. Lives in memory only and is reset at every start. */
 const accumulator = new SessionAccumulator();
 let positionWatch: Location.LocationSubscription | null = null;
-let scanTimer: ReturnType<typeof setInterval> | null = null;
+let scanTimer: ReturnType<typeof setTimeout> | null = null;
+/** How fast the phone is moving now, in metres per second, from the last two position fixes. */
+let speedMps = 0;
 /** Latitude of a reporting cell, or Washington's if there is none (area per cell varies only a little with it). */
 function latitudeOf(cellId: string | null): number {
   const parsed = cellId ? parseCellId(cellId) : null;
@@ -270,7 +284,7 @@ function scheduleSignalsSave() {
 }
 
 async function teardown() {
-  if (scanTimer) clearInterval(scanTimer);
+  if (scanTimer) clearTimeout(scanTimer);
   scanTimer = null;
   positionWatch?.remove();
   positionWatch = null;
@@ -344,15 +358,19 @@ export const useMapping = create<MappingState>((set, get) => ({
       await startMapping();
 
       positionWatch = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 5 },
+        { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 3 },
         (loc) => {
           if (loc.mocked !== true && (loc.coords.accuracy ?? 999) <= MAX_REVEAL_ACCURACY_M) {
             const fix = { latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude };
-            const step = lastFix ? stepDistance(distanceM(lastFix, fix), (loc.timestamp - lastFixAtMs) / 1000) : 0;
+            const previous = lastFix;
+            const seconds = (loc.timestamp - lastFixAtMs) / 1000;
+            const step = previous ? stepDistance(distanceM(previous, fix), seconds) : 0;
+            speedMps = seconds > 0 ? step / seconds : 0;
             lastFix = fix;
             lastFixAtMs = loc.timestamp;
-            // Clearing the fog happens only here, while a mapping session is running.
-            const cleared = get().revealAt(fix);
+            // Clearing the fog happens only here, while a mapping session is running. The fog is cleared along the line from
+            // the last fix to this one as well as around this fix, so driving leaves one continuous road, not separate circles.
+            const cleared = get().revealPath(previous && step > 0 ? pointsAlong(previous, fix, seconds) : [], fix);
             if (step > 0 || cleared > 0) {
               set({ sessionDistanceM: get().sessionDistanceM + step, sessionClearedCells: get().sessionClearedCells + cleared });
             }
@@ -367,7 +385,14 @@ export const useMapping = create<MappingState>((set, get) => ({
           set({ currentCellId: cellIdAt({ latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude }) });
         }
       );
-      scanTimer = setInterval(() => void scanOnce(set, get), SCAN_INTERVAL_MS);
+      speedMps = 0;
+      const scheduleScan = () => {
+        scanTimer = setTimeout(() => {
+          void scanOnce(set, get);
+          if (scanTimer !== null) scheduleScan();
+        }, scanIntervalFor(speedMps));
+      };
+      scheduleScan();
       void scanOnce(set, get);
       set({ status: 'running', startedAtMs: Date.now() });
       return true;
@@ -529,17 +554,22 @@ export const useMapping = create<MappingState>((set, get) => ({
     set({ visited: {}, explored: {}, signals: {}, sessions: [], currentCellId: null });
   },
 
-  revealAt: (position) => {
+  revealAt: (position) => get().revealPath([], position),
+
+  revealPath: (between, position) => {
     const explored = get().explored;
     let next: Record<string, number> | null = null;
     let added = 0;
     const now = Date.now();
-    for (const id of cellsWithin(position)) {
-      if (explored[id]) continue;
-      next ??= { ...explored };
-      next[id] = now;
-      added += 1;
-      if (get().status === 'running' && sessionCellIds.length < MAX_SESSION_CELLS) sessionCellIds.push(id);
+    const recording = get().status === 'running';
+    for (const point of [...between, position]) {
+      for (const id of cellsWithin(point)) {
+        if ((next ?? explored)[id]) continue;
+        next ??= { ...explored };
+        next[id] = now;
+        added += 1;
+        if (recording && sessionCellIds.length < MAX_SESSION_CELLS) sessionCellIds.push(id);
+      }
     }
     if (next) {
       set({ explored: next });

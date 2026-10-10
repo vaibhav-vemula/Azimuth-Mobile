@@ -152,6 +152,17 @@ function shortDecimal(value: number): string {
   return Math.round(value * 10) / 10 < 10 ? value.toFixed(1) : String(Math.round(value));
 }
 
+/** 12345 as "12,345". */
+export function group(n: number | string): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/** A height above the ground, such as a balloon's: "12,300 m" or "40,400 ft". Never kilometres or miles. */
+export function heightParts(metres: number, system: UnitSystem = currentSystem()): Quantity {
+  if (!Number.isFinite(metres)) return { value: '–', unit: system === 'imperial' ? 'ft' : 'm' };
+  return system === 'imperial' ? { value: group(Math.round(metres / M_PER_FT / 10) * 10), unit: 'ft' } : { value: group(Math.round(metres / 10) * 10), unit: 'm' };
+}
+
 export function formatQuantity(q: Quantity): string {
   return `${q.value} ${q.unit}`;
 }
@@ -194,10 +205,10 @@ export function areaParts(km2: number, system: UnitSystem = currentSystem()): Qu
     if (!Number.isFinite(km2) || km2 <= 0) return { value: '0', unit: 'sq ft' };
     const mi2 = km2 / KM2_PER_MI2;
     if (mi2 < 0.02) return { value: squareFeet(km2 * FT2_PER_KM2), unit: 'sq ft' };
-    return { value: mi2 < 10 ? mi2.toFixed(2) : String(Math.round(mi2)), unit: 'mi²' };
+    return { value: mi2 < 10 ? mi2.toFixed(2) : group(Math.round(mi2)), unit: 'mi²' };
   }
   if (!Number.isFinite(km2) || km2 <= 0) return { value: '0', unit: 'm²' };
-  if (km2 < 0.01) return { value: String(Math.round((km2 * 1e6) / 10) * 10 || 10), unit: 'm²' };
+  if (km2 < 0.01) return { value: group(Math.round((km2 * 1e6) / 10) * 10 || 10), unit: 'm²' };
   if (km2 < 10) return { value: km2.toFixed(2), unit: 'km²' };
-  return { value: String(Math.round(km2)), unit: 'km²' };
+  return { value: group(Math.round(km2)), unit: 'km²' };
 }

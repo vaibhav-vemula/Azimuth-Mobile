@@ -15,7 +15,7 @@ import { useAppStore } from '../../state/useAppStore';
 import { useReceiver } from '../../receiver/useReceiver';
 import { Sonde, ago, bearingTo, distanceTo, estimatedLanding, secondsToGround, target } from '../../sondes/sondehub';
 import { useSondes } from '../../sondes/useSondes';
-import { useUnitSystem, currentSystem } from '../../units/units';
+import { useUnitSystem, currentSystem, formatQuantity, heightParts, rangeLabel } from '../../units/units';
 import { STATUS_STYLE } from './components/SondesPanel';
 
 type Route = RouteProp<SatellitesStackParamList, 'SondeHunt'>;
@@ -126,7 +126,7 @@ function Hunt({ sonde, here, tracked, dongle }: { sonde: Sonde; here: LatLon | n
       <GlassCard style={{ gap: 8 }}>
         <SectionLabel>Details</SectionLabel>
         <Fact name="Last heard" value={ago(sonde.lastSeenMs)} />
-        <Fact name="Height when last heard" value={formatDistanceShort(sonde.altM)} />
+        <Fact name="Height when last heard" value={formatQuantity(heightParts(sonde.altM))} />
         <Fact name={sonde.climbMps < 0 ? 'Falling at' : 'Climbing at'} value={speedLabel(Math.abs(sonde.climbMps))} />
         <Fact name="Drifting at" value={sonde.headingDeg !== null ? `${speedLabel(sonde.speedMps)} toward ${compassPoint(sonde.headingDeg)}` : speedLabel(sonde.speedMps)} />
         <Fact name="Last position" value={`${sonde.lat.toFixed(5)}, ${sonde.lon.toFixed(5)}`} />
@@ -135,7 +135,7 @@ function Hunt({ sonde, here, tracked, dongle }: { sonde: Sonde; here: LatLon | n
 
       <GlassCard style={{ gap: 8 }}>
         <SectionLabel>Before you go</SectionLabel>
-        <Text style={styles.note}>The signal fades before the sonde reaches the ground, so it is usually within a few hundred metres of the last position, often downwind. Look in trees, fields and ditches.</Text>
+        <Text style={styles.note}>The signal fades before the sonde reaches the ground, so it is usually within about {rangeLabel(300)} of the last position, often downwind. Look in trees, fields and ditches.</Text>
         <Text style={styles.note}>Ask before going onto private land. Stay away from roads, power lines, water and anything you would have to climb. The sonde has a small battery: handle it gently. Many have a label with a return address, and the weather service often wants them back.</Text>
       </GlassCard>
     </ScrollView>

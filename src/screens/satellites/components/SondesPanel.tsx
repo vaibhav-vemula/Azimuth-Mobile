@@ -10,6 +10,7 @@ import type { LatLon } from '../../../mapping/hexGrid';
 import { Sonde, SondeStatus, ago, bearingTo, distanceTo } from '../../../sondes/sondehub';
 import { useSondes } from '../../../sondes/useSondes';
 import { useUnitSystem } from '../../../units/units';
+import { DEFAULT_RADIUS_KM } from '../../../sondes/sondehub';
 
 export const STATUS_STYLE: Record<SondeStatus, { label: string; color: string }> = {
   landed: { label: 'Landed', color: colors.success },
@@ -62,7 +63,7 @@ export function SondesPanel({ here, onOpen }: Props) {
       {status === 'loading' && sondes.length === 0 ? <ActivityIndicator color={colors.accent} style={{ marginTop: 16 }} /> : null}
 
       {status !== 'loading' && status !== 'error' && hunting.length === 0 ? (
-        <EmptyState icon="balloon-outline" title="No sondes near you" message="None have been heard in the last few days within about 300 km. Balloons are launched twice a day from weather stations, so check again later." />
+        <EmptyState icon="balloon-outline" title="No sondes near you" message={`None have been heard in the last few days within about ${formatDistanceShort(DEFAULT_RADIUS_KM * 1000)}. Balloons are launched twice a day from weather stations, so check again later.`} />
       ) : null}
 
       {hunting.map((s) => (

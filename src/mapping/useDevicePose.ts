@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { addOrientationListener, startOrientation, stopOrientation } from '../../modules/signal-scan';
 import { smoothAngleDeg, walkingHeadingDeg } from '../ar/orientation';
 import { useUnits } from '../units/units';
-import { compassNeedsCalibration, useHeadingStore } from './headingStore';
+import { activityFor, compassNeedsCalibration, useHeadingStore } from './headingStore';
 import type { LatLon } from './hexGrid';
 
 /** The heading is refreshed this often (the sensor reports about 60 times a second; a screen needs far fewer). */
@@ -34,6 +34,7 @@ export function useDevicePose(active: boolean): DevicePose {
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
   const setHeading = useHeadingStore((s) => s.set);
   const setNeedsCalibration = useHeadingStore((s) => s.setNeedsCalibration);
+  const setActivity = useHeadingStore((s) => s.setActivity);
   const [mocked, setMocked] = useState(false);
   const hasFix = position !== null;
 
@@ -70,6 +71,7 @@ export function useDevicePose(active: boolean): DevicePose {
         posSub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: 2 }, (loc) => {
           setPosition({ latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude });
           useUnits.getState().noteLocation(loc.coords.latitude, loc.coords.longitude);
+          setActivity(activityFor(loc.coords.speed));
           setAccuracyM(loc.coords.accuracy);
           setMocked(loc.mocked === true);
         });

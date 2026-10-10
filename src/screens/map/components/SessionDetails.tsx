@@ -124,7 +124,7 @@ function LiveStats() {
       </StatCard>
 
       <Text style={styles.note}>
-        A reading is taken about every {Math.round(SCAN_INTERVAL_MS / 1000)} seconds, and the fog clears as you walk. Android limits Wi-Fi scans, so some readings reuse the last result. Different networks and devices are counted without keeping their names or addresses, and those counts stay on your phone.
+        A reading is taken about every {Math.round(SCAN_INTERVAL_MS / 1000)} seconds when you walk, and more often when you move faster, and the fog clears along your route. Android limits Wi-Fi scans, so some readings reuse the last result. Different networks and devices are counted without keeping their names or addresses, and those counts stay on your phone.
       </Text>
     </>
   );

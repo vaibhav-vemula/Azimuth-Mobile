@@ -4,6 +4,7 @@ import { Camera, GeoJSONSource, Images, Layer, Map, Marker } from '@maplibre/map
 import type { CameraRef, StyleSpecification } from '@maplibre/maplibre-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { clearedBoundary, fogFeature } from '../../../mapping/fog';
+import { PersonMarker } from './PersonMarker';
 import { VISION_RADIUS_M } from '../../../mapping/explore';
 import { HEAT_RADIUS_M, circleRing, radiusForMetres } from '../../../mapping/signalLayer';
 import type { FogStyle } from '../../../mapping/mappingStorage';
@@ -263,21 +264,11 @@ function ChestPin({ chest, nearest }: { chest: Chest; nearest: boolean }) {
   );
 }
 
-/** You: a dot with a soft pulsing ring, and a cone showing which way the phone faces. */
+/** You: a small person in a glowing badge, with a beam for the way the phone faces. (See PersonMarker.) */
 function MeMarker() {
   const headingDeg = useHeadingStore((s) => s.heading);
-  const pulse = usePulse(true);
-  return (
-    <View style={styles.meWrap} pointerEvents="none">
-      <Animated.View style={[styles.mePulse, { opacity: pulse.opacity, transform: [{ scale: pulse.scale }] }]} />
-      {headingDeg !== null ? (
-        <View style={[styles.cone, { transform: [{ rotate: `${headingDeg}deg` }] }]}>
-          <Ionicons name="caret-up" size={26} color={colors.accent} style={styles.coneIcon} />
-        </View>
-      ) : null}
-      <View style={styles.meDot} />
-    </View>
-  );
+  const activity = useHeadingStore((s) => s.activity);
+  return <PersonMarker headingDeg={headingDeg} activity={activity} />;
 }
 
 function usePulse(active: boolean) {
@@ -302,11 +293,6 @@ const styles = StyleSheet.create({
   pin: { borderWidth: 2.5, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
   pinTag: { marginTop: 4, borderWidth: 1, borderRadius: 999, backgroundColor: 'rgba(11,15,26,0.95)', paddingHorizontal: 8, paddingVertical: 2 },
   pinTagText: { fontSize: 11, color: colors.textPrimary, fontFamily: 'SpaceGrotesk_500Medium' },
-  meWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
-  mePulse: { position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accent },
-  meDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.accent, borderWidth: 3.5, borderColor: '#fff', shadowColor: colors.accent, shadowOpacity: 0.9, shadowRadius: 8, elevation: 8 },
-  cone: { position: 'absolute', width: 64, height: 64, alignItems: 'center' },
-  coneIcon: { marginTop: -4 },
 });
 
 /** Memoised: the screen redraws for many reasons (timers, readings) that do not change the map. */

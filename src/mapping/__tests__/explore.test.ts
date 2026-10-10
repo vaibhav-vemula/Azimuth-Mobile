@@ -1,5 +1,6 @@
 import { FOG_CELL_M, VISION_RADIUS_M, cellsWithin, exploredAreaKm2, formatArea } from '../explore';
 import { cellId, distanceM, hexAt, hexCenter, neighbors, parseCellId } from '../hexGrid';
+import { useUnits } from '../../units/units';
 
 const here = { latitudeDeg: 38.9072, longitudeDeg: -77.0369 };
 
@@ -40,9 +41,16 @@ describe('clearing the fog around you', () => {
     const km2 = exploredAreaKm2(1000, 38.9);
     expect(km2).toBeGreaterThan(0.03);
     expect(km2).toBeLessThan(0.06);
+    useUnits.getState().setPreference('metric');
     expect(formatArea(0.0004)).toBe('400 m²');
     expect(formatArea(0.42)).toBe('0.42 km²');
     expect(formatArea(1234.5)).toBe('1,235 km²');
+    // The same area in miles and feet when that is the setting, so every screen agrees.
+    useUnits.getState().setPreference('imperial');
+    expect(formatArea(0.0004)).toMatch(/ sq ft$/);
+    expect(formatArea(0.42)).toBe('0.16 mi²');
+    expect(formatArea(1234.5)).toBe('477 mi²');
+    useUnits.getState().setPreference('auto');
   });
 });
 

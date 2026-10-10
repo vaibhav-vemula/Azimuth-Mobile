@@ -137,3 +137,32 @@ describe('Automatic goes by where the phone is', () => {
     expect(units.getState().place).toBe('metric');
   });
 });
+
+describe('one setting everywhere', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { group, heightParts, formatQuantity, areaParts: area, walkedParts: walked } = require('../units');
+
+  it('groups thousands', () => {
+    expect(group(1234567)).toBe('1,234,567');
+    expect(group('999')).toBe('999');
+  });
+
+  it('gives a height in metres or feet, never kilometres or miles', () => {
+    expect(formatQuantity(heightParts(12_345, 'metric'))).toBe('12,350 m');
+    expect(formatQuantity(heightParts(12_345, 'imperial'))).toBe('40,500 ft');
+    expect(formatQuantity(heightParts(Number.NaN, 'metric'))).toBe('– m');
+  });
+
+  it('puts every measurement of the same setting in the same family of units', () => {
+    const metricUnits = [walked(5000, 'metric').unit, area(2, 'metric').unit, distanceParts(5000, 'metric').unit, longDistanceParts(1000, 'metric').unit, heightParts(500, 'metric').unit];
+    expect(metricUnits.every((u: string) => /^(m|km|m²|km²)$/.test(u))).toBe(true);
+    const imperialUnits = [walked(5000, 'imperial').unit, area(2, 'imperial').unit, distanceParts(5000, 'imperial').unit, longDistanceParts(1000, 'imperial').unit, heightParts(500, 'imperial').unit];
+    expect(imperialUnits.every((u: string) => /^(ft|mi|sq ft|mi²)$/.test(u))).toBe(true);
+  });
+
+  it('groups large areas and counts the same area the same way in each setting', () => {
+    expect(area(1234.5, 'metric').value).toBe('1,235');
+    expect(area(2589.988, 'imperial').value).toBe('1,000');
+    expect(area(0.0123, 'metric').unit).toBe('km²');
+  });
+});
