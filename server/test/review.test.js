@@ -41,6 +41,7 @@ function fakeSupabase() {
       return [...db.reports.values()].find((r) => r.type === 'challenge-claim' && r.status === 'verified' && r.node === node && r.body && r.body.report && r.body.report.challengeId === id && r.body.report.period === period) || null;
     },
     async listVerifiedActivity(node, from, to) { return db.activity.filter((a) => a.node === node && a.atMs >= Date.parse(from) && a.atMs < Date.parse(to)); },
+    async listNewReportsFor(node, from, to) { return [...db.reports.values()].filter((r) => r.node === node && r.status === 'new' && r.type !== 'challenge-claim' && Date.parse(r.received_at) >= Date.parse(from) && Date.parse(r.received_at) < Date.parse(to)); },
     async listNewCellRewards(node, from, to) { return db.cellRewards.filter((a) => a.node === node && a.atMs >= Date.parse(from) && a.atMs < Date.parse(to)); },
     async eraseNode(node) { db.erased.push(node); for (const r of db.reports.values()) if (r.node === node) r.body = { deleted: true }; },
   };
@@ -600,4 +601,41 @@ test('approve refuses challenge claims and leaves the row untouched', async () =
   assert.equal(out.status, 'blocked');
   assert.equal(chain.calls.length, 0);
   assert.equal(fake.db.reports.get(row.hash).status, 'new');
+});
+
+test('a claim counts submitted reports that nobody has reviewed yet, if they pass the automatic checks', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  const env = signedReport(node, manyCells(25));
+  fake.insertReport(env, NOW - 600_000);
+  const row = claimRow(node, { challengeId: 'cells-20' }); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'verified');
+  assert.equal(chain.calls.length, 1);
+  assert.equal(chain.calls[0].amount, 5);
+  assert.equal(fake.db.reports.get(env.hash).status, 'new', 'the report itself is still left for a person to review');
+});
+
+test('a claim does not count unreviewed reports that fail the checks, or the same ground twice', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  const bad = signedReport(node, manyCells(25));
+  bad.report.checks.samples = 999; // changed after signing
+  fake.insertReport(bad, NOW - 600_000);
+  const row = claimRow(node, { challengeId: 'cells-20' }); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'rejected');
+  assert.match(out[0].reasons[0], /0 of 20/);
+  assert.equal(chain.calls.length, 0);
+
+  // Two reports over the same 12 cells: each looks new on its own, but only one may count (12 < 20).
+  const fake2 = fakeSupabase(); const chain2 = fakeChain();
+  const n2 = newNode();
+  const twelve = Array.from({ length: 12 }, (_, i) => bucket(`h120:1:${i + 1}`, NOW - 3600_000));
+  fake2.insertReport(signedReport(n2, twelve), NOW - 600_000);
+  fake2.insertReport(signedReport(n2, twelve, { device: { model: 'Seeker', app: '1.0.1' } }), NOW - 500_000);
+  const row2 = claimRow(n2, { challengeId: 'cells-20' }); fake2.db.reports.set(row2.hash, row2);
+  const out2 = await reviewer(fake2, { chain: chain2 }).settleChallenges({ nowMs: NOW });
+  assert.equal(out2[0].status, 'rejected');
+  assert.match(out2[0].reasons[0], /12 of 20/);
 });

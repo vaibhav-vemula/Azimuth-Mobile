@@ -232,3 +232,16 @@ test('activity queries are bounded by wallet and time', async () => {
   assert.match(f.calls[1].url, /kind=eq\.new-cells/);
   assert.match(f.calls[1].url, /status=neq\.rejected/);
 });
+
+test('listNewReportsFor asks for one wallet\'s unreviewed reports in a window, never claims', async () => {
+  const f = fakeFetch([{ status: 200, body: [{ hash: 'h', type: 'mapping-session' }] }]);
+  const sink = makeSink(f);
+  const rows = await sink.listNewReportsFor('NodeA', '2026-10-10T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
+  assert.deepEqual(rows, [{ hash: 'h', type: 'mapping-session' }]);
+  const url = decodeURIComponent(f.calls[0].url);
+  assert.match(url, /node=eq\.NodeA/);
+  assert.match(url, /status=eq\.new/);
+  assert.match(url, /type=neq\.challenge-claim/);
+  assert.match(url, /received_at=gte\.2026-10-10T00:00:00\.000Z/);
+  assert.match(url, /received_at=lt\.2026-10-11T00:00:00\.000Z/);
+});

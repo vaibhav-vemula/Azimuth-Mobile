@@ -73,6 +73,11 @@ function createSupabaseSink({ url, serviceKey, fetchImpl = fetch }) {
       return call('GET', `/reports?node=eq.${encodeURIComponent(node)}&status=eq.verified&type=neq.challenge-claim&verified_at=gte.${encodeURIComponent(fromIso)}&verified_at=lt.${encodeURIComponent(toIso)}&select=type,seconds:body->report->checks->>durationSec&limit=1000`);
     },
 
+    /** The wallet's submitted reports (not claims) that nobody has reviewed yet, received in a time window. */
+    async listNewReportsFor(node, fromIso, toIso, limit = 200) {
+      return call('GET', `/reports?node=eq.${encodeURIComponent(node)}&status=eq.new&type=neq.challenge-claim&received_at=gte.${encodeURIComponent(fromIso)}&received_at=lt.${encodeURIComponent(toIso)}&order=received_at.asc&limit=${limit}&select=hash,node,type,received_at,body`);
+    },
+
     /** The wallet's 'new-cells' reward rows created in a time window. */
     async listNewCellRewards(node, fromIso, toIso) {
       return call('GET', `/rewards?node=eq.${encodeURIComponent(node)}&kind=eq.new-cells&status=neq.rejected&created_at=gte.${encodeURIComponent(fromIso)}&created_at=lt.${encodeURIComponent(toIso)}&select=amount_usdc&limit=1000`);

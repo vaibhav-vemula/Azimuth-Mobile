@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import bs58 from 'bs58';
 import { fetchChallenges, fetchNodeSummary } from '../network/api';
@@ -83,7 +83,7 @@ export function useChallenges(): {
         if (!result.accepted) {
           setMessage(result.reasons?.[0] ?? 'Could not send the claim.');
         } else {
-          setMessage('Claim sent. It is checked automatically and the reward arrives once your reports are verified.');
+          setMessage('Claim pending. The server is checking it and will send your AZM to your wallet. If it is offline, the claim waits and is paid when it is back.');
         }
         await refresh();
       } catch (e) {
@@ -94,6 +94,14 @@ export function useChallenges(): {
     },
     [list, address, refresh]
   );
+
+  // While a claim is waiting for the server, look again every few seconds so it flips to Claimed (or rejected) on its own.
+  const hasPending = !!summary?.claims?.some((c) => c.status === 'new');
+  useEffect(() => {
+    if (!hasPending) return;
+    const id = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(id);
+  }, [hasPending, refresh]);
 
   const nowMs = Date.now();
   const verified = summary?.verified ?? [];

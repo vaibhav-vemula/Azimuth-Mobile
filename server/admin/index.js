@@ -38,7 +38,7 @@ http.createServer(handle).listen(port, host, () => {
 });
 
 if (chain) {
-  const SETTLE_EVERY_MS = 30_000;
+  const SETTLE_EVERY_MS = 5_000;
   let busy = false;
   setInterval(async () => {
     if (busy) return;

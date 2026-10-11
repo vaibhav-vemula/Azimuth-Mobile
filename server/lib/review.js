@@ -159,8 +159,25 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
       sink.listVerifiedActivity(r.node, new Date(fromMs).toISOString(), new Date(toMs).toISOString()),
       sink.listNewCellRewards(r.node, new Date(fromMs).toISOString(), new Date(toMs).toISOString()),
     ]);
-    const progress = progressFor(def.metric, { reports, rewards }, service.config.newCellUsdc);
-    if (progress < def.goal) return reject([`${progress} of ${def.goal} verified so far. Reports are counted once they have been checked.`]);
+    let progress = progressFor(def.metric, { reports, rewards }, service.config.newCellUsdc);
+    if (progress < def.goal) {
+      // Not enough approved work yet. Submitted reports that nobody has reviewed also count, once they pass the same
+      // automatic checks (signature, plausibility, freshness). Reports that fail them count for nothing.
+      const waiting = await sink.listNewReportsFor(r.node, new Date(fromMs).toISOString(), new Date(toMs).toISOString());
+      const passing = [];
+      let bestNewCellsUsdc = 0;
+      for (const w of waiting) {
+        const p = await preview(w);
+        if (!p.ok) continue;
+        passing.push({ type: w.type, seconds: w.body && w.body.report && w.body.report.checks ? w.body.report.checks.durationSec : null });
+        const usdc = (p.rewardRows || []).filter((x) => x.kind === 'new-cells').reduce((n, x) => n + Number(x.amountUsdc), 0);
+        // Each report is judged against the same known cells, so two reports over the same ground would both look new.
+        // Only the best one counts, so repeating a walk cannot add up.
+        if (usdc > bestNewCellsUsdc) bestNewCellsUsdc = usdc;
+      }
+      progress = progressFor(def.metric, { reports: reports.concat(passing), rewards: bestNewCellsUsdc > 0 ? rewards.concat([{ amount_usdc: bestNewCellsUsdc }]) : rewards }, service.config.newCellUsdc);
+    }
+    if (progress < def.goal) return reject([`${progress} of ${def.goal} found by the server so far. Submit your sessions from the Map tab, then claim again.`]);
 
     try {
       await sink.setOnchain(r.hash, { onchain_amount: def.reward });
