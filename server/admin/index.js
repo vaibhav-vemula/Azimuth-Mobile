@@ -15,6 +15,7 @@ const { createSupabaseSink } = require('../lib/supabase');
 const { createReviewer } = require('../lib/review');
 const { createRpc, createSeekerGate } = require('../lib/seeker');
 const { fileTleProvider } = require('../lib/orbit');
+const { chainFromEnv } = require('../lib/chainFromEnv');
 const { createAdminApp } = require('./app');
 
 const host = process.env.ADMIN_HOST || '127.0.0.1';
@@ -26,10 +27,12 @@ const checkNode =
   process.env.REQUIRE_SEEKER === '1'
     ? createSeekerGate({ rpc: createRpc(process.env.RPC_URL || 'https://api.mainnet-beta.solana.com'), store })
     : undefined;
-const reviewer = createReviewer({ sink, store, checkNode, tleFor: fileTleProvider(path.join(__dirname, '..', 'data', 'tles.json')) });
+const chain = chainFromEnv();
+const reviewer = createReviewer({ sink, store, checkNode, chain, tleFor: fileTleProvider(path.join(__dirname, '..', 'data', 'tles.json')) });
 
-const handle = createAdminApp({ reviewer, sink, password: process.env.ADMIN_PASSWORD });
+const handle = createAdminApp({ reviewer, sink, chain, password: process.env.ADMIN_PASSWORD });
 http.createServer(handle).listen(port, host, () => {
   console.log(`Admin portal on http://${host}:${port}`);
+  console.log(chain ? 'AZMTest payouts: on (devnet)' : 'AZMTest payouts: off (set AZM_AUTHORITY_KEYPAIR, AZM_PROGRAM_ID, AZM_MINT)');
   if (host !== '127.0.0.1') console.warn('The portal is reachable from other computers. Put HTTPS in front of it.');
 });
