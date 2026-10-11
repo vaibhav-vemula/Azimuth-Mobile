@@ -58,7 +58,7 @@ export default function QuestsScreen() {
                 <GlassCard key={c.id} style={styles.card}>
                   <View style={styles.head}>
                     <Text style={styles.cardTitle}>{c.title}</Text>
-                    <Badge label={`+${c.reward} AZMTest`} color={colors.success} />
+                    <Badge label={`+${c.reward} AZM`} color={colors.success} />
                   </View>
                   {c.blurb ? <Text style={styles.muted}>{c.blurb}</Text> : null}
                   <View style={styles.track}>

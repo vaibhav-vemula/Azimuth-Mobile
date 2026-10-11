@@ -1,3 +1,4 @@
+import { StoreBubble } from '../../store/StoreBubble';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -264,6 +265,7 @@ export default function PassesScreen() {
 
         {mode === 'sondes' ? null : body}
       </ScrollView>
+      <StoreBubble />
     </View>
   );
 }

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { GlassCard } from '../../components/GlassCard';
 import { LiveSpectrum } from '../../components/LiveSpectrum';
+import { StoreBubble } from '../../store/StoreBubble';
 import { Screen } from '../../components/Screen';
 import { Badge, Button, Row, SectionLabel } from '../../components/ui';
 import { errorMessage, useReceiver } from '../../receiver/useReceiver';
@@ -112,7 +113,7 @@ export default function RadioScreen() {
     streamAction === 'starting' ? 'Starting…' : streamAction === 'stopping' ? 'Stopping…' : isStreaming ? 'Stop stream' : 'Start stream';
 
   return (
-    <Screen>
+    <Screen overlay={<StoreBubble />}>
       <View style={styles.titleRow}>
         <View>
           <Text style={styles.title}>Radio</Text>

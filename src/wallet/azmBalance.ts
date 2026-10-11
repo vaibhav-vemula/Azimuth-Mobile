@@ -26,11 +26,11 @@ export async function fetchAzmBalance(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTokenAccountBalance', params: [azmTokenAccount(owner, mint)] }),
   });
-  if (res.status !== 200) throw new Error(`Could not read the AZMTest balance (HTTP ${res.status}).`);
+  if (res.status !== 200) throw new Error(`Could not read the AZM balance (HTTP ${res.status}).`);
   const json = (await res.json()) as { result?: { value?: { amount?: string } }; error?: { message?: string } };
   if (json.error) {
     if (/could not find account/i.test(json.error.message ?? '')) return 0;
-    throw new Error(json.error.message ?? 'Could not read the AZMTest balance.');
+    throw new Error(json.error.message ?? 'Could not read the AZM balance.');
   }
   return Number(json.result?.value?.amount ?? 0);
 }

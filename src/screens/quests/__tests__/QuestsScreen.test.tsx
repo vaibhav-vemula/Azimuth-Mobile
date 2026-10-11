@@ -41,7 +41,7 @@ beforeEach(() => jest.clearAllMocks());
 describe('QuestsScreen', () => {
   it('groups cards under the section labels', () => {
     const out = text(render({ items: [item('a', 'daily', 'Scan daily', { kind: 'progress', value: 10 }), item('b', 'weekly', 'Scan weekly', { kind: 'progress', value: 10 }), item('c', 'once', 'First chest', { kind: 'progress', value: 10 })] }));
-    for (const s of ['DAILY', 'WEEKLY', 'ONE TIME', 'Scan daily', 'Scan weekly', 'First chest', '+5 AZMTest']) expect(out).toContain(s);
+    for (const s of ['DAILY', 'WEEKLY', 'ONE TIME', 'Scan daily', 'Scan weekly', 'First chest', '+5 AZM']) expect(out).toContain(s);
   });
   it('shows an empty message and a first-load error', () => {
     expect(text(render())).toContain('No challenges right now.');

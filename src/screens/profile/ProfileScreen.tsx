@@ -185,7 +185,7 @@ export default function ProfileScreen() {
           <Stat label="Explored" value={formatArea(exploredAreaKm2(exploredCount, 38.9))} />
           <Stat label="Chests opened" value={summary ? String(chestsOpened) : '—'} />
           <Stat label="Earned" value={summary ? String(summary.totalUsdc) : '—'} unit="USDC" />
-          {AZM_MINT ? <Stat label="AZMTest" value={azm === null ? '—' : String(azm)} unit="devnet" /> : null}
+          {AZM_MINT ? <Stat label="AZM" value={azm === null ? '—' : String(azm)} unit="token" /> : null}
         </View>
         <Text style={styles.muted}>
           {verifierConfigured
@@ -201,7 +201,7 @@ export default function ProfileScreen() {
               <LinkRow
                 key={v.hash}
                 icon="checkmark-circle-outline"
-                label={`${v.type.replace('-', ' ')} · +${v.amount} AZMTest`}
+                label={`${v.type.replace('-', ' ')} · +${v.amount} AZM`}
                 onPress={() => void Linking.openURL(`https://explorer.solana.com/address/${v.record}?cluster=devnet`)}
               />
             ))}
