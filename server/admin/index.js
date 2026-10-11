@@ -36,3 +36,23 @@ http.createServer(handle).listen(port, host, () => {
   console.log(chain ? 'AZMTest payouts: on (devnet)' : 'AZMTest payouts: off (set AZM_AUTHORITY_KEYPAIR, AZM_PROGRAM_ID, AZM_MINT)');
   if (host !== '127.0.0.1') console.warn('The portal is reachable from other computers. Put HTTPS in front of it.');
 });
+
+if (chain) {
+  const SETTLE_EVERY_MS = 30_000;
+  let busy = false;
+  setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const out = await reviewer.settleChallenges();
+      if (out.length) console.log(`Challenge claims: ${out.filter((x) => x.status === 'verified').length} verified, ${out.filter((x) => x.status === 'rejected').length} rejected`);
+      for (const x of out) {
+        if (x.status === 'skipped') for (const reason of x.reasons || (x.reason ? [x.reason] : [])) console.warn(`Challenge claim skipped: ${reason}`);
+      }
+    } catch (e) {
+      console.warn(`Challenge settlement failed: ${e.message}`);
+    } finally {
+      busy = false;
+    }
+  }, SETTLE_EVERY_MS).unref();
+}

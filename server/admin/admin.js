@@ -149,7 +149,7 @@
     return (j.onchain && j.onchain.error) || (j.reasons && j.reasons.join('. ')) || j.error || ('Failed (' + x.status + ')');
   }
   function loadPayouts() {
-    api('GET', '/api/payouts').then(function (r) {
+    return api('GET', '/api/payouts').then(function (r) {
       var vault = $('vault'), box = $('payouts');
       vault.textContent = ''; box.textContent = '';
       if (r.status !== 200) { vault.textContent = (r.json && r.json.error) || 'Could not load payouts.'; return; }
@@ -187,6 +187,14 @@
       });
     }).catch(function () { $('vault').textContent = 'Could not reach the portal.'; });
   }
+
+  $('settle').addEventListener('click', function () {
+    var v = $('vault');
+    api('POST', '/api/claims/settle').then(function (r) {
+      var msg = r.status === 200 ? 'Claims checked: ' + r.json.verified + ' paid or verified, ' + r.json.rejected + ' rejected.' : ((r.json && r.json.error) || 'Could not check claims.');
+      return loadPayouts().then(function () { v.insertBefore(el('div', { class: 'tag', text: msg }), v.firstChild); });
+    }).catch(function () { v.textContent = 'Could not reach the portal.'; });
+  });
 
   $('reload').addEventListener('click', function () { loadOverview(); loadList(); loadPayouts(); });
   loadOverview(); loadList(); loadPayouts();

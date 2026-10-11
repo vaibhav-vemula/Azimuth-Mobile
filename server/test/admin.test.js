@@ -194,3 +194,18 @@ test('pause switch validates input and needs a chain', async () => {
     assert.equal((await call('POST', '/api/pause', { paused: true })).status, 503);
   });
 });
+
+test('settling claims runs the reviewer and counts outcomes', async () => {
+  const reviewer = { settleChallenges: async () => [{ status: 'verified' }, { status: 'rejected' }, { status: 'verified' }] };
+  await withPortal(async ({ call }) => {
+    const res = await call('POST', '/api/claims/settle');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json, { settled: 3, verified: 2, rejected: 1 });
+  }, { reviewer, chain: { status: async () => ({}) } });
+});
+
+test('settling claims needs a configured chain', async () => {
+  await withPortal(async ({ call }) => {
+    assert.equal((await call('POST', '/api/claims/settle')).status, 503);
+  }, { reviewer: { settleChallenges: async () => [] }, chain: null });
+});

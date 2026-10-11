@@ -166,6 +166,12 @@ function createAdminApp({ reviewer, sink, chain = null, password }) {
         return send(200, { ok: true, paused: body.paused });
       }
 
+      if (req.method === 'POST' && p === '/api/claims/settle') {
+        if (!chain) return send(503, { error: 'on-chain payouts are not configured' });
+        const out = await reviewer.settleChallenges();
+        return send(200, { settled: out.length, verified: out.filter((x) => x.status === 'verified').length, rejected: out.filter((x) => x.status === 'rejected').length });
+      }
+
       return send(404, { error: 'not found' });
     } catch (e) {
       return send(e.status || 500, { error: e.status ? e.message : `internal error: ${e.message}` });
