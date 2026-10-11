@@ -4,8 +4,12 @@
 resolution = true
 skip-lint = false
 
+[programs.devnet]
+azimuth_registry = "AJtmjGMQPjPUF5zscYXdMqvMXgRYZHeWHgNijAEae9Zh"
+
 [programs.localnet]
 azimuth_bounty = "GNDu67dFybZNrs8vs5XSDSQTmRnQqoKKoFUhuEuVH9fq"
+azimuth_registry = "AJtmjGMQPjPUF5zscYXdMqvMXgRYZHeWHgNijAEae9Zh"
 
 [registry]
 url = "https://api.apr.dev"

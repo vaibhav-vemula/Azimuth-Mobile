@@ -286,6 +286,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "azimuth_registry"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+]
+
+[[package]]
 name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
