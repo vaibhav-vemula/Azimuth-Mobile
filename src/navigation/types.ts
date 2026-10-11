@@ -15,5 +15,6 @@ export type RootTabParamList = {
   Map: undefined;
   Radio: undefined;
   Satellites: undefined;
+  Quests: undefined;
   Profile: undefined;
 };

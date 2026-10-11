@@ -11,6 +11,7 @@ import CaptureScreen from '../screens/satellites/CaptureScreen';
 import SondeHuntScreen from '../screens/satellites/SondeHuntScreen';
 import RecordingsScreen from '../screens/recordings/RecordingsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import QuestsScreen from '../screens/quests/QuestsScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import { colors, typography } from '../theme';
 import MapScreen from '../screens/map/MapScreen';
@@ -24,6 +25,7 @@ const TAB_ICONS: Record<keyof RootTabParamList, { active: keyof typeof Ionicons.
   Map: { active: 'map', idle: 'map-outline' },
   Radio: { active: 'radio', idle: 'radio-outline' },
   Satellites: { active: 'planet', idle: 'planet-outline' },
+  Quests: { active: 'trophy', idle: 'trophy-outline' },
   Profile: { active: 'person', idle: 'person-outline' },
 };
 
@@ -58,6 +60,7 @@ const GuardedPassDetail = guarded(PassDetailScreen);
 const GuardedCapture = guarded(CaptureScreen);
 const GuardedSondeHunt = guarded(SondeHuntScreen);
 const GuardedRecordings = guarded(RecordingsScreen);
+const GuardedQuests = guarded(QuestsScreen);
 const GuardedProfile = guarded(ProfileScreen);
 const GuardedMap = guarded(MapScreen);
 const GuardedSettings = guarded(SettingsScreen);
@@ -117,6 +120,7 @@ export function RootNavigator() {
         <Tab.Screen name="Map" component={GuardedMap} />
         <Tab.Screen name="Radio" component={GuardedRadio} />
         <Tab.Screen name="Satellites" component={SatellitesStack} />
+        <Tab.Screen name="Quests" component={GuardedQuests} />
         <Tab.Screen name="Profile" component={ProfileStackNavigator} />
       </Tab.Navigator>
     </NavigationContainer>
