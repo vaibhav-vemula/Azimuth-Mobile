@@ -93,4 +93,35 @@ describe('Supabase direct API', () => {
     expect(bare.azmTotal).toBe(0);
     expect(bare.verified).toEqual([]);
   });
+
+  it('submits a challenge claim as a report row of type challenge-claim', async () => {
+    const f = fakeFetch([{ status: 201 }, { status: 409 }]);
+    const claim = { report: { version: 1, type: 'challenge-claim', node: 'N', challengeId: 'scan-30', period: '2026-10-10', claimedMs: 1 }, signature: 's', hash: 'a'.repeat(64) };
+    const out = await api(f).submitClaim(claim as never);
+    expect(out).toMatchObject({ accepted: true, pending: true });
+    const sent = JSON.parse(f.calls[0].init.body as string);
+    expect(sent).toMatchObject({ hash: 'a'.repeat(64), node: 'N', type: 'challenge-claim' });
+    expect(await api(f).submitClaim(claim as never)).toMatchObject({ accepted: false });
+  });
+
+  it('fetches the challenge list from the server and drops invalid rows', async () => {
+    const f = fakeFetch([{ status: 200, body: [
+      { id: 'scan-30', title: 'Scan', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map' },
+      { id: 'bad', title: 'Bad', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 0, go_tab: 'Map' },
+    ] }, { status: 500, body: { message: 'boom' } }]);
+    const a = api(f);
+    expect((await a.fetchChallenges()).map((c) => c.id)).toEqual(['scan-30']);
+    expect(f.calls[0].url).toMatch(/\/challenges\?active=eq\.true&order=sort\.asc/);
+    await expect(a.fetchChallenges()).rejects.toThrow();
+  });
+
+  it('maps claims from node_summary and tolerates their absence', async () => {
+    const f = fakeFetch([
+      { status: 200, body: { pendingUsdc: 0, approvedUsdc: 0, paidUsdc: 0, entries: [], claims: [{ challengeId: 'scan-30', period: '2026-10-10', status: 'rejected', reasons: ['23 of 30'] }] } },
+      { status: 200, body: { pendingUsdc: 0, approvedUsdc: 0, paidUsdc: 0, entries: [] } },
+    ]);
+    const a = api(f);
+    expect((await a.fetchNodeSummary('Addr')).claims).toEqual([{ challengeId: 'scan-30', period: '2026-10-10', status: 'rejected', reasons: ['23 of 30'] }]);
+    expect((await a.fetchNodeSummary('Addr')).claims).toEqual([]);
+  });
 });

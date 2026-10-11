@@ -1,3 +1,5 @@
+import type { ChallengeClaim } from '../challenges/claim';
+import type { Challenge } from '../challenges/definitions';
 import type { SignedReport } from '../reports/report';
 import { SUPABASE_KEY, SUPABASE_URL, VERIFIER_URL, directMode, verifierConfigured } from './config';
 import { createSupabaseApi } from './supabaseApi';
@@ -44,7 +46,9 @@ export interface NodeSummary {
   /** Whole AZMTest recorded on-chain for this wallet's verified reports. */
   azmTotal?: number;
   /** Reports recorded on-chain, newest first. */
-  verified?: { hash: string; type: string; amount: number; record: string; verified_ms: number }[];
+  verified?: { hash: string; type: string; amount: number; record: string; verified_ms: number; challenge?: string | null; period?: string | null }[];
+  /** Challenge claims filed by this wallet and how the server judged them. */
+  claims?: { challengeId: string; period: string; status: 'new' | 'verified' | 'rejected'; reasons: string[] | null }[];
   entries: { kind: string; ref: string; amount_usdc: number; status: string; created_ms: number }[];
   seekerMint: string | null;
 }
@@ -79,6 +83,16 @@ export async function submitReport(signed: SignedReport): Promise<SubmitResult> 
     body: JSON.stringify(signed),
   });
   return body;
+}
+
+export async function submitClaim(signed: { report: ChallengeClaim; signature: string; hash: string }): Promise<SubmitResult> {
+  if (directMode) return direct().submitClaim(signed);
+  throw new Error('Challenges need the direct Supabase connection.');
+}
+
+export async function fetchChallenges(): Promise<Challenge[]> {
+  if (directMode) return direct().fetchChallenges();
+  return [];
 }
 
 export async function fetchChests(): Promise<Chest[]> {

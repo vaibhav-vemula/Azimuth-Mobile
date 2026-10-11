@@ -1,4 +1,7 @@
 import type { SignedReport } from '../reports/report';
+import type { ChallengeClaim } from '../challenges/claim';
+import { challengeFromRow } from '../challenges/definitions';
+import type { Challenge } from '../challenges/definitions';
 import type { Chest, DeleteResult, NodeSummary, SubmitResult } from './api';
 
 const TIMEOUT_MS = 15_000;
@@ -85,6 +88,23 @@ export function createSupabaseApi(config: { url: string; key: string; fetchImpl?
       throw new Error(msg || `The server refused the report (HTTP ${res.status}).`);
     },
 
+    /** Stores a signed challenge claim as a report row; the server re-checks the numbers before paying. */
+    async submitClaim(signed: { report: ChallengeClaim; signature: string; hash: string }): Promise<SubmitResult> {
+      const res = await call('POST', '/reports', { hash: signed.hash, node: signed.report.node, type: 'challenge-claim', body: signed }, { prefer: 'return=minimal' });
+      if (res.status === 201 || res.status === 200 || res.status === 204) return { accepted: true, pending: true, hash: signed.hash, reasons: [] };
+      if (res.status === 409) return { accepted: false, hash: signed.hash, reasons: ['This claim was already submitted.'] };
+      const msg = messageOf(res.json);
+      if (/too many|busy/i.test(msg)) return { accepted: false, reasons: [msg] };
+      if (/reports_shape|violates check/i.test(msg)) return { accepted: false, reasons: ['The claim is malformed.'] };
+      throw new Error(msg || `The server refused the claim (HTTP ${res.status}).`);
+    },
+
+    async fetchChallenges(): Promise<Challenge[]> {
+      const res = await call('GET', '/challenges?active=eq.true&order=sort.asc&select=id,title,blurb,period,metric,goal,reward,go_tab');
+      if (res.status !== 200 || !Array.isArray(res.json)) throw new Error(messageOf(res.json) || `Could not load challenges (HTTP ${res.status}).`);
+      return (res.json as unknown[]).map(challengeFromRow).filter((c): c is Challenge => c !== null);
+    },
+
     async fetchChests(): Promise<Chest[]> {
       const res = await call('GET', '/chests?select=*&order=created_at.desc&limit=200');
       if (res.status !== 200 || !Array.isArray(res.json)) throw new Error(messageOf(res.json) || `Could not load chests (HTTP ${res.status}).`);
@@ -114,7 +134,7 @@ export function createSupabaseApi(config: { url: string; key: string; fetchImpl?
     async fetchNodeSummary(address: string): Promise<NodeSummary> {
       const res = await call('POST', '/rpc/node_summary', { p_node: address });
       if (res.status !== 200 || !res.json) throw new Error(messageOf(res.json) || `Could not load earnings (HTTP ${res.status}).`);
-      const j = res.json as { pendingReports?: number; rejectedReports?: number; pendingUsdc: number; approvedUsdc: number; paidUsdc: number; entries: NodeSummary['entries']; azmTotal?: number; verified?: NodeSummary['verified'] };
+      const j = res.json as { pendingReports?: number; rejectedReports?: number; pendingUsdc: number; approvedUsdc: number; paidUsdc: number; entries: NodeSummary['entries']; azmTotal?: number; verified?: NodeSummary['verified']; claims?: NodeSummary['claims'] };
       return {
         address,
         totalUsdc: Number(j.pendingUsdc) + Number(j.approvedUsdc) + Number(j.paidUsdc),
@@ -127,6 +147,7 @@ export function createSupabaseApi(config: { url: string; key: string; fetchImpl?
         seekerMint: null,
         azmTotal: Number(j.azmTotal ?? 0),
         verified: j.verified ?? [],
+        claims: j.claims ?? [],
       };
     },
 
