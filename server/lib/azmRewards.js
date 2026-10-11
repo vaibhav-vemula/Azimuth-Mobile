@@ -2,7 +2,7 @@
 
 /** Whole AZMTest amounts for approved reports. The token has 0 decimals, so everything here is an integer. */
 const KIND = { mapping: 0, satellite: 1, chest: 2, challenge: 3 };
-const TYPE_KIND = { 'mapping-session': KIND.mapping, 'satellite-pass': KIND.satellite, 'chest-claim': KIND.chest };
+const TYPE_KIND = { 'mapping-session': KIND.mapping, 'satellite-pass': KIND.satellite, 'chest-claim': KIND.chest, 'challenge-claim': KIND.challenge };
 
 /** A positive whole number from the environment, or the fallback. */
 function whole(env, name, fallback) {

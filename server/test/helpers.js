@@ -14,7 +14,11 @@ function base58Encode(buf) {
 function newNode() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
   const raw = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
-  return { privateKey, address: base58Encode(raw) };
+  return {
+    privateKey,
+    address: base58Encode(raw),
+    signMessage: (text) => crypto.sign(null, Buffer.from(text, 'utf8'), privateKey).toString('base64'),
+  };
 }
 
 const BUCKET = 15 * 60_000;

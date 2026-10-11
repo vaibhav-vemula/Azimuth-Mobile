@@ -77,6 +77,34 @@ function verifyEnvelope(envelope) {
   return { valid: problems.length === 0, problems, hash, node: report.node };
 }
 
+/** Checks a signed challenge claim. It is a small report with no readings, so only the signature and shape are checked. */
+function verifyClaim(envelope) {
+  const problems = [];
+  const report = envelope && envelope.report;
+  if (!report || typeof report !== 'object') return { valid: false, problems: ['missing claim'] };
+  if (report.version !== 1) problems.push(`unsupported claim version ${report.version}`);
+  if (report.type !== 'challenge-claim') problems.push('not a challenge claim');
+  if (typeof report.node !== 'string') problems.push('missing node address');
+  if (typeof report.challengeId !== 'string' || !/^[a-z0-9-]{1,40}$/.test(report.challengeId)) problems.push('invalid challenge id');
+  if (typeof report.period !== 'string' || !/^(once|\d{4}-\d{2}-\d{2}|\d{4}-W\d{2})$/.test(report.period)) problems.push('invalid period');
+  if (!Number.isFinite(report.claimedMs)) problems.push('invalid claim time');
+
+  const canonical = canonicalize(report);
+  const hash = crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
+  if (hash !== envelope.hash) problems.push('hash does not match the claim contents');
+  try {
+    const publicKey = base58Decode(report.node);
+    if (publicKey.length !== 32) throw new Error(`node address decodes to ${publicKey.length} bytes, expected 32`);
+    const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_PREFIX, publicKey]), format: 'der', type: 'spki' });
+    const signature = Buffer.from(envelope.signature || '', 'base64');
+    if (signature.length !== 64) throw new Error(`signature is ${signature.length} bytes, expected 64`);
+    if (!crypto.verify(null, Buffer.from(SIGNING_PREFIX + canonical, 'utf8'), key, signature)) problems.push('signature is not valid for this node and claim');
+  } catch (e) {
+    problems.push(e.message);
+  }
+  return { valid: problems.length === 0, problems, hash, node: report.node };
+}
+
 /** Checks an ed25519 signature over a UTF-8 message by the wallet at a base58 address. */
 function verifyMessage(addressBase58, message, signatureBase64) {
   try {
@@ -90,7 +118,7 @@ function verifyMessage(addressBase58, message, signatureBase64) {
   }
 }
 
-module.exports = { canonicalize, base58Decode, verifyEnvelope, verifyMessage };
+module.exports = { canonicalize, base58Decode, verifyEnvelope, verifyClaim, verifyMessage };
 
 function cli(argv) {
   const file = argv[2];

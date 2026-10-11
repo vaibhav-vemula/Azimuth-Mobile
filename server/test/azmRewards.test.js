@@ -32,3 +32,8 @@ test('unknown report types pay nothing and have no kind', () => {
   assert.equal(kindFor('satellite-pass'), KIND.satellite);
   assert.equal(kindFor('chest-claim'), KIND.chest);
 });
+
+test('challenge claims have kind 3 and an amount of 0 here (the amount comes from the challenge list)', () => {
+  assert.equal(kindFor('challenge-claim'), 3);
+  assert.equal(azmAmount({ type: 'challenge-claim', rows: [], newCellUsdc: 0.001 }, {}), 0);
+});
