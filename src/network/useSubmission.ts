@@ -15,7 +15,7 @@ export type SubmissionState =
   | { phase: 'error'; message: string };
 
 function rewardMessage(accepted: boolean, reasons: string[], reward?: { newCells: number; paidCells: number; subsidyUsdc: number; chestUsdc: number }, pending?: boolean): string {
-  if (accepted && pending) return 'Received. It will be checked soon, and any reward is added after review. Check Profile for the result.';
+  if (accepted && pending) return 'Submitted. You will receive AZMTest when it is verified. Check Profile for the result.';
   if (!accepted) return reasons.length ? reasons.join('. ') : 'The verifier did not accept this report.';
   const parts: string[] = [];
   if (reward?.chestUsdc) parts.push('Chest opened');

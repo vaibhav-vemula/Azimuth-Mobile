@@ -19,3 +19,7 @@ export const backendMode: BackendMode = SUPABASE_URL && SUPABASE_KEY ? 'direct' 
 /** True when there is anywhere to send reports. Kept under its older name because screens already use it. */
 export const verifierConfigured = backendMode !== 'none';
 export const directMode = backendMode === 'direct';
+
+/** The AZMTest mint on devnet (from onchain/devnet.json). Empty hides the balance. */
+export const AZM_MINT: string = process.env.EXPO_PUBLIC_AZM_MINT ?? '';
+export const DEVNET_RPC: string = process.env.EXPO_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com';

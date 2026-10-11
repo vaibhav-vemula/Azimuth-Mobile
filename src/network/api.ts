@@ -41,6 +41,10 @@ export interface NodeSummary {
   pendingUsdc?: number;
   approvedUsdc?: number;
   paidUsdc?: number;
+  /** Whole AZMTest recorded on-chain for this wallet's verified reports. */
+  azmTotal?: number;
+  /** Reports recorded on-chain, newest first. */
+  verified?: { hash: string; type: string; amount: number; record: string; verified_ms: number }[];
   entries: { kind: string; ref: string; amount_usdc: number; status: string; created_ms: number }[];
   seekerMint: string | null;
 }

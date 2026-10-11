@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +16,8 @@ import { exploredAreaKm2, formatArea } from '../../mapping/explore';
 import { NodeSummary, deleteMyData, fetchNodeSummary, verifySeeker } from '../../network/api';
 import bs58 from 'bs58';
 import { signText } from '../../wallet/signReport';
-import { directMode, verifierConfigured } from '../../network/config';
+import { AZM_MINT, directMode, verifierConfigured } from '../../network/config';
+import { fetchAzmBalance } from '../../wallet/azmBalance';
 import type { ProfileStackParamList } from '../../navigation/types';
 
 export default function ProfileScreen() {
@@ -31,6 +32,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const exploredCount = useMapping((s) => Object.keys(s.explored).length);
   const [summary, setSummary] = useState<NodeSummary | null>(null);
+  const [azm, setAzm] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -39,6 +41,11 @@ export default function ProfileScreen() {
       fetchNodeSummary(address)
         .then((r) => !cancelled && setSummary(r))
         .catch(() => undefined);
+      if (AZM_MINT) {
+        fetchAzmBalance(address)
+          .then((n) => !cancelled && setAzm(n))
+          .catch(() => undefined);
+      }
       return () => {
         cancelled = true;
       };
@@ -178,6 +185,7 @@ export default function ProfileScreen() {
           <Stat label="Explored" value={formatArea(exploredAreaKm2(exploredCount, 38.9))} />
           <Stat label="Chests opened" value={summary ? String(chestsOpened) : '—'} />
           <Stat label="Earned" value={summary ? String(summary.totalUsdc) : '—'} unit="USDC" />
+          {AZM_MINT ? <Stat label="AZMTest" value={azm === null ? '—' : String(azm)} unit="devnet" /> : null}
         </View>
         <Text style={styles.muted}>
           {verifierConfigured
@@ -186,6 +194,19 @@ export default function ProfileScreen() {
               : 'Earnings are recorded by the verifier. Paying them out on-chain is a separate step.'
             : 'Earnings need a network connection, which this build does not have.'}
         </Text>
+        {summary?.verified?.length ? (
+          <View style={{ gap: 6 }}>
+            <SectionLabel>Verified on-chain</SectionLabel>
+            {summary.verified.slice(0, 5).map((v) => (
+              <LinkRow
+                key={v.hash}
+                icon="checkmark-circle-outline"
+                label={`${v.type.replace('-', ' ')} · +${v.amount} AZMTest`}
+                onPress={() => void Linking.openURL(`https://explorer.solana.com/address/${v.record}?cluster=devnet`)}
+              />
+            ))}
+          </View>
+        ) : null}
       </GlassCard>
 
       <GlassCard style={styles.section}>

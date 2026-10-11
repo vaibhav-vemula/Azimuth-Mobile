@@ -80,4 +80,17 @@ describe('Supabase direct API', () => {
     const impl = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
     await expect(createSupabaseApi({ url: 'https://x.supabase.co', key: 'k', fetchImpl: impl }).fetchChests()).rejects.toThrow('Could not reach the server');
   });
+  it('maps the AZMTest total and the verified list from node_summary, and tolerates their absence', async () => {
+    const f = fakeFetch([
+      { status: 200, body: { pendingUsdc: 0, approvedUsdc: 0, paidUsdc: 0, entries: [], azmTotal: 14, verified: [{ hash: 'h', type: 'mapping-session', amount: 14, record: 'REC', verified_ms: 5 }] } },
+      { status: 200, body: { pendingUsdc: 0, approvedUsdc: 0, paidUsdc: 0, entries: [] } },
+    ]);
+    const a = api(f);
+    const full = await a.fetchNodeSummary('Addr');
+    expect(full.azmTotal).toBe(14);
+    expect(full.verified).toEqual([{ hash: 'h', type: 'mapping-session', amount: 14, record: 'REC', verified_ms: 5 }]);
+    const bare = await a.fetchNodeSummary('Addr');
+    expect(bare.azmTotal).toBe(0);
+    expect(bare.verified).toEqual([]);
+  });
 });

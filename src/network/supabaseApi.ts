@@ -114,7 +114,7 @@ export function createSupabaseApi(config: { url: string; key: string; fetchImpl?
     async fetchNodeSummary(address: string): Promise<NodeSummary> {
       const res = await call('POST', '/rpc/node_summary', { p_node: address });
       if (res.status !== 200 || !res.json) throw new Error(messageOf(res.json) || `Could not load earnings (HTTP ${res.status}).`);
-      const j = res.json as { pendingReports?: number; rejectedReports?: number; pendingUsdc: number; approvedUsdc: number; paidUsdc: number; entries: NodeSummary['entries'] };
+      const j = res.json as { pendingReports?: number; rejectedReports?: number; pendingUsdc: number; approvedUsdc: number; paidUsdc: number; entries: NodeSummary['entries']; azmTotal?: number; verified?: NodeSummary['verified'] };
       return {
         address,
         totalUsdc: Number(j.pendingUsdc) + Number(j.approvedUsdc) + Number(j.paidUsdc),
@@ -125,6 +125,8 @@ export function createSupabaseApi(config: { url: string; key: string; fetchImpl?
         paidUsdc: Number(j.paidUsdc),
         entries: j.entries ?? [],
         seekerMint: null,
+        azmTotal: Number(j.azmTotal ?? 0),
+        verified: j.verified ?? [],
       };
     },
 
