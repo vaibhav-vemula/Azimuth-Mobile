@@ -163,3 +163,24 @@ test('rewards created by a person approving are inserted already approved', asyn
   await sink.getReport('abc');
   assert.match(f.calls[2].url, /\/reports\?hash=eq\.abc&select=/);
 });
+
+test('setOnchain patches only the on-chain columns', async () => {
+  const f = fakeFetch();
+  const sink = makeSink(f);
+  await sink.setOnchain('a'.repeat(64), { onchain_tx: 'SIG', onchain_record: 'REC', onchain_error: null });
+  assert.equal(f.calls[0].method, 'PATCH');
+  assert.match(f.calls[0].url, /\/reports\?hash=eq\.a{64}$/);
+  assert.deepEqual(f.calls[0].body, { onchain_tx: 'SIG', onchain_record: 'REC', onchain_error: null });
+  await assert.rejects(sink.setOnchain('a'.repeat(64), { status: 'verified' }), /not an on-chain column/);
+});
+
+test('listPayouts asks for verified reports with a payout, newest first', async () => {
+  const f = fakeFetch();
+  const sink = makeSink(f);
+  assert.deepEqual(await sink.listPayouts(10), []);
+  assert.match(f.calls[0].url, /status=eq\.verified/);
+  assert.match(f.calls[0].url, /onchain_amount=gt\.0/);
+  assert.match(f.calls[0].url, /order=verified_at\.desc/);
+  assert.match(f.calls[0].url, /limit=10/);
+  assert.match(f.calls[0].url, /select=[^&]*onchain_error/);
+});

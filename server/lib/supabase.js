@@ -59,7 +59,7 @@ function createSupabaseSink({ url, serviceKey, fetchImpl = fetch }) {
 
     /** One report with its body, whatever its state. Null if there is none. */
     async getReport(hash) {
-      const rows = await call('GET', `/reports?hash=eq.${encodeURIComponent(hash)}&select=hash,node,type,received_at,body,status`);
+      const rows = await call('GET', `/reports?hash=eq.${encodeURIComponent(hash)}&select=hash,node,type,received_at,body,status,onchain_tx,onchain_record,onchain_error,onchain_amount`);
       return rows && rows[0] ? rows[0] : null;
     },
 
@@ -73,6 +73,18 @@ function createSupabaseSink({ url, serviceKey, fetchImpl = fetch }) {
         rows.map((r) => ({ node, report_hash: hash, kind: r.kind, ref: r.ref, amount_usdc: r.amountUsdc, status, ...(approvedAt ? { approved_at: approvedAt } : {}) })),
         { prefer: 'resolution=ignore-duplicates,return=minimal' }
       );
+    },
+
+    /** Records the on-chain payout state of a report. Only the four on-chain columns can be written. */
+    async setOnchain(hash, patch) {
+      const allowed = ['onchain_tx', 'onchain_record', 'onchain_error', 'onchain_amount'];
+      for (const k of Object.keys(patch)) if (!allowed.includes(k)) throw new Error(`${k} is not an on-chain column`);
+      await call('PATCH', `/reports?hash=eq.${encodeURIComponent(hash)}`, patch, { prefer: 'return=minimal' });
+    },
+
+    /** Verified reports that carry an AZMTest payout, newest first, whether paid on-chain or not yet. */
+    async listPayouts(limit = 30) {
+      return call('GET', `/reports?status=eq.verified&onchain_amount=gt.0&order=verified_at.desc&limit=${limit}&select=hash,node,type,status,verified_at,onchain_tx,onchain_record,onchain_error,onchain_amount`);
     },
 
     async listChests() {
