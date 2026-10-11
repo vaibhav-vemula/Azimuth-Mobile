@@ -4,7 +4,7 @@
 
 **Goal:** A Quests tab that tracks daily, weekly and one-time challenges automatically, lets the user claim a finished one with one wallet signature, and pays AZMTest (on-chain `reward`, kind 3) automatically after the server re-checks the claim against the wallet's already-verified reports.
 
-**Architecture:** One shared `challenges.json` feeds the app and the server. The app computes live progress for display only. A claim is a signed `challenge-claim` report inserted into Supabase like any report; the admin portal process settles new claims on a timer: it recomputes progress from the wallet's verified reports and reward rows, then verifies and pays through the existing `payOnChain`, or rejects with the numbers. Once per challenge and period is enforced by the server (duplicate check) and on-chain (the registry record hash is derived from challenge id and period).
+**Architecture:** The challenge list lives in a Supabase table `challenges` that you edit (Supabase table editor); the server reads it with the service key and the app fetches it with the public key, so challenges change without an app update. The app computes live progress for display only. A claim is a signed `challenge-claim` report inserted into Supabase like any report; the admin portal process settles new claims on a timer: it recomputes progress from the wallet's verified reports and reward rows, then verifies and pays through the existing `payOnChain`, or rejects with the numbers. Once per challenge and period is enforced by the server (duplicate check) and on-chain (the registry record hash is derived from challenge id and period).
 
 **Tech Stack:** Node 22 `node:test` (server), Supabase REST/PostgREST + SQL, Expo/React Native + TypeScript + Jest (app), existing `azimuth_registry` program and `chain.js`.
 
@@ -19,7 +19,7 @@
 - Once per challenge and period: the on-chain `report_hash` for a claim is `sha256("challenge:" + id + ":" + period)` (hex), not the claim's own hash; the server also refuses a claim when a verified claim for the same wallet, id and period exists.
 - Kinds on-chain: 3 = challenge (already supported by the program). No program change, no redeploy.
 - Tab name **Quests**. Sonde challenge is out of v1.
-- `challenges.json` at the repo root is the single list. Challenge ids in v1: `scan-30`, `cells-20`, `ground-weekly`, `passes-3`, `first-chest`.
+- The list is the table `public.challenges` (columns `id, title, blurb, period, metric, goal, reward, go_tab, active, sort`), seeded by `schema_challenges.sql` with five rows: `scan-30`, `cells-20`, `ground-weekly`, `passes-3`, `first-chest`. The public key may only SELECT active rows; only the service key writes. Challenge values are validated on both sides (known period/metric/go_tab, whole reward 1..100, positive goal); an invalid row is ignored, never paid. Changing `goal` or `reward` of a challenge affects claims settled after the change.
 - Ruling carried into this plan: the spec's "1 square mile of new ground" is implemented as **70 new cells** (metric `new_cells`, goal 70). One map-grid cell is 120 m (circumradius) = about 0.0374 km² on the projected grid, so 70 cells is about 2.6 km² (1 square mile) on the grid; real ground area is smaller at mid latitudes (about 0.6 of that at Washington, DC). The title says "about a square mile on the map grid". Cost if wrong: only the wording; the goal is a clean cell count both sides can verify.
 - **Git:** one commit per task, made by the controller after the task is reviewed. Implementers do NOT run `git add`/`git commit`. Never add a co-author line or trailers. Never touch `.git` otherwise.
 - Secrets stay out of git; `server/.env` stays untracked.
@@ -39,31 +39,29 @@
 
 | File | Responsibility |
 |---|---|
-| `challenges.json` (repo root) | The challenge list (single source of truth) |
-| `server/lib/challenges.js` | Load list, period keys and windows (UTC), on-chain hash, `progressFor` |
+| `server/supabase/schema_challenges.sql` | `challenges` table (+ seed, read-only for the public key), `reports.type`, `node_summary` |
+| `server/lib/challenges.js` | Row validation, cached challenge source, period keys and windows (UTC), on-chain hash, `progressFor` |
 | `server/lib/verify-report.cjs` | Add `verifyClaim(envelope)` |
 | `server/lib/azmRewards.js` | `kindFor('challenge-claim') = 3` |
 | `server/lib/supabase.js` | `listNewClaims`, `findVerifiedClaim`, `listVerifiedActivity`, `listNewCellRewards`; `listNewReports` excludes claims |
-| `server/supabase/schema_challenges.sql` | `reports.type` accepts `challenge-claim`; `node_summary` gains claim info |
 | `server/lib/review.js` | `settleChallenges`, claim retry with derived hash |
 | `server/admin/app.js`, `admin.html`, `admin.js`, `index.js` | Timer, manual "Check challenge claims" |
-| `src/challenges/definitions.ts`, `periods.ts`, `progress.ts`, `claim.ts`, `useChallenges.ts` | App logic |
+| `src/challenges/definitions.ts` (types + row mapping), `periods.ts`, `progress.ts`, `claim.ts`, `useChallenges.ts` | App logic |
 | `src/screens/quests/QuestsScreen.tsx` | The tab |
 | `src/navigation/*`, `src/network/*` | Tab, summary fields, claim insert |
 
 ---
 
-### Task 1: `challenges.json`, server periods and progress
+### Task 1: Server challenge source, periods and progress
 
 **Files:**
-- Create: `challenges.json`
 - Create: `server/lib/challenges.js`
 - Test: `server/test/challenges.test.js`
 
 **Interfaces:**
 - Produces (`server/lib/challenges.js`):
-  - `CHALLENGES: Challenge[]` where `Challenge = { id, title, blurb, period: 'daily'|'weekly'|'once', metric: 'mapping_minutes'|'new_cells'|'satellite_passes'|'chests_opened', goal: number, reward: number, go: 'Map'|'Satellites' }`
-  - `getChallenge(id): Challenge | null`
+  - `challengeFromRow(row): Challenge | null` where `Challenge = { id, title, blurb, period: 'daily'|'weekly'|'once', metric: 'mapping_minutes'|'new_cells'|'satellite_passes'|'chests_opened', goal: number, reward: number, go: 'Map'|'Satellites' }`; the row has `go_tab`; returns `null` when invalid (unknown period/metric/go_tab, id not `/^[a-z0-9-]{1,40}$/`, goal not a positive number, reward not an integer 1..100)
+  - `createChallengeSource({ sink, ttlMs = 60_000, now = Date.now }): { list(): Promise<Challenge[]>, get(id): Promise<Challenge | null> }` — reads `sink.listChallenges()`, drops invalid rows, caches for `ttlMs`; if a refresh fails it keeps serving the last good list, and throws only when it has never loaded one
   - `periodKey(period, ms): string`  (`'2026-10-10'`, `'2026-W41'`, `'once'`)
   - `previousPeriodKey(period, ms): string`
   - `periodWindow(period, key, nowMs): { fromMs, toMs }`  (`toMs` exclusive; for `once`: `{0, nowMs + 1}`)
@@ -71,42 +69,47 @@
   - `onchainHash(id, key): string` (64 hex)
   - `progressFor(metric, { reports, rewards }, newCellUsdc): number` where `reports = [{ type, seconds }]`, `rewards = [{ amount_usdc }]`
 
-- [ ] **Step 1: Write `challenges.json`**
-
-```json
-[
-  { "id": "scan-30", "title": "Scan for 30 minutes", "blurb": "Keep mapping on for half an hour today.", "period": "daily", "metric": "mapping_minutes", "goal": 30, "reward": 5, "go": "Map" },
-  { "id": "cells-20", "title": "Find 20 new cells", "blurb": "Map 20 cells nobody has mapped yet.", "period": "daily", "metric": "new_cells", "goal": 20, "reward": 5, "go": "Map" },
-  { "id": "ground-weekly", "title": "Explore new ground", "blurb": "Reveal 70 new cells this week, about a square mile on the map grid.", "period": "weekly", "metric": "new_cells", "goal": 70, "reward": 40, "go": "Map" },
-  { "id": "passes-3", "title": "Catch 3 satellite passes", "blurb": "Record three satellite passes this week.", "period": "weekly", "metric": "satellite_passes", "goal": 3, "reward": 30, "go": "Satellites" },
-  { "id": "first-chest", "title": "Open your first chest", "blurb": "Find a chest and open it. Once only.", "period": "once", "metric": "chests_opened", "goal": 1, "reward": 20, "go": "Map" }
-]
-```
-
-- [ ] **Step 2: Write the failing test** `server/test/challenges.test.js`
+- [ ] **Step 1: Write the failing test** `server/test/challenges.test.js`
 
 ```js
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  CHALLENGES, getChallenge, periodKey, previousPeriodKey, periodWindow, isClaimablePeriod, onchainHash, progressFor,
+  challengeFromRow, createChallengeSource, periodKey, previousPeriodKey, periodWindow, isClaimablePeriod, onchainHash, progressFor,
 } = require('../lib/challenges');
 
 const T = Date.UTC(2026, 9, 10, 15, 30); // Saturday 2026-10-10, ISO week 41
 
-test('the list is valid: known metrics, whole rewards 1..100, unique ids', () => {
-  const ids = new Set();
-  for (const c of CHALLENGES) {
-    assert.ok(!ids.has(c.id)); ids.add(c.id);
-    assert.ok(['daily', 'weekly', 'once'].includes(c.period));
-    assert.ok(['mapping_minutes', 'new_cells', 'satellite_passes', 'chests_opened'].includes(c.metric));
-    assert.ok(Number.isInteger(c.reward) && c.reward >= 1 && c.reward <= 100, c.id);
-    assert.ok(c.goal > 0);
-    assert.ok(['Map', 'Satellites'].includes(c.go));
-  }
-  assert.equal(getChallenge('scan-30').reward, 5);
-  assert.equal(getChallenge('nope'), null);
+const row = (over = {}) => ({ id: 'scan-30', title: 'Scan for 30 minutes', blurb: 'b', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map', active: true, sort: 1, ...over });
+
+test('rows become challenges and invalid rows are dropped', () => {
+  assert.deepEqual(challengeFromRow(row()), { id: 'scan-30', title: 'Scan for 30 minutes', blurb: 'b', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go: 'Map' });
+  assert.equal(challengeFromRow(row({ reward: 0 })), null);
+  assert.equal(challengeFromRow(row({ reward: 101 })), null);
+  assert.equal(challengeFromRow(row({ reward: 2.5 })), null);
+  assert.equal(challengeFromRow(row({ goal: 0 })), null);
+  assert.equal(challengeFromRow(row({ period: 'monthly' })), null);
+  assert.equal(challengeFromRow(row({ metric: 'steps' })), null);
+  assert.equal(challengeFromRow(row({ go_tab: 'Profile' })), null);
+  assert.equal(challengeFromRow(row({ id: 'Bad Id' })), null);
+  assert.equal(challengeFromRow(null), null);
+});
+
+test('the source caches, drops invalid rows, and survives a failed refresh', async () => {
+  let calls = 0;
+  let fail = false;
+  const sink = { async listChallenges() { calls++; if (fail) throw new Error('down'); return [row(), row({ id: 'bad', reward: 0 })]; } };
+  let t = 1000;
+  const src = createChallengeSource({ sink, ttlMs: 60_000, now: () => t });
+  assert.deepEqual((await src.list()).map((c) => c.id), ['scan-30']);
+  assert.equal((await src.get('scan-30')).reward, 5);
+  assert.equal(await src.get('bad'), null);
+  assert.equal(calls, 1, 'cached');
+  t += 61_000; fail = true;
+  assert.deepEqual((await src.list()).map((c) => c.id), ['scan-30'], 'serves the last good list when refresh fails');
+  const fresh = createChallengeSource({ sink: { async listChallenges() { throw new Error('down'); } } });
+  await assert.rejects(fresh.list(), /down/);
 });
 
 test('period keys are UTC days and ISO weeks (shared vectors with the app)', () => {
@@ -172,25 +175,53 @@ test('progress per metric', () => {
 });
 ```
 
-- [ ] **Step 3: Run to confirm failure**
+- [ ] **Step 2: Run to confirm failure**
 
 Run: `cd server && node --test test/challenges.test.js`
 Expected: FAIL (module not found).
 
-- [ ] **Step 4: Implement `server/lib/challenges.js`**
+- [ ] **Step 3: Implement `server/lib/challenges.js`**
 
 ```js
 'use strict';
 const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
 
-/** The challenge list is one JSON file at the repo root, shared with the app. */
-const CHALLENGES = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'challenges.json'), 'utf8'));
 const DAY = 86_400_000;
 const WEEK = 7 * DAY;
+const PERIODS = ['daily', 'weekly', 'once'];
+const METRICS = ['mapping_minutes', 'new_cells', 'satellite_passes', 'chests_opened'];
+const TABS = ['Map', 'Satellites'];
 
-const getChallenge = (id) => CHALLENGES.find((c) => c.id === id) || null;
+/** A `challenges` table row as a challenge, or null when anything about it is off (an invalid row is never paid). */
+function challengeFromRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const ok =
+    typeof row.id === 'string' && /^[a-z0-9-]{1,40}$/.test(row.id) &&
+    typeof row.title === 'string' && row.title.length > 0 &&
+    PERIODS.includes(row.period) && METRICS.includes(row.metric) && TABS.includes(row.go_tab) &&
+    Number.isFinite(Number(row.goal)) && Number(row.goal) > 0 &&
+    Number.isInteger(Number(row.reward)) && Number(row.reward) >= 1 && Number(row.reward) <= 100;
+  if (!ok) return null;
+  return { id: row.id, title: row.title, blurb: String(row.blurb || ''), period: row.period, metric: row.metric, goal: Number(row.goal), reward: Number(row.reward), go: row.go_tab };
+}
+
+/** The server's view of the challenge list: read from the table, validated, and cached briefly. */
+function createChallengeSource({ sink, ttlMs = 60_000, now = Date.now }) {
+  let cached = null;
+  let loadedAt = 0;
+  async function list() {
+    if (cached && now() - loadedAt < ttlMs) return cached;
+    try {
+      cached = (await sink.listChallenges()).map(challengeFromRow).filter(Boolean);
+      loadedAt = now();
+    } catch (e) {
+      if (!cached) throw e;
+      loadedAt = now(); // keep serving the last good list and try again after the next interval
+    }
+    return cached;
+  }
+  return { list, async get(id) { return (await list()).find((c) => c.id === id) || null; } };
+}
 
 /** ISO week of a UTC instant: the year the week belongs to and its number. */
 function isoWeek(ms) {
@@ -256,17 +287,17 @@ function progressFor(metric, { reports, rewards }, newCellUsdc) {
   }
 }
 
-module.exports = { CHALLENGES, getChallenge, periodKey, previousPeriodKey, periodWindow, isClaimablePeriod, onchainHash, progressFor };
+module.exports = { challengeFromRow, createChallengeSource, periodKey, previousPeriodKey, periodWindow, isClaimablePeriod, onchainHash, progressFor };
 ```
 
 If the test's `mapping_minutes` case `(600+1500)/60 = 35` passes with `Math.floor`, the vector `2026-W53` for 1 Jan 2027 and `2025-W01` for 30 Dec 2024 must also pass; if a vector disagrees with the implementation, check the vector against the ISO 8601 rule (week with the year's first Thursday is week 1) before changing code.
 
-- [ ] **Step 5: Run to confirm it passes**
+- [ ] **Step 3b: Run to confirm it passes**
 
 Run: `cd server && node --test test/challenges.test.js`
-Expected: 6 passing.
+Expected: 7 passing.
 
-- [ ] **Step 6: Checkpoint** — run `cd server && npm test` (all green) and report. Do not commit.
+- [ ] **Step 4: Checkpoint** — run `cd server && npm test` (all green) and report. Do not commit.
 
 ---
 
@@ -395,16 +426,26 @@ Expected: all green.
 
 **Interfaces:**
 - Produces on the sink:
+  - `listChallenges(): Promise<row[]>` — rows of `public.challenges` where `active = true`, ordered by `sort`, all columns (`id, title, blurb, period, metric, goal, reward, go_tab, active, sort`).
   - `listNewReports(limit)` now **excludes** claims (`type=neq.challenge-claim`).
   - `listNewClaims(limit = 50): Promise<{ hash, node, type, received_at, body }[]>`
   - `findVerifiedClaim(node, challengeId, period): Promise<boolean>`
   - `listVerifiedActivity(node, fromIso, toIso): Promise<{ type, seconds }[]>` — verified, non-claim reports with `verified_at` in `[from, to)`; `seconds` is `body->report->checks->>durationSec`.
   - `listNewCellRewards(node, fromIso, toIso): Promise<{ amount_usdc }[]>` — `kind = 'new-cells'`, status not `rejected`, `created_at` in `[from, to)`.
-- Produces in SQL: `reports_shape` accepts type `challenge-claim`; `node_summary` returns, in addition to everything in `schema_azm.sql`: each `verified` item gains `challenge` (id or null) and `period` (or null); new key `claims`: `[{ challengeId, period, status, reasons }]` for this wallet's claims received in the last 10 days.
+- Produces in SQL: table `public.challenges` (primary key `id`; checks: `id ~ '^[a-z0-9-]{1,40}$'`, `period in ('daily','weekly','once')`, `metric in ('mapping_minutes','new_cells','satellite_passes','chests_opened')`, `go_tab in ('Map','Satellites')`, `goal > 0`, `reward between 1 and 100`; `active boolean default true`, `sort int default 0`), row level security on with a policy letting the public key SELECT rows where `active`, no insert/update/delete for it, and the five seed rows (below); `reports_shape` accepts type `challenge-claim`; `node_summary` returns, in addition to everything in `schema_azm.sql`: each `verified` item gains `challenge` (id or null) and `period` (or null); new key `claims`: `[{ challengeId, period, status, reasons }]` for this wallet's claims received in the last 10 days.
 
 - [ ] **Step 1: Failing tests** (append to `server/test/supabase.test.js`; read the file's `fakeFetch` and match how it records calls)
 
 ```js
+test('listChallenges reads the active challenges in order', async () => {
+  const f = fakeFetch([{ status: 200, body: [{ id: 'scan-30' }] }]);
+  const sink = createSupabaseSink({ url: 'https://x.supabase.co', serviceKey: 'sb_secret_x', fetchImpl: f.impl });
+  assert.deepEqual(await sink.listChallenges(), [{ id: 'scan-30' }]);
+  assert.match(f.calls[0].url, /\/challenges\?/);
+  assert.match(f.calls[0].url, /active=eq\.true/);
+  assert.match(f.calls[0].url, /order=sort\.asc/);
+});
+
 test('listNewReports leaves out challenge claims, and listNewClaims asks only for them', async () => {
   const f = fakeFetch([{ status: 200, body: [] }, { status: 200, body: [{ hash: 'c' }] }]);
   const sink = createSupabaseSink({ url: 'https://x.supabase.co', serviceKey: 'sb_secret_x', fetchImpl: f.impl });
@@ -452,6 +493,16 @@ test('activity queries are bounded by wallet and time', async () => {
 Change `listNewReports` URL to `/reports?status=eq.new&type=neq.challenge-claim&order=received_at.asc&limit=${limit}&select=hash,node,type,received_at,body`. Add:
 
 ```js
+    /** The active challenges, in display order. */
+    async listChallenges() {
+      return call('GET', '/challenges?active=eq.true&order=sort.asc&select=id,title,blurb,period,metric,goal,reward,go_tab,active,sort');
+    },
+
+    /** The active challenges, in display order. */
+    async listChallenges() {
+      return call('GET', '/challenges?active=eq.true&order=sort.asc&select=id,title,blurb,period,metric,goal,reward,go_tab,active,sort');
+    },
+
     /** Claims for challenge rewards that nobody has settled yet, oldest first. */
     async listNewClaims(limit = 50) {
       return call('GET', `/reports?status=eq.new&type=eq.challenge-claim&order=received_at.asc&limit=${limit}&select=hash,node,type,received_at,body`);
@@ -479,6 +530,35 @@ Change `listNewReports` URL to `/reports?status=eq.new&type=neq.challenge-claim&
 ```sql
 -- Challenge claims. Run once in the Supabase SQL editor (after schema_azm.sql).
 -- A claim is a small signed report; the admin portal settles it by re-checking the wallet's verified reports.
+
+-- The challenge list. Edit it in the Supabase table editor (the service key and the dashboard can write; the app can only read active rows).
+create table if not exists public.challenges (
+  id      text primary key check (id ~ '^[a-z0-9-]{1,40}$'),
+  title   text not null check (length(title) between 1 and 80),
+  blurb   text not null default '' check (length(blurb) <= 200),
+  period  text not null check (period in ('daily', 'weekly', 'once')),
+  metric  text not null check (metric in ('mapping_minutes', 'new_cells', 'satellite_passes', 'chests_opened')),
+  goal    numeric not null check (goal > 0),
+  reward  integer not null check (reward between 1 and 100),
+  go_tab  text not null check (go_tab in ('Map', 'Satellites')),
+  active  boolean not null default true,
+  sort    integer not null default 0
+);
+alter table public.challenges enable row level security;
+drop policy if exists challenges_read on public.challenges;
+create policy challenges_read on public.challenges for select to anon using (active);
+revoke all on public.challenges from anon;
+grant select on public.challenges to anon;
+
+insert into public.challenges (id, title, blurb, period, metric, goal, reward, go_tab, sort) values
+  ('scan-30', 'Scan for 30 minutes', 'Keep mapping on for half an hour today.', 'daily', 'mapping_minutes', 30, 5, 'Map', 10),
+  ('cells-20', 'Find 20 new cells', 'Map 20 cells nobody has mapped yet.', 'daily', 'new_cells', 20, 5, 'Map', 20),
+  ('ground-weekly', 'Explore new ground', 'Reveal 70 new cells this week, about a square mile on the map grid.', 'weekly', 'new_cells', 70, 40, 'Map', 30),
+  ('passes-3', 'Catch 3 satellite passes', 'Record three satellite passes this week.', 'weekly', 'satellite_passes', 3, 30, 'Satellites', 40),
+  ('first-chest', 'Open your first chest', 'Find a chest and open it. Once only.', 'once', 'chests_opened', 1, 20, 'Map', 50)
+on conflict (id) do nothing;
+
+-- Claims.
 alter table public.reports drop constraint if exists reports_shape;
 alter table public.reports add constraint reports_shape check (
   hash ~ '^[0-9a-f]{64}$'
@@ -545,7 +625,7 @@ Before finishing, diff the `reports_shape` constraint against `schema_direct.sql
 - Test: `server/test/review.test.js` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1–3: `getChallenge`, `isClaimablePeriod`, `periodWindow`, `onchainHash`, `progressFor`, `verifyClaim`, `kindFor`, sink `listNewClaims`/`findVerifiedClaim`/`listVerifiedActivity`/`listNewCellRewards`, existing `payOnChain`, `sink.finishReport`, `sink.setOnchain`.
+- Consumes: Tasks 1–3: `createChallengeSource` (default source is `createChallengeSource({ sink })`; `createReviewer` gains an optional `challenges = createChallengeSource({ sink })` parameter whose `.get(id)` replaces any static lookup), `isClaimablePeriod`, `periodWindow`, `onchainHash`, `progressFor`, `verifyClaim`, `kindFor`, sink `listNewClaims`/`findVerifiedClaim`/`listVerifiedActivity`/`listNewCellRewards`, existing `payOnChain`, `sink.finishReport`, `sink.setOnchain`.
 - Produces:
   - `reviewer.settleChallenges({ nowMs = Date.now(), limit = 50 } = {}): Promise<{ hash, status: 'verified'|'rejected'|'skipped', reasons?: string[], onchain?: object }[]>`. Returns `[]` and touches nothing when no `chain` is configured.
   - `payOnChain(hash, node, type, amount, chainHash = hash)` (internal) — the row is updated under `hash`, the on-chain record uses `chainHash`.
@@ -566,6 +646,8 @@ function claimRow(node, over = {}, receivedMs = NOW) {
   return { hash: env.hash, node: node.address, type: 'challenge-claim', received_at: new Date(receivedMs).toISOString(), body: env, status: 'new' };
 }
 ```
+
+Also give `fakeSupabase`'s sink `async listChallenges() { return db.challenges; }` with `db.challenges` seeded by the five rows from `schema_challenges.sql` (as `{ id, title, blurb, period, metric, goal, reward, go_tab, active: true, sort }`; a small constant `SEED_CHALLENGES` in the test file), and add one test: a claim whose challenge row has been removed from `db.challenges` (or has `reward: 0`) is rejected with 'unknown challenge' and pays nothing.
 
 (`NOW` is `Date.UTC(2026, 9, 2, 15, 0, 0)` in this file, so the daily period key is `2026-10-02`.)
 
@@ -672,7 +754,7 @@ test('claims never reach manual review or auto-approval', async () => {
 
 - [ ] **Step 3: Implement in `server/lib/review.js`**
 
-Add requires: `const { verifyEnvelope, verifyClaim } = require('./verify-report.cjs');` (extend the existing import), `const { getChallenge, isClaimablePeriod, periodWindow, onchainHash, progressFor } = require('./challenges');`.
+Add requires: `const { verifyEnvelope, verifyClaim } = require('./verify-report.cjs');` (extend the existing import), `const { createChallengeSource, isClaimablePeriod, periodWindow, onchainHash, progressFor } = require('./challenges');`. Add the parameter `challenges = createChallengeSource({ sink })` to `createReviewer`'s options (next to `chain`).
 
 Change `payOnChain` to take an optional on-chain hash:
 
@@ -707,7 +789,7 @@ Add `settleChallenges` before `processDeletions`:
     if (checked.hash !== r.hash) return reject(['the report hash column does not match the signed claim']);
     if (c.node !== r.node) return reject(['the wallet column does not match the signed claim']);
     if (r.type !== 'challenge-claim') return reject(['the type column does not match the signed claim']);
-    const def = getChallenge(c.challengeId);
+    const def = await challenges.get(c.challengeId);
     if (!def) return reject(['unknown challenge']);
     if (!isClaimablePeriod(def.period, c.period, nowMs)) return reject(['this period can no longer be claimed']);
     if (await sink.findVerifiedClaim(r.node, def.id, c.period)) return reject(['already claimed for this period']);
@@ -842,7 +924,7 @@ if (chain) {
 
 **Interfaces:**
 - Produces:
-  - `definitions.ts`: `export type Challenge = { id: string; title: string; blurb: string; period: 'daily'|'weekly'|'once'; metric: 'mapping_minutes'|'new_cells'|'satellite_passes'|'chests_opened'; goal: number; reward: number; go: 'Map'|'Satellites' }`; `export const CHALLENGES: Challenge[]` (imported from `../../challenges.json`); `getChallenge(id)`.
+  - `definitions.ts`: `export type Challenge = { id: string; title: string; blurb: string; period: 'daily'|'weekly'|'once'; metric: 'mapping_minutes'|'new_cells'|'satellite_passes'|'chests_opened'; goal: number; reward: number; go: 'Map'|'Satellites' }`; `challengeFromRow(row: unknown): Challenge | null` (same validation as the server: id `/^[a-z0-9-]{1,40}$/`, non-empty title, known period/metric/`go_tab`, goal > 0, whole reward 1..100; maps `go_tab` to `go`). There is no bundled list: the list comes from the server (Task 7).
   - `periods.ts`: `periodKey(period, ms)`, `previousPeriodKey`, `periodWindow(period, key, nowMs)`, `isClaimablePeriod` — **same behaviour as the server** (UTC, ISO week).
   - `progress.ts`: `export interface VerifiedItem { type: string; verified_ms: number; challenge?: string | null; period?: string | null }`; `localProgress(challenge, { sessions, verified, nowMs }): number` (current period).
 - Consumes: `SessionRecord` from `src/mapping/sessionHistory.ts`.
@@ -884,7 +966,8 @@ describe('periods (UTC, same vectors as the server)', () => {
 `progress.test.ts`:
 
 ```ts
-import { CHALLENGES, getChallenge } from '../definitions';
+import { challengeFromRow } from '../definitions';
+import type { Challenge } from '../definitions';
 import { localProgress } from '../progress';
 import type { SessionRecord } from '../../mapping/sessionHistory';
 
@@ -894,25 +977,26 @@ const session = (over: Partial<SessionRecord>): SessionRecord => ({
   clearedCells: 0, areaKm2: 0, newCells: 0, readings: 5, towers: 0, wifi: 0, bluetooth: 0, radioDbfs: null, ...over,
 });
 
-describe('definitions', () => {
-  it('has valid entries', () => {
-    const ids = new Set<string>();
-    for (const c of CHALLENGES) {
-      expect(ids.has(c.id)).toBe(false); ids.add(c.id);
-      expect(Number.isInteger(c.reward) && c.reward >= 1 && c.reward <= 100).toBe(true);
-      expect(c.goal).toBeGreaterThan(0);
+const make = (over: Record<string, unknown>): Challenge =>
+  challengeFromRow({ id: 'x', title: 't', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map', ...over })!;
+
+describe('challengeFromRow', () => {
+  it('maps a valid row and drops invalid ones', () => {
+    expect(make({})).toEqual({ id: 'x', title: 't', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go: 'Map' });
+    for (const bad of [{ reward: 0 }, { reward: 101 }, { reward: 2.5 }, { goal: 0 }, { period: 'monthly' }, { metric: 'steps' }, { go_tab: 'Profile' }, { id: 'Bad Id' }]) {
+      expect(challengeFromRow({ id: 'x', title: 't', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map', ...bad })).toBeNull();
     }
-    expect(getChallenge('scan-30')?.reward).toBe(5);
-    expect(getChallenge('nope')).toBeNull();
+    expect(challengeFromRow(null)).toBeNull();
+    expect(challengeFromRow('nope')).toBeNull();
   });
 });
 
 describe('localProgress', () => {
-  const scan = getChallenge('scan-30')!;
-  const cells = getChallenge('cells-20')!;
-  const weekly = getChallenge('ground-weekly')!;
-  const passes = getChallenge('passes-3')!;
-  const chest = getChallenge('first-chest')!;
+  const scan = make({ id: 'scan-30' });
+  const cells = make({ id: 'cells-20', metric: 'new_cells', goal: 20 });
+  const weekly = make({ id: 'ground-weekly', period: 'weekly', metric: 'new_cells', goal: 70, reward: 40 });
+  const passes = make({ id: 'passes-3', period: 'weekly', metric: 'satellite_passes', goal: 3, reward: 30, go_tab: 'Satellites' });
+  const chest = make({ id: 'first-chest', period: 'once', metric: 'chests_opened', goal: 1, reward: 20 });
 
   it('adds up today\'s mapping minutes and ignores sessions from other UTC days', () => {
     const sessions = [session({ startedMs: NOW - 3600_000, durationSec: 1800 }), session({ startedMs: NOW - 86_400_000 * 2, durationSec: 3600 })];
@@ -944,8 +1028,6 @@ describe('localProgress', () => {
 `definitions.ts`:
 
 ```ts
-import list from '../../challenges.json';
-
 export type Challenge = {
   id: string;
   title: string;
@@ -957,14 +1039,25 @@ export type Challenge = {
   go: 'Map' | 'Satellites';
 };
 
-export const CHALLENGES = list as Challenge[];
+const PERIODS = ['daily', 'weekly', 'once'];
+const METRICS = ['mapping_minutes', 'new_cells', 'satellite_passes', 'chests_opened'];
+const TABS = ['Map', 'Satellites'];
 
-export function getChallenge(id: string): Challenge | null {
-  return CHALLENGES.find((c) => c.id === id) ?? null;
+/** A server row as a challenge, or null when anything about it is off. The server applies the same checks before paying. */
+export function challengeFromRow(row: unknown): Challenge | null {
+  if (!row || typeof row !== 'object') return null;
+  const r = row as Record<string, unknown>;
+  const goal = Number(r.goal);
+  const reward = Number(r.reward);
+  const ok =
+    typeof r.id === 'string' && /^[a-z0-9-]{1,40}$/.test(r.id) &&
+    typeof r.title === 'string' && r.title.length > 0 &&
+    PERIODS.includes(r.period as string) && METRICS.includes(r.metric as string) && TABS.includes(r.go_tab as string) &&
+    Number.isFinite(goal) && goal > 0 && Number.isInteger(reward) && reward >= 1 && reward <= 100;
+  if (!ok) return null;
+  return { id: r.id as string, title: r.title as string, blurb: typeof r.blurb === 'string' ? r.blurb : '', period: r.period as Challenge['period'], metric: r.metric as Challenge['metric'], goal, reward, go: r.go_tab as Challenge['go'] };
 }
 ```
-
-If TypeScript cannot import JSON, set `"resolveJsonModule": true` in `tsconfig.json` (check first whether the base Expo config already has it) and check that `npx tsc --noEmit` passes.
 
 `periods.ts` — a TypeScript port of `server/lib/challenges.js` periods (`DAY`, `WEEK`, `isoWeek`, `periodKey`, `previousPeriodKey`, `periodWindow`, `isClaimablePeriod`) with the same algorithm and `Period = 'daily' | 'weekly' | 'once'` types; copy the server code and add types, nothing else.
 
@@ -1027,8 +1120,8 @@ export function localProgress(
 **Interfaces:**
 - Produces:
   - `claim.ts`: `export interface ChallengeClaim { version: 1; type: 'challenge-claim'; node: string; challengeId: string; period: string; claimedMs: number }`; `buildClaim(node, challengeId, period, claimedMs): ChallengeClaim`; `claimHash(claim): string`; `claimSigningText(claim): string` (`SIGNING_PREFIX + canonicalize(claim)`); `async signAndSubmitClaim(claim, base64Address): Promise<SubmitResult>` (signs with `signText`, then calls the network `submitClaim`).
-  - `api.ts`: `NodeSummary.claims?: { challengeId: string; period: string; status: 'new'|'verified'|'rejected'; reasons: string[] | null }[]`; `NodeSummary.verified` items gain `challenge?: string | null; period?: string | null`; `submitClaim(signed: { report: ChallengeClaim; signature: string; hash: string }): Promise<SubmitResult>`.
-  - `supabaseApi.ts`: `submitClaim` inserts `{ hash, node, type: 'challenge-claim', body: signed }` into `reports` with the same status handling as `submitReport` (201/200/204 → received; 409 → already submitted); `fetchNodeSummary` maps `claims` (default `[]`).
+  - `api.ts`: `fetchChallenges(): Promise<Challenge[]>` (direct mode only; other modes return `[]`); `NodeSummary.claims?: { challengeId: string; period: string; status: 'new'|'verified'|'rejected'; reasons: string[] | null }[]`; `NodeSummary.verified` items gain `challenge?: string | null; period?: string | null`; `submitClaim(signed: { report: ChallengeClaim; signature: string; hash: string }): Promise<SubmitResult>`.
+  - `supabaseApi.ts`: `fetchChallenges` does `GET /challenges?active=eq.true&order=sort.asc&select=id,title,blurb,period,metric,goal,reward,go_tab` with the public key, maps rows through `challengeFromRow` and drops invalid ones, throws a readable error on a non-200; `submitClaim` inserts `{ hash, node, type: 'challenge-claim', body: signed }` into `reports` with the same status handling as `submitReport` (201/200/204 → received; 409 → already submitted); `fetchNodeSummary` maps `claims` (default `[]`).
 - Consumes: `canonicalize` from `src/reports/canonical.ts`, `SIGNING_PREFIX` from `src/reports/report.ts`, `signText` from `src/wallet/signReport.ts`, `sha256`/`bytesToHex`/`utf8ToBytes` from `@noble/hashes` as `report.ts` does.
 
 - [ ] **Step 1: Failing tests**
@@ -1066,6 +1159,17 @@ Append to `supabaseApi.test.ts`:
     const sent = JSON.parse(f.calls[0].init.body as string);
     expect(sent).toMatchObject({ hash: 'a'.repeat(64), node: 'N', type: 'challenge-claim' });
     expect(await api(f).submitClaim(claim as never)).toMatchObject({ accepted: false });
+  });
+
+  it('fetches the challenge list from the server and drops invalid rows', async () => {
+    const f = fakeFetch([{ status: 200, body: [
+      { id: 'scan-30', title: 'Scan', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map' },
+      { id: 'bad', title: 'Bad', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 0, go_tab: 'Map' },
+    ] }, { status: 500, body: { message: 'boom' } }]);
+    const a = api(f);
+    expect((await a.fetchChallenges()).map((c) => c.id)).toEqual(['scan-30']);
+    expect(f.calls[0].url).toMatch(/\/challenges\?active=eq\.true&order=sort\.asc/);
+    await expect(a.fetchChallenges()).rejects.toThrow();
   });
 
   it('maps claims from node_summary and tolerates their absence', async () => {
@@ -1142,7 +1246,7 @@ In `api.ts` add the `NodeSummary` fields and `submitClaim` wrapper following the
     - `rejected`: the newest claim for the current period has `status === 'rejected'` and local progress still ≥ goal → `{ kind: 'rejected', value, reason: reasons?.[0] ?? 'Not verified yet' }` (the card still offers Claim).
     - `ready`: `value >= goal`.
     - else `progress`.
-  - `useChallenges.ts`: `useChallenges(): { items: { challenge: Challenge; value: number; state: CardState }[]; loading: boolean; error: string | null; claiming: string | null; message: string | null; claim: (id: string) => Promise<void>; refresh: () => Promise<void> }`. Reads `useMapping((s) => s.sessions)` and `useWallet` address; fetches `fetchNodeSummary(address)` on focus; `claim(id)` builds the claim for `periodKey(c.period, Date.now())`, calls `signAndSubmitClaim` with the wallet's base64 address (`Buffer.from(bs58.decode(address)).toString('base64')`, as `useSubmission` does), sets `message` ("Claim sent. It is checked automatically and the reward arrives once your reports are verified."), then refreshes.
+  - `useChallenges.ts`: `useChallenges(): { items: { challenge: Challenge; value: number; state: CardState }[]; loading: boolean; error: string | null; claiming: string | null; message: string | null; claim: (id: string) => Promise<void>; refresh: () => Promise<void> }`. Reads `useMapping((s) => s.sessions)` and `useWallet` address; on focus fetches the challenge list with `fetchChallenges()` (the list comes from the server; keep the last good list in memory if a refresh fails, and show an error line only when there is none) and `fetchNodeSummary(address)`; `claim(id)` builds the claim for `periodKey(c.period, Date.now())`, calls `signAndSubmitClaim` with the wallet's base64 address (`Buffer.from(bs58.decode(address)).toString('base64')`, as `useSubmission` does), sets `message` ("Claim sent. It is checked automatically and the reward arrives once your reports are verified."), then refreshes.
   - `QuestsScreen.tsx`: default export; cards grouped under `Daily`, `Weekly`, `One time` section labels; each card: title, blurb, a progress bar with `value / goal`, reward `+N AZMTest`, and a button: **Go** (state progress or rejected-but-not-ready: navigates to the `Map` or `Satellites` tab via `navigation.navigate(c.go)`), **Claim** (ready or rejected-with-progress: calls `claim`), disabled "Waiting for check" (waiting), "Claimed" check (claimed). Shows connect-wallet text when no wallet is connected, and the error/`message` lines.
   - Navigation: `RootTabParamList` gains `Quests: undefined`; tab placed between Satellites and Profile with icons `{ active: 'trophy', idle: 'trophy-outline' }`; screen wrapped with `guarded(...)`.
 
@@ -1152,11 +1256,11 @@ In `api.ts` add the `NodeSummary` fields and `submitClaim` wrapper following the
 
 ```ts
 import { cardState } from '../cardState';
-import { getChallenge } from '../definitions';
+import { challengeFromRow } from '../definitions';
 
 const NOW = Date.UTC(2026, 9, 10, 15, 0);
-const scan = getChallenge('scan-30')!;
-const chest = getChallenge('first-chest')!;
+const scan = challengeFromRow({ id: 'scan-30', title: 'Scan', blurb: '', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map' })!;
+const chest = challengeFromRow({ id: 'first-chest', title: 'Chest', blurb: '', period: 'once', metric: 'chests_opened', goal: 1, reward: 20, go_tab: 'Map' })!;
 const base = { claims: [] as never[], verified: [] as never[], nowMs: NOW };
 
 describe('cardState', () => {
@@ -1183,7 +1287,7 @@ describe('cardState', () => {
 });
 ```
 
-`QuestsScreen.test.tsx` — render the screen with `useChallenges` mocked (jest.mock with a `mock`-prefixed variable): assert that cards render their titles under the three section labels; a `progress` item shows a Go button that calls `navigation.navigate('Map')` (mock `@react-navigation/native`'s `useNavigation`), a `ready` item shows Claim and pressing it calls `claim('scan-30')`, `waiting` shows "Waiting for check", `claimed` shows "Claimed", and with no wallet it shows the connect text. Follow an existing screen test in `src/screens/*/__tests__` for how this repo renders screens (providers, mocks, `act`); read one first.
+`QuestsScreen.test.tsx` — render the screen with `useChallenges` mocked (jest.mock with a `mock`-prefixed variable): assert that cards render their titles under the three section labels; an empty list shows 'No challenges right now.' and a failed first load shows the error text; a `progress` item shows a Go button that calls `navigation.navigate('Map')` (mock `@react-navigation/native`'s `useNavigation`), a `ready` item shows Claim and pressing it calls `claim('scan-30')`, `waiting` shows "Waiting for check", `claimed` shows "Claimed", and with no wallet it shows the connect text. Follow an existing screen test in `src/screens/*/__tests__` for how this repo renders screens (providers, mocks, `act`); read one first.
 
 - [ ] **Step 2: Run to confirm failure** — `npx jest src/challenges src/screens/quests`.
 
@@ -1243,7 +1347,7 @@ Navigation edits: add `Quests` to `RootTabParamList`, to `TAB_ICONS`, a `Guarded
 
 - [ ] **Step 2: Live check on devnet** (with `npm run admin` running and the log line `AZMTest payouts: on (devnet)`): insert a signed `challenge-claim` for `cells-20` for a test wallet that has enough verified new-cell reward rows in the period (or use `server/test/helpers.js` to sign the claim and insert via the Supabase REST API with the service key; for the progress, approve one real or crafted mapping report with at least 20 new cells first). Expected: within 30 seconds (or via "Check challenge claims now") the claim becomes `verified`, 5 AZMTest arrive (`spl-token balance --owner <wallet> <mint> --url devnet`), and the payouts panel shows it with a record link. Then insert a second claim for the same period: expected `rejected` with "already claimed for this period", no second transfer. Then a claim with too little progress: rejected with "N of M verified so far".
 
-- [ ] **Step 3: Docs** — append a section describing: the Quests tab and the five challenges, the claim flow, the server-side recheck and the UTC periods, the once-per-period rule (server and on-chain hash), the 30-second timer in the portal and that claims wait while the portal is off, the SQL to run, what was verified (tests, live devnet check) and what was not (the tab on a phone, the Seed Vault signing prompt for a claim, timezone behaviour near UTC midnight).
+- [ ] **Step 3: Docs** — append a section describing: the Quests tab and the five seeded challenges (stored in the `challenges` table, edited in the Supabase table editor, fetched by the app, with the server's cache of up to 60 seconds and the validation rules), the claim flow, the server-side recheck and the UTC periods, the once-per-period rule (server and on-chain hash), the 30-second timer in the portal and that claims wait while the portal is off, the SQL to run, what was verified (tests, live devnet check) and what was not (the tab on a phone, the Seed Vault signing prompt for a claim, timezone behaviour near UTC midnight).
 
 - [ ] **Step 4: Final full runs**
 
