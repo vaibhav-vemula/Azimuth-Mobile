@@ -7,7 +7,7 @@ import { areaParts, formatQuantity } from '../units/units';
  */
 export const FOG_CELL_M = 5;
 /** Ground you can "see" around you. Walking anywhere clears a bubble this wide, and the bubble stays cleared. */
-export const VISION_RADIUS_M = 60;
+export const VISION_RADIUS_M = 100;
 /** Fixes less accurate than this are ignored, so a poor GPS reading cannot clear a distant street. */
 export const MAX_REVEAL_ACCURACY_M = 40;
 

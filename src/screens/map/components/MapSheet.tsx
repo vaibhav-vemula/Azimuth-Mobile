@@ -73,6 +73,10 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
   // Where the current touch started, and how far the contents are scrolled, so a drag goes to the right thing.
   const touchInHeader = useRef(false);
   const scrollY = useRef(0);
+  const scrollRef = useRef<ScrollView>(null);
+  // While the contents sit at the very top, the sheet handles every vertical drag itself: a native scroll view would
+  // otherwise grab the touch first on Android and a pull down would do nothing. (A drag up scrolls the contents by hand.)
+  const [atTop, setAtTop] = useState(true);
 
   const pan = useRef(
     PanResponder.create({
@@ -83,18 +87,27 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
         if (!vertical) return false;
         // A drag that starts on the bar (the handle, title, counters or button) always moves the sheet, up or down.
         if (touchInHeader.current) return true;
-        // In the contents: while the sheet is not fully open any vertical drag opens it; once open, only a downward drag
-        // from the very top of the list closes it, and everything else scrolls the list.
-        return !openRef.current || (scrollY.current <= 0 && g.dy > 0);
+        // In the contents: while the sheet is not fully open any vertical drag opens it; once open, any drag from the very
+        // top of the list is ours (down closes, up scrolls), and a list that is already scrolled scrolls on its own.
+        return !openRef.current || scrollY.current <= 0;
       },
       onPanResponderGrant: () => {
         ty.stopAnimation((v) => {
           start.current = v;
         });
       },
-      onPanResponderMove: (_, g) => ty.setValue(clamp(start.current + g.dy, 0, offsetRef.current)),
+      onPanResponderMove: (_, g) => {
+        ty.setValue(clamp(start.current + g.dy, 0, offsetRef.current));
+        // Open and dragged up from the top of the contents: scroll them.
+        if (openRef.current && g.dy < 0) scrollRef.current?.scrollTo({ y: -g.dy, animated: false });
+      },
       onPanResponderRelease: (_, g) => {
         const position = clamp(start.current + g.dy, 0, offsetRef.current);
+        // An open sheet only closes on a pull down; a drag up that scrolled the contents leaves it open.
+        if (openRef.current && g.dy <= 0) {
+          settle(true);
+          return;
+        }
         // A quick flick decides by its direction; a slow drag decides by which half it ended in.
         const toOpen = g.vy < -0.3 ? true : g.vy > 0.3 ? false : position < offsetRef.current / 2;
         changeRef.current(toOpen);
@@ -116,12 +129,17 @@ export function MapSheet({ open, onOpenChange, header, children, openFraction = 
         {header}
       </View>
       <ScrollView
+        ref={scrollRef}
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={open}
+        scrollEnabled={open && !atTop}
         scrollEventThrottle={16}
-        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+        onScroll={(e) => {
+          const y = e.nativeEvent.contentOffset.y;
+          scrollY.current = y;
+          setAtTop((was) => (was === y <= 0 ? was : y <= 0));
+        }}
         onTouchStart={() => (touchInHeader.current = false)}
       >
         {children}

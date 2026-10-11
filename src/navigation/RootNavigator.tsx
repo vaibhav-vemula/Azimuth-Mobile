@@ -1,4 +1,5 @@
 import { ComponentType } from 'react';
+import { InteractionManager } from 'react-native';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -102,12 +103,36 @@ function ProfileStackNavigator() {
   );
 }
 
+/** Tabs that are built quietly in the background once the first screen is up, so pressing them later is instant. */
+const PRELOAD_ORDER: (keyof RootTabParamList)[] = ['Quests', 'Satellites', 'Profile', 'Radio'];
+let preloadScheduled = false;
+function preloadTabsLater(navigation: { preload: (...args: any[]) => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (preloadScheduled) return;
+  preloadScheduled = true;
+  InteractionManager.runAfterInteractions(() => {
+    PRELOAD_ORDER.forEach((name, i) => {
+      // One at a time with a gap, so building them never blocks a touch.
+      setTimeout(() => {
+        try {
+          navigation.preload(name);
+        } catch {
+          // A tab that cannot be preloaded is simply built when first opened.
+        }
+      }, 1200 + i * 700);
+    });
+  });
+}
+
 export function RootNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
       <Tab.Navigator
+        screenListeners={({ navigation }) => ({ focus: () => preloadTabsLater(navigation) })}
         screenOptions={({ route }) => ({
           headerShown: false,
+          // A tab you are not looking at stops redrawing, so the one you are on stays quick; a short fade replaces the hard cut.
+          freezeOnBlur: true,
+          animation: 'fade',
           tabBarStyle: { backgroundColor: colors.backgroundElevated, borderTopColor: colors.surfaceBorder },
           tabBarActiveTintColor: colors.accent,
           tabBarInactiveTintColor: colors.textSecondary,
@@ -117,7 +142,7 @@ export function RootNavigator() {
           ),
         })}
       >
-        <Tab.Screen name="Map" component={GuardedMap} />
+        <Tab.Screen name="Map" component={GuardedMap} options={{ title: 'Explore' }} />
         <Tab.Screen name="Quests" component={GuardedQuests} />
         <Tab.Screen name="Satellites" component={SatellitesStack} />
         <Tab.Screen name="Radio" component={GuardedRadio} />

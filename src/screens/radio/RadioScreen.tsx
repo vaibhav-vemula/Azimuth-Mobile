@@ -19,15 +19,16 @@ const STATUS_COLORS = {
   connecting: colors.warning,
   connected: colors.accent,
   streaming: colors.success,
-  error: colors.danger,
+  // No dongle plugged in ends up here too, which is not an alarm: shown as plainly not connected.
+  error: colors.textTertiary,
 } as const;
 
 const STATUS_LABELS = {
-  disconnected: 'Disconnected',
+  disconnected: 'Not connected',
   connecting: 'Connecting',
   connected: 'Connected',
   streaming: 'Streaming',
-  error: 'Error',
+  error: 'Not connected',
 } as const;
 
 export default function RadioScreen() {
@@ -216,9 +217,9 @@ export default function RadioScreen() {
           ) : null}
 
           {error ? (
-            <GlassCard style={styles.errorCard}>
-              <Ionicons name="alert-circle" size={18} color={colors.danger} />
-              <Text style={styles.errorText}>{error}</Text>
+            <GlassCard style={[styles.errorCard, !isConnected && styles.infoCard]}>
+              <Ionicons name={isConnected ? 'alert-circle' : 'information-circle-outline'} size={18} color={isConnected ? colors.danger : colors.textSecondary} />
+              <Text style={[styles.errorText, !isConnected && styles.infoText]}>{error}</Text>
             </GlassCard>
           ) : null}
         </>
@@ -261,4 +262,6 @@ const styles = StyleSheet.create({
   noticeText: { ...typography.caption, color: colors.textPrimary, flex: 1 },
   errorCard: { flexDirection: 'row', alignItems: 'center', gap: 10, borderColor: colors.danger },
   errorText: { ...typography.caption, color: colors.danger, flex: 1 },
+  infoCard: { borderColor: colors.surfaceBorder },
+  infoText: { color: colors.textSecondary },
 });
