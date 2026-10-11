@@ -64,11 +64,13 @@ function summarise(r, p) {
   };
 }
 
+const PAY_STATE = (r) => (r.onchain_tx ? 'paid' : r.onchain_error ? 'failed' : 'pending');
+
 /**
  * The admin portal's HTTP handler. It runs on the operator's own computer with the secret key; the page in the
  * browser only talks to this handler, so the key never reaches the browser.
  */
-function createAdminApp({ reviewer, sink, password }) {
+function createAdminApp({ reviewer, sink, chain = null, password }) {
   if (!password || password.length < 8) throw new Error('ADMIN_PASSWORD must be set to at least 8 characters.');
 
   return async function handle(req, res) {
@@ -133,6 +135,35 @@ function createAdminApp({ reviewer, sink, password }) {
         if (!r) return send(404, { error: 'not found' });
         if (r.status !== 'new') return send(409, { error: `this report was already ${r.status}` });
         return send(200, await reviewer.reject(m[1], [reason]));
+      }
+
+      if (req.method === 'GET' && p === '/api/payouts') {
+        if (!chain) return send(200, { enabled: false, status: null, statusError: null, items: [] });
+        let status = null;
+        let statusError = null;
+        try { status = await chain.status(); } catch (e) { statusError = String(e.message || e).slice(0, 200); }
+        const rows = await sink.listPayouts(30);
+        return send(200, {
+          enabled: true, status, statusError,
+          items: rows.map((r) => ({
+            hash: r.hash, node: r.node, type: r.type, amount: r.onchain_amount, state: PAY_STATE(r),
+            error: r.onchain_error || null, record: r.onchain_record || null, tx: r.onchain_tx || null, verifiedAt: r.verified_at,
+          })),
+        });
+      }
+
+      m = /^\/api\/payouts\/([0-9a-f]{64})\/retry$/.exec(p);
+      if (req.method === 'POST' && m) {
+        const result = await reviewer.retryOnChain(m[1]);
+        return send(result.status === 'paid' ? 200 : 409, result);
+      }
+
+      if (req.method === 'POST' && p === '/api/pause') {
+        const body = await readJson(req);
+        if (typeof body.paused !== 'boolean') return send(400, { error: 'paused must be true or false' });
+        if (!chain) return send(503, { error: 'on-chain payouts are not configured' });
+        await chain.setPaused(body.paused);
+        return send(200, { ok: true, paused: body.paused });
       }
 
       return send(404, { error: 'not found' });

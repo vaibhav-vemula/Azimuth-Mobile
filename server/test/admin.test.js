@@ -12,7 +12,7 @@ const iso = (ms) => new Date(ms).toISOString();
 const PASSWORD = 'correct horse battery';
 const auth = 'Basic ' + Buffer.from('admin:' + PASSWORD).toString('base64');
 
-function fakeSink() {
+function fakeSink(extra = {}) {
   const db = { reports: new Map(), rewards: [], chests: new Map() };
   return {
     db,
@@ -24,13 +24,14 @@ function fakeSink() {
     async updateChest() {},
     async listApproved() { return db.rewards.filter((r) => r.status === 'approved'); },
     async listDeletionRequests() { return []; },
+    async listPayouts() { return extra.payouts || []; },
   };
 }
 
-async function withPortal(fn) {
-  const sink = fakeSink();
-  const reviewer = createReviewer({ sink, store: openStore(':memory:') });
-  const server = http.createServer(createAdminApp({ reviewer, sink, password: PASSWORD }));
+async function withPortal(fn, opts = {}) {
+  const sink = fakeSink(opts);
+  const reviewer = opts.reviewer || createReviewer({ sink, store: openStore(':memory:') });
+  const server = http.createServer(createAdminApp({ reviewer, sink, chain: opts.chain || null, password: PASSWORD }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = (method, path, body, headers = { authorization: auth }) =>
@@ -143,5 +144,53 @@ test('the logo is served as an image and is the real mark', async () => {
     assert.equal(res.headers.get('content-type'), 'image/svg+xml');
     assert.match(await res.text(), /<svg[^>]*viewBox="0 0 200 200"/);
     assert.equal((await fetch(base + '/logo.svg')).status, 401, 'still behind the password');
+  });
+});
+
+test('payouts list shows paid, failed and pending items with the vault status', async () => {
+  const payouts = [
+    { hash: 'a'.repeat(64), node: 'N1', type: 'mapping-session', verified_at: '2026-10-10T10:00:00Z', onchain_tx: 'SIG', onchain_record: 'REC', onchain_error: null, onchain_amount: 2 },
+    { hash: 'b'.repeat(64), node: 'N2', type: 'satellite-pass', verified_at: '2026-10-10T09:00:00Z', onchain_tx: null, onchain_record: null, onchain_error: 'Rewards are paused', onchain_amount: 25 },
+    { hash: 'c'.repeat(64), node: 'N3', type: 'chest-claim', verified_at: '2026-10-10T08:00:00Z', onchain_tx: null, onchain_record: null, onchain_error: null, onchain_amount: 10 },
+  ];
+  const chain = { status: async () => ({ vaultBalance: 99, paused: false, maxReward: 100, authority: 'AUTH' }), setPaused: async () => ({ signature: 'S' }) };
+  await withPortal(async ({ call }) => {
+    const res = await call('GET', '/api/payouts');
+    assert.equal(res.status, 200);
+    assert.equal(res.json.enabled, true);
+    assert.equal(res.json.status.vaultBalance, 99);
+    assert.deepEqual(res.json.items.map((i) => i.state), ['paid', 'failed', 'pending']);
+    assert.equal(res.json.items[1].error, 'Rewards are paused');
+  }, { payouts, chain });
+});
+
+test('payouts report enabled:false when no chain is configured', async () => {
+  await withPortal(async ({ call }) => {
+    const res = await call('GET', '/api/payouts');
+    assert.equal(res.json.enabled, false);
+    assert.deepEqual(res.json.items, []);
+  }, { payouts: [] });
+});
+
+test('retry runs the reviewer retry and maps failures to 409', async () => {
+  const h = 'a'.repeat(64);
+  await withPortal(async ({ call }) => {
+    assert.equal((await call('POST', `/api/payouts/${h}/retry`)).status, 200);
+  }, { reviewer: { retryOnChain: async (x) => ({ hash: x, status: 'paid' }) } });
+  await withPortal(async ({ call }) => {
+    assert.equal((await call('POST', `/api/payouts/${h}/retry`)).status, 409);
+  }, { reviewer: { retryOnChain: async (x) => ({ hash: x, status: 'failed', onchain: { ok: false, error: 'Rewards are paused' } }) } });
+});
+
+test('pause switch validates input and needs a chain', async () => {
+  const chain = { paused: null, status: async () => ({}), setPaused: async function (p) { chain.paused = p; return { signature: 'S' }; } };
+  await withPortal(async ({ call }) => {
+    assert.equal((await call('POST', '/api/pause', { paused: 'yes' })).status, 400);
+    const ok = await call('POST', '/api/pause', { paused: true });
+    assert.equal(ok.status, 200);
+    assert.equal(chain.paused, true);
+  }, { chain });
+  await withPortal(async ({ call }) => {
+    assert.equal((await call('POST', '/api/pause', { paused: true })).status, 503);
   });
 });

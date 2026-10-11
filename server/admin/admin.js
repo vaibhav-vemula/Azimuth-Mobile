@@ -131,7 +131,11 @@
     api('POST', '/api/reports/' + r.hash + '/' + action, body).then(function (x) {
       if (x.status === 200) {
         selected = null;
-        $('detail').textContent = action === 'approve' ? 'Approved. The rewards are ready for the weekly payout.' : 'Rejected.';
+        var oc = x.json.onchain;
+        $('detail').textContent = action === 'approve'
+          ? 'Approved.' + (oc ? (oc.ok ? ' Sent ' + oc.amount + ' AZMTest on-chain.' + (oc.warning ? ' Warning: ' + oc.warning : '') : ' Payout not sent yet: ' + oc.error + ' (retry under AZMTest payouts).') : ' Rewards are ready for the weekly payout.')
+          : 'Rejected.';
+        loadPayouts();
         loadOverview(); loadList();
       } else {
         msg.textContent = (x.json.reasons && x.json.reasons.join('. ')) || x.json.error || 'Could not do that.';
@@ -139,6 +143,51 @@
     }).catch(function () { msg.textContent = 'Could not reach the portal.'; });
   }
 
-  $('reload').addEventListener('click', function () { loadOverview(); loadList(); });
-  loadOverview(); loadList();
+  var EXPLORER = 'https://explorer.solana.com/address/';
+  function failText(x) {
+    var j = x.json || {};
+    return (j.onchain && j.onchain.error) || (j.reasons && j.reasons.join('. ')) || j.error || ('Failed (' + x.status + ')');
+  }
+  function loadPayouts() {
+    api('GET', '/api/payouts').then(function (r) {
+      var vault = $('vault'), box = $('payouts');
+      vault.textContent = ''; box.textContent = '';
+      if (r.status !== 200) { vault.textContent = (r.json && r.json.error) || 'Could not load payouts.'; return; }
+      var d = r.json;
+      if (!d.enabled) { vault.textContent = 'On-chain payouts are not configured on this server (see .env.example).'; return; }
+      if (d.statusError) vault.appendChild(el('span', { class: 'tag bad', text: d.statusError }));
+      if (d.status) {
+        vault.appendChild(el('span', { text: 'Vault: ' + d.status.vaultBalance + ' AZMTest · cap per report ' + d.status.maxReward + ' · ' }));
+        vault.appendChild(el('span', { class: 'tag ' + (d.status.paused ? 'bad' : 'good'), text: d.status.paused ? 'paused' : 'active' }));
+        vault.appendChild(el('button', { class: 'ghost', text: d.status.paused ? 'Resume payouts' : 'Pause payouts', on: { click: function () {
+          api('POST', '/api/pause', { paused: !d.status.paused }).then(function (x) {
+            if (x.status === 200) loadPayouts(); else vault.appendChild(el('div', { class: 'tag bad', text: failText(x) }));
+          }).catch(function () { vault.appendChild(el('div', { class: 'tag bad', text: 'Could not reach the portal.' })); });
+        } } }));
+      }
+      if (!d.items.length) { box.textContent = 'No payouts yet.'; return; }
+      d.items.forEach(function (i) {
+        var row = el('div', { class: 'item' }, [
+          el('div', { class: 'top' }, [
+            el('span', { class: 'mono', text: short(i.node) }),
+            el('span', { class: 'tag ' + (i.state === 'paid' ? 'good' : i.state === 'failed' ? 'bad' : ''), text: i.state === 'paid' ? 'paid on-chain' : i.state === 'failed' ? 'failed' : 'not paid yet' }),
+          ]),
+          el('div', { class: 'muted', text: i.type + ' · ' + i.amount + ' AZMTest · ' + when(i.verifiedAt) }),
+        ]);
+        if (i.error) row.appendChild(el('div', { class: 'muted', text: i.error }));
+        if (i.record) row.appendChild(el('a', { href: EXPLORER + encodeURIComponent(i.record) + '?cluster=devnet', target: '_blank', rel: 'noopener noreferrer', text: 'record on explorer' }));
+        if (i.state !== 'paid') row.appendChild(el('button', { class: 'ghost', text: 'Retry', on: { click: function (ev) {
+          ev.target.disabled = true;
+          api('POST', '/api/payouts/' + i.hash + '/retry').then(function (x) {
+            if (x.status === 200) loadPayouts();
+            else { ev.target.disabled = false; vault.textContent = failText(x); }
+          }).catch(function () { ev.target.disabled = false; vault.textContent = 'Could not reach the portal.'; });
+        } } }));
+        box.appendChild(row);
+      });
+    }).catch(function () { $('vault').textContent = 'Could not reach the portal.'; });
+  }
+
+  $('reload').addEventListener('click', function () { loadOverview(); loadList(); loadPayouts(); });
+  loadOverview(); loadList(); loadPayouts();
 })();
