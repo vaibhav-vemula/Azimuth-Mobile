@@ -118,9 +118,9 @@ export function RootNavigator() {
         })}
       >
         <Tab.Screen name="Map" component={GuardedMap} />
-        <Tab.Screen name="Radio" component={GuardedRadio} />
-        <Tab.Screen name="Satellites" component={SatellitesStack} />
         <Tab.Screen name="Quests" component={GuardedQuests} />
+        <Tab.Screen name="Satellites" component={SatellitesStack} />
+        <Tab.Screen name="Radio" component={GuardedRadio} />
         <Tab.Screen name="Profile" component={ProfileStackNavigator} />
       </Tab.Navigator>
     </NavigationContainer>
