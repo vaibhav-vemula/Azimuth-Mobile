@@ -9,12 +9,14 @@ const { newNode, bucket, signedReport, signText } = require('./helpers');
 const NOW = Date.UTC(2026, 9, 2, 15, 0, 0);
 
 /** A fake Supabase REST endpoint that records calls and can be told to fail. */
-function fakeFetch() {
+function fakeFetch(queue = []) {
   const calls = [];
   let failing = false;
   const impl = async (url, init) => {
     calls.push({ url, method: init.method, headers: init.headers, body: init.body ? JSON.parse(init.body) : undefined });
     if (failing) return { ok: false, status: 503, text: async () => 'down' };
+    const next = queue.shift();
+    if (next) return { ok: next.status >= 200 && next.status < 300, status: next.status, text: async () => JSON.stringify(next.body) };
     return { ok: true, status: 200, text: async () => '[]' };
   };
   return { impl, calls, setFailing: (v) => { failing = v; } };
@@ -132,7 +134,7 @@ test('review job calls use the right filters and never touch other rows', async 
   const f = fakeFetch();
   const sink = makeSink(f);
   await sink.listNewReports(5);
-  assert.match(f.calls[0].url, /\/reports\?status=eq\.new&order=received_at\.asc&limit=5/);
+  assert.match(f.calls[0].url, /\/reports\?status=eq\.new&type=neq\.challenge-claim&order=received_at\.asc&limit=5/);
   await sink.finishReport('abc', 'rejected', ['why']);
   assert.match(f.calls[1].url, /\/reports\?hash=eq\.abc$/);
   assert.deepEqual([f.calls[1].body.status, f.calls[1].body.reasons], ['rejected', ['why']]);
@@ -183,4 +185,50 @@ test('listPayouts asks for verified reports with a payout, newest first', async 
   assert.match(f.calls[0].url, /order=verified_at\.desc/);
   assert.match(f.calls[0].url, /limit=10/);
   assert.match(f.calls[0].url, /select=[^&]*onchain_error/);
+});
+
+test('listChallenges reads the active challenges in order', async () => {
+  const f = fakeFetch([{ status: 200, body: [{ id: 'scan-30' }] }]);
+  const sink = makeSink(f);
+  assert.deepEqual(await sink.listChallenges(), [{ id: 'scan-30' }]);
+  assert.match(f.calls[0].url, /\/challenges\?/);
+  assert.match(f.calls[0].url, /active=eq\.true/);
+  assert.match(f.calls[0].url, /order=sort\.asc/);
+});
+
+test('listNewReports leaves out challenge claims, and listNewClaims asks only for them', async () => {
+  const f = fakeFetch([{ status: 200, body: [] }, { status: 200, body: [{ hash: 'c' }] }]);
+  const sink = makeSink(f);
+  await sink.listNewReports(5);
+  assert.match(f.calls[0].url, /type=neq\.challenge-claim/);
+  assert.deepEqual(await sink.listNewClaims(7), [{ hash: 'c' }]);
+  assert.match(f.calls[1].url, /status=eq\.new/);
+  assert.match(f.calls[1].url, /type=eq\.challenge-claim/);
+  assert.match(f.calls[1].url, /limit=7/);
+});
+
+test('findVerifiedClaim filters on wallet, challenge and period and answers true or false', async () => {
+  const f = fakeFetch([{ status: 200, body: [{ hash: 'h' }] }, { status: 200, body: [] }]);
+  const sink = makeSink(f);
+  assert.equal(await sink.findVerifiedClaim('NodeA', 'scan-30', '2026-10-10'), true);
+  assert.match(f.calls[0].url, /node=eq\.NodeA/);
+  assert.match(f.calls[0].url, /status=eq\.verified/);
+  assert.match(f.calls[0].url, /body-%3Ereport-%3E%3EchallengeId=eq\.scan-30|body->report->>challengeId=eq\.scan-30/);
+  assert.match(f.calls[0].url, /2026-10-10/);
+  assert.equal(await sink.findVerifiedClaim('NodeA', 'scan-30', '2026-10-11'), false);
+});
+
+test('activity queries are bounded by wallet and time', async () => {
+  const f = fakeFetch([{ status: 200, body: [{ type: 'mapping-session', seconds: '60' }] }, { status: 200, body: [{ amount_usdc: 0.01 }] }]);
+  const sink = makeSink(f);
+  const a = await sink.listVerifiedActivity('NodeA', '2026-10-10T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
+  assert.deepEqual(a, [{ type: 'mapping-session', seconds: '60' }]);
+  assert.match(f.calls[0].url, /status=eq\.verified/);
+  assert.match(f.calls[0].url, /type=neq\.challenge-claim/);
+  assert.match(decodeURIComponent(f.calls[0].url), /verified_at=gte\.2026-10-10T00:00:00\.000Z/);
+  assert.match(decodeURIComponent(f.calls[0].url), /verified_at=lt\.2026-10-11T00:00:00\.000Z/);
+  const r = await sink.listNewCellRewards('NodeA', '2026-10-10T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
+  assert.deepEqual(r, [{ amount_usdc: 0.01 }]);
+  assert.match(f.calls[1].url, /kind=eq\.new-cells/);
+  assert.match(f.calls[1].url, /status=neq\.rejected/);
 });

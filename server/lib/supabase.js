@@ -49,7 +49,33 @@ function createSupabaseSink({ url, serviceKey, fetchImpl = fetch }) {
 
     /** Reports the app inserted that nobody has checked yet, oldest first. */
     async listNewReports(limit = 100) {
-      return call('GET', `/reports?status=eq.new&order=received_at.asc&limit=${limit}&select=hash,node,type,received_at,body`);
+      return call('GET', `/reports?status=eq.new&type=neq.challenge-claim&order=received_at.asc&limit=${limit}&select=hash,node,type,received_at,body`);
+    },
+
+    /** The active challenges, in display order. */
+    async listChallenges() {
+      return call('GET', '/challenges?active=eq.true&order=sort.asc&select=id,title,blurb,period,metric,goal,reward,go_tab,active,sort');
+    },
+
+    /** Claims for challenge rewards that nobody has settled yet, oldest first. */
+    async listNewClaims(limit = 50) {
+      return call('GET', `/reports?status=eq.new&type=eq.challenge-claim&order=received_at.asc&limit=${limit}&select=hash,node,type,received_at,body`);
+    },
+
+    /** Whether this wallet already has a verified claim for the challenge in the period. */
+    async findVerifiedClaim(node, challengeId, period) {
+      const rows = await call('GET', `/reports?node=eq.${encodeURIComponent(node)}&type=eq.challenge-claim&status=eq.verified&body->report->>challengeId=eq.${encodeURIComponent(challengeId)}&body->report->>period=eq.${encodeURIComponent(period)}&select=hash&limit=1`);
+      return Array.isArray(rows) && rows.length > 0;
+    },
+
+    /** The wallet's verified reports (not claims) in a time window, with the session length where the report has one. */
+    async listVerifiedActivity(node, fromIso, toIso) {
+      return call('GET', `/reports?node=eq.${encodeURIComponent(node)}&status=eq.verified&type=neq.challenge-claim&verified_at=gte.${encodeURIComponent(fromIso)}&verified_at=lt.${encodeURIComponent(toIso)}&select=type,seconds:body->report->checks->>durationSec&limit=1000`);
+    },
+
+    /** The wallet's 'new-cells' reward rows created in a time window. */
+    async listNewCellRewards(node, fromIso, toIso) {
+      return call('GET', `/rewards?node=eq.${encodeURIComponent(node)}&kind=eq.new-cells&status=neq.rejected&created_at=gte.${encodeURIComponent(fromIso)}&created_at=lt.${encodeURIComponent(toIso)}&select=amount_usdc&limit=1000`);
     },
 
     /** Records the review result on a report. */
