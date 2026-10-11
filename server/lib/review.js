@@ -100,6 +100,7 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
   async function approve(hash, { status = 'approved' } = {}) {
     const r = await sink.getReport(hash);
     if (!r) return { hash, status: 'missing', reasons: ['no such report'] };
+    if (r.type === 'challenge-claim') return { hash, status: 'blocked', reasons: ['challenge claims are settled automatically'] };
     if (r.status !== 'new') return { hash, status: 'unchanged', current: r.status, reasons: [`this report was already ${r.status}`] };
 
     const problems = columnProblems(r);
@@ -161,14 +162,14 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     const progress = progressFor(def.metric, { reports, rewards }, service.config.newCellUsdc);
     if (progress < def.goal) return reject([`${progress} of ${def.goal} verified so far. Reports are counted once they have been checked.`]);
 
-    await sink.finishReport(r.hash, 'verified', null);
-    let onchain;
     try {
       await sink.setOnchain(r.hash, { onchain_amount: def.reward });
-      onchain = await payOnChain(r.hash, r.node, 'challenge-claim', def.reward, onchainHash(def.id, c.period));
     } catch (e) {
-      onchain = { ok: false, amount: def.reward, error: `Could not save the payout amount (nothing was sent): ${String((e && e.message) || e).slice(0, 250)}` };
+      // Nothing is marked or sent: the claim stays new and is settled again on the next pass.
+      return { hash: r.hash, status: 'skipped', reasons: [`Could not save the payout amount (nothing was sent): ${String((e && e.message) || e).slice(0, 250)}`] };
     }
+    await sink.finishReport(r.hash, 'verified', null);
+    const onchain = await payOnChain(r.hash, r.node, 'challenge-claim', def.reward, onchainHash(def.id, c.period));
     return { hash: r.hash, status: 'verified', onchain };
   }
 

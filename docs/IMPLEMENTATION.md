@@ -234,3 +234,11 @@ Verified reports pay the wallet **AZMTest** (0 decimals, whole tokens) and store
 - **Supabase**: run `server/supabase/schema_azm.sql` in the SQL editor (new `reports` columns, `node_summary` with `azmTotal` and `verified`).
 - **App**: Profile shows the AZMTest balance (RPC read of the wallet's token account, needs `EXPO_PUBLIC_AZM_MINT`) and up to five verified reports linking to the devnet explorer; the submit message says AZMTest arrives after verification.
 - **Verified**: program tests (9 registry tests on a local validator), server tests, app typecheck and Jest, devnet deploy and supply/vault balances. **Not verified**: the live approve-and-pay run (needs the SQL run and `server/.env` filled), the portal panel in a browser, the Profile on a phone.
+
+## Challenges / Quests (2026-10-10)
+
+- **Quests tab and challenges**: five seeded challenges (scan 30 minutes, find 20 new cells, explore new ground weekly, catch 3 satellite passes, open your first chest) live in the Supabase table `challenges`. Edit them in the Supabase table editor; the app fetches them and the server caches the list for up to 60 s. Validation: whole reward 1..100, goal > 0, known period, metric and go_tab; invalid rows are ignored.
+- **Claim flow**: the app tracks progress from local sessions plus verified passes and chests. Claim signs a `challenge-claim` once. The portal's 30 s timer or the "Check challenge claims now" button settles it: the server recomputes progress from the wallet's verified reports and new-cell reward rows in the UTC period, then pays AZMTest kind 3 with on-chain hash `sha256('challenge:id:period')`, so each period pays once. Claims wait while the portal is off or no chain is configured.
+- **SQL to run**: `server/supabase/schema_challenges.sql`, after `schema_azm.sql`.
+- **Known limits**: the app and server count progress on different clocks (session start vs review time), so a card can say Ready and the server reject with the numbers. The weekly 70-cell goal counts cells on the projected map grid. The sonde challenge is deferred.
+- **Verified**: server and app tests. **Not verified**: the tab on a phone, the Seed Vault claim prompt, the live devnet payout, behaviour near UTC midnight.

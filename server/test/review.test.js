@@ -573,3 +573,31 @@ test('a claim whose challenge is removed or has no reward is rejected as unknown
     assert.equal(chain.calls.length, 0);
   }
 });
+
+test('if the payout amount cannot be saved the claim stays new, nothing is sent, and a later run settles it', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  fake.db.activity.push({ node: node.address, atMs: NOW - 3600_000, type: 'mapping-session', seconds: '2400' });
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  const realSet = fake.sink.setOnchain; let fail = true;
+  fake.sink.setOnchain = async (h, p) => { if (fail) throw new Error('db down'); return realSet(h, p); };
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'skipped');
+  assert.match(out[0].reasons[0], /nothing was sent/);
+  assert.equal(fake.db.reports.get(row.hash).status, 'new');
+  assert.equal(chain.calls.length, 0);
+  fail = false;
+  const again = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(again[0].status, 'verified');
+  assert.equal(chain.calls.length, 1);
+});
+
+test('approve refuses challenge claims and leaves the row untouched', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain }).approve(row.hash);
+  assert.equal(out.status, 'blocked');
+  assert.equal(chain.calls.length, 0);
+  assert.equal(fake.db.reports.get(row.hash).status, 'new');
+});

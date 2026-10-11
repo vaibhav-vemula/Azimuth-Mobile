@@ -69,7 +69,9 @@ language sql security definer set search_path = public as $$
       from (
         select body->'report'->>'challengeId' as challenge, body->'report'->>'period' as period, status, reasons, received_at
         from public.reports
-        where node = p_node and type = 'challenge-claim' and received_at > now() - interval '10 days'
+        where node = p_node and type = 'challenge-claim'
+          and (received_at > now() - interval '10 days'
+               or (status = 'verified' and body->'report'->>'period' = 'once'))
         order by received_at desc limit 50
       ) c
     ), '[]'::jsonb)
