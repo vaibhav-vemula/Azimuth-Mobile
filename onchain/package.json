@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "anchor build",
+    "setup:azmtest": "ts-node --transpile-only scripts/setup-azmtest.ts",
     "test": "anchor test -- --features short-grace"
   },
   "dependencies": {
