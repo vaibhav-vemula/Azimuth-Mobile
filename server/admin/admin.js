@@ -133,7 +133,7 @@
         selected = null;
         var oc = x.json.onchain;
         $('detail').textContent = action === 'approve'
-          ? 'Approved.' + (oc ? (oc.ok ? ' Sent ' + oc.amount + ' AZMTest on-chain.' + (oc.warning ? ' Warning: ' + oc.warning : '') : ' Payout not sent yet: ' + oc.error + ' (retry under AZMTest payouts).') : ' Rewards are ready for the weekly payout.')
+          ? 'Approved.' + (oc ? (oc.ok ? ' Sent ' + oc.amount + ' AZMTest on-chain.' + (oc.warning ? ' Warning: ' + oc.warning : '') : ' Payout not sent yet: ' + oc.error + (oc.error.indexOf('Could not save the payout amount') === 0 ? '' : ' (retry under AZMTest payouts).')) : ' Rewards are ready for the weekly payout.')
           : 'Rejected.';
         loadPayouts();
         loadOverview(); loadList();

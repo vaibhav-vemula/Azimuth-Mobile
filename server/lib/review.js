@@ -39,6 +39,7 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     const checked = verifyEnvelope(envelope);
     if (checked.hash && checked.hash !== r.hash) return ['the report hash column does not match the signed report'];
     if (envelope.report.node !== r.node) return ['the wallet column does not match the signed report'];
+    if (envelope.report.type !== r.type) return ['the type column does not match the signed report'];
     return [];
   }
 
@@ -128,7 +129,7 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
           await sink.setOnchain(hash, { onchain_amount: amount });
           onchain = await payOnChain(hash, r.node, r.type, amount);
         } catch (e) {
-          onchain = { ok: false, amount, error: String((e && e.message) || e).slice(0, 300) };
+          onchain = { ok: false, amount, error: 'Could not save the payout amount (nothing was sent): ' + String((e && e.message) || e).slice(0, 250) };
         }
       }
     }

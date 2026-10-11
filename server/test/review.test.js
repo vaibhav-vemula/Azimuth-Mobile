@@ -384,8 +384,8 @@ test('an already-recorded payout (no signature) is stored as already-recorded', 
 test('satellite pass pays 25 with kind 1 and chest claim pays 10 with kind 2', async () => {
   const fake = fakeSupabase();
   const chain = fakeChain();
-  const sat = signedReport(newNode(), manyCells(1));
-  fake.insertReport(sat, NOW, { type: 'satellite-pass' });
+  const sat = signedReport(newNode(), manyCells(1), { type: 'satellite-pass' });
+  fake.insertReport(sat, NOW);
   const rev = reviewer(fake, { chain });
   // Building a physically valid signed pass is heavy (see passes.test.js); the review path is what matters here.
   rev.service.wasAccepted = () => true;
@@ -424,4 +424,19 @@ test('a failed retry returns status failed with the error', async () => {
   const r = await reviewer(fake, { chain: fakeChain({ fail: 'still paused' }) }).retryOnChain(env.hash);
   assert.equal(r.status, 'failed');
   assert.equal(r.onchain.error, 'still paused');
+});
+
+test('a type column that differs from the signed report is blocked and rejected', async () => {
+  const fake = fakeSupabase();
+  const chain = fakeChain();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW, { type: 'satellite-pass' });
+  const out = await reviewer(fake, { chain }).approve(env.hash);
+  assert.equal(out.status, 'blocked');
+  assert.match(out.reasons.join(), /type column/);
+  assert.equal(chain.calls.length, 0);
+  const run = await reviewer(fake, { chain }).run({ auto: true });
+  assert.equal(run.rejected, 1);
+  assert.match(fake.db.reports.get(env.hash).reasons.join(), /type column/);
+  assert.equal(chain.calls.length, 0);
 });
