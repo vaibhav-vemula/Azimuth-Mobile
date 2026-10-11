@@ -1,6 +1,7 @@
 'use strict';
 const { openStore } = require('./store');
 const { createService } = require('./service');
+const { azmAmount, kindFor } = require('./azmRewards');
 const { verifyEnvelope } = require('./verify-report.cjs');
 
 const DAY = 24 * 3600_000;
@@ -21,7 +22,7 @@ const DELETION_MAX_AGE_MS = 7 * DAY;
  * Each report is judged as of the time it was received, so review delays never turn a good report into an expired
  * one. Local state (known cells, chest claims) lives in a SQLite file that must be kept between runs.
  */
-function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor, config, log = () => undefined }) {
+function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor, config, chain = null, azmEnv = process.env, log = () => undefined }) {
   const clock = { t: Date.now() };
   const service = createService(store, { now: () => clock.t, checkNode, tleFor, config });
 
@@ -57,6 +58,37 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     return { hash, status: 'rejected', reasons: list };
   }
 
+  /** Sends the AZMTest payout for a verified report and records the outcome. Never throws. */
+  async function payOnChain(hash, node, type, amount) {
+    let out;
+    try {
+      out = await chain.reward({ wallet: node, hash, kind: kindFor(type), amount });
+    } catch (e) {
+      const error = String((e && e.message) || e).slice(0, 300);
+      await sink.setOnchain(hash, { onchain_error: error }).catch(() => undefined);
+      return { ok: false, amount, error };
+    }
+    try {
+      await sink.setOnchain(hash, { onchain_tx: out.signature || 'already-recorded', onchain_record: out.record, onchain_error: null });
+    } catch (e) {
+      return { ok: true, amount, signature: out.signature, record: out.record, warning: `paid on-chain but could not save the result: ${String((e && e.message) || e).slice(0, 250)}` };
+    }
+    return { ok: true, amount, signature: out.signature, record: out.record };
+  }
+
+  /** Pays again a verified report whose payout failed. Safe to repeat: the program pays each report once. */
+  async function retryOnChain(hash) {
+    if (!chain) return { hash, status: 'failed', onchain: { ok: false, amount: 0, error: 'on-chain payouts are not configured' } };
+    const r = await sink.getReport(hash);
+    if (!r) return { hash, status: 'missing' };
+    if (r.status !== 'verified') return { hash, status: 'not-verified' };
+    if (r.onchain_tx) return { hash, status: 'already-paid' };
+    const amount = Number(r.onchain_amount) || 0;
+    if (kindFor(r.type) === null || amount <= 0) return { hash, status: 'nothing-to-pay' };
+    const onchain = await payOnChain(hash, r.node, r.type, amount);
+    return { hash, status: onchain.ok ? 'paid' : 'failed', onchain };
+  }
+
   /**
    * Accepts a report. With `auto` unset this is the person pressing Approve. A report that fails the automatic
    * checks cannot be approved (reject it instead); this keeps one mistaken click from paying out an implausible report.
@@ -87,7 +119,20 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     }
     await sink.insertRewards(hash, r.node, rows, status);
     await sink.finishReport(hash, 'verified', null);
-    return { hash, status: 'verified', rewards: rows };
+
+    let onchain = null;
+    if (chain && status === 'approved') {
+      const amount = azmAmount({ type: r.type, rows, newCellUsdc: service.config.newCellUsdc }, azmEnv);
+      if (amount > 0) {
+        try {
+          await sink.setOnchain(hash, { onchain_amount: amount });
+          onchain = await payOnChain(hash, r.node, r.type, amount);
+        } catch (e) {
+          onchain = { ok: false, amount, error: String((e && e.message) || e).slice(0, 300) };
+        }
+      }
+    }
+    return { hash, status: 'verified', rewards: rows, onchain };
   }
 
   async function processDeletions() {
@@ -133,7 +178,7 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     };
   }
 
-  return { run, preview, approve, reject, syncChests, processDeletions, service, store };
+  return { run, preview, approve, reject, retryOnChain, syncChests, processDeletions, service, store };
 }
 
 module.exports = { createReviewer, DELETION_MAX_AGE_MS };

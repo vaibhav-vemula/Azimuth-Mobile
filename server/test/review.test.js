@@ -14,6 +14,7 @@ function fakeSupabase() {
   const failures = { insertRewards: 0 };
   const sink = {
     async listNewReports(limit = 100) { return [...db.reports.values()].filter((r) => r.status === 'new').sort((a, b) => a.received_at.localeCompare(b.received_at)).slice(0, limit); },
+    async setOnchain(hash, patch) { Object.assign(db.reports.get(hash), patch); },
     async finishReport(hash, status, reasons) { Object.assign(db.reports.get(hash), { status, reasons: reasons && reasons.length ? reasons : null }); },
     async getReport(hash) { return db.reports.get(hash) || null; },
     async insertRewards(hash, node, rows, status = 'pending') {
@@ -240,4 +241,187 @@ test('approving a chest claim fills the chest and pays the chest reward', async 
   assert.equal(fake.db.chests.get('c1').fills, 1);
   assert.equal(fake.db.chests.get('c1').status, 'filled');
   assert.equal(fake.db.rewards.find((x) => x.kind === 'chest').amount_usdc, 1);
+});
+
+function fakeChain(over = {}) {
+  const calls = [];
+  return {
+    calls,
+    async reward(args) {
+      calls.push(args);
+      if (over.fail) throw new Error(over.fail);
+      return { signature: 'SIG', record: 'REC', existed: false };
+    },
+  };
+}
+const manyCells = (n) => Array.from({ length: n }, (_, i) => bucket(`h120:1:${i + 1}`, NOW - 3600_000));
+
+test('approving a mapping report with enough new cells pays AZMTest and stores the transaction', async () => {
+  const fake = fakeSupabase();
+  const chain = fakeChain();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  const out = await reviewer(fake, { chain }).approve(env.hash);
+  assert.equal(out.status, 'verified');
+  assert.deepEqual(out.onchain, { ok: true, amount: 2, signature: 'SIG', record: 'REC' });
+  assert.deepEqual(chain.calls, [{ wallet: env.report.node, hash: env.hash, kind: 0, amount: 2 }]);
+  const row = fake.db.reports.get(env.hash);
+  assert.equal(row.onchain_amount, 2);
+  assert.equal(row.onchain_tx, 'SIG');
+  assert.equal(row.onchain_record, 'REC');
+  assert.equal(row.onchain_error, null);
+});
+
+test('a report worth less than one token makes no chain call and no error', async () => {
+  const fake = fakeSupabase();
+  const chain = fakeChain();
+  const env = signedReport(newNode(), manyCells(3));
+  fake.insertReport(env, NOW);
+  const out = await reviewer(fake, { chain }).approve(env.hash);
+  assert.equal(out.status, 'verified');
+  assert.equal(out.onchain, null);
+  assert.equal(chain.calls.length, 0);
+  assert.equal(fake.db.reports.get(env.hash).onchain_error, undefined);
+});
+
+test('a chain failure keeps the report verified, stores the error and the amount, and can be retried', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  const broken = await reviewer(fake, { chain: fakeChain({ fail: 'Rewards are paused' }) }).approve(env.hash);
+  assert.equal(broken.status, 'verified');
+  assert.deepEqual(broken.onchain, { ok: false, amount: 2, error: 'Rewards are paused' });
+  const row = fake.db.reports.get(env.hash);
+  assert.equal(row.status, 'verified');
+  assert.equal(row.onchain_error, 'Rewards are paused');
+  assert.equal(row.onchain_tx, undefined);
+
+  const good = fakeChain();
+  const rev = reviewer(fake, { chain: good });
+  const retried = await rev.retryOnChain(env.hash);
+  assert.equal(retried.status, 'paid');
+  assert.equal(good.calls[0].amount, 2);
+  assert.equal(fake.db.reports.get(env.hash).onchain_error, null);
+  assert.equal((await rev.retryOnChain(env.hash)).status, 'already-paid');
+  assert.equal(good.calls.length, 1, 'no second payment');
+});
+
+test('retry refuses reports that are not verified or have nothing to pay', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(3));
+  fake.insertReport(env, NOW);
+  const rev = reviewer(fake, { chain: fakeChain() });
+  assert.equal((await rev.retryOnChain('f'.repeat(64))).status, 'missing');
+  assert.equal((await rev.retryOnChain(env.hash)).status, 'not-verified');
+  await rev.approve(env.hash);
+  assert.equal((await rev.retryOnChain(env.hash)).status, 'nothing-to-pay');
+});
+
+test('if saving the amount fails, approval still completes and reports the problem', async () => {
+  const fake = fakeSupabase();
+  fake.sink.setOnchain = async () => { throw new Error('column onchain_amount does not exist'); };
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  const out = await reviewer(fake, { chain: fakeChain() }).approve(env.hash);
+  assert.equal(out.status, 'verified');
+  assert.equal(out.onchain.ok, false);
+  assert.match(out.onchain.error, /onchain_amount/);
+});
+
+test('without a chain nothing changes', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  const out = await reviewer(fake).approve(env.hash);
+  assert.equal(out.status, 'verified');
+  assert.equal(out.onchain, null);
+});
+
+test('auto-mode approvals never touch the chain', async () => {
+  const fake = fakeSupabase();
+  const chain = fakeChain();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  const out = await reviewer(fake, { chain }).run({ auto: true });
+  assert.equal(out.verified, 1);
+  assert.equal(chain.calls.length, 0);
+  assert.equal(out.results[0].onchain, null);
+  assert.equal(fake.db.reports.get(env.hash).onchain_amount, undefined);
+});
+
+test('retry does nothing for a report type that has no AZMTest kind', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(3));
+  fake.insertReport(env, NOW, { status: 'verified', type: 'mystery', onchain_amount: 5 });
+  const chain = fakeChain();
+  assert.equal((await reviewer(fake, { chain }).retryOnChain(env.hash)).status, 'nothing-to-pay');
+  assert.equal(chain.calls.length, 0);
+});
+
+test('money moved but saving the result failed: reported as paid with a warning', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  let n = 0;
+  const real = fake.sink.setOnchain;
+  fake.sink.setOnchain = async (h, patch) => { if (++n === 2) throw new Error('db down'); return real(h, patch); };
+  const out = await reviewer(fake, { chain: fakeChain() }).approve(env.hash);
+  assert.equal(out.onchain.ok, true);
+  assert.equal(out.onchain.signature, 'SIG');
+  assert.match(out.onchain.warning, /paid on-chain but could not save the result: db down/);
+});
+
+test('an already-recorded payout (no signature) is stored as already-recorded', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  const chain = { async reward() { return { signature: null, record: 'REC', existed: true }; } };
+  const out = await reviewer(fake, { chain }).approve(env.hash);
+  assert.deepEqual(out.onchain, { ok: true, amount: 2, signature: null, record: 'REC' });
+  assert.equal(fake.db.reports.get(env.hash).onchain_tx, 'already-recorded');
+});
+
+test('satellite pass pays 25 with kind 1 and chest claim pays 10 with kind 2', async () => {
+  const fake = fakeSupabase();
+  const chain = fakeChain();
+  const sat = signedReport(newNode(), manyCells(1));
+  fake.insertReport(sat, NOW, { type: 'satellite-pass' });
+  const rev = reviewer(fake, { chain });
+  // Building a physically valid signed pass is heavy (see passes.test.js); the review path is what matters here.
+  rev.service.wasAccepted = () => true;
+  rev.service.rewardsFor = () => [];
+  const out = await rev.approve(sat.hash);
+  assert.equal(out.onchain.amount, 25);
+  assert.deepEqual(chain.calls[0], { wallet: sat.report.node, hash: sat.hash, kind: 1, amount: 25 });
+
+  fake.db.chests.set('c1', { id: 'c1', title: 'Dead zone', kind: 'dead-zone', cell_id: 'h120:5:5', reward_usdc: 1, max_fills: 1, fills: 0, expires_at: iso(NOW + 86_400_000), requester: 'town', spec: {}, created_at: iso(NOW - 3600_000), status: 'open' });
+  const chain2 = fakeChain();
+  const rev2 = reviewer(fake, { chain: chain2 });
+  await rev2.syncChests();
+  const claim = signedReport(newNode(), [bucket('h120:5:5', NOW + 60_000)], { type: 'chest-claim', chest: { id: 'c1', cellId: 'h120:5:5' } });
+  fake.insertReport(claim, NOW);
+  const out2 = await rev2.approve(claim.hash);
+  assert.equal(out2.status, 'verified');
+  assert.equal(out2.onchain.amount, 10);
+  assert.deepEqual(chain2.calls[0], { wallet: claim.report.node, hash: claim.hash, kind: 2, amount: 10 });
+});
+
+test('a rejected report makes no chain call', async () => {
+  const fake = fakeSupabase();
+  const chain = fakeChain();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  await reviewer(fake, { chain }).reject(env.hash, 'nope');
+  assert.equal(chain.calls.length, 0);
+  assert.equal(fake.db.reports.get(env.hash).onchain_amount, undefined);
+});
+
+test('a failed retry returns status failed with the error', async () => {
+  const fake = fakeSupabase();
+  const env = signedReport(newNode(), manyCells(12));
+  fake.insertReport(env, NOW);
+  await reviewer(fake, { chain: fakeChain({ fail: 'paused' }) }).approve(env.hash);
+  const r = await reviewer(fake, { chain: fakeChain({ fail: 'still paused' }) }).retryOnChain(env.hash);
+  assert.equal(r.status, 'failed');
+  assert.equal(r.onchain.error, 'still paused');
 });
