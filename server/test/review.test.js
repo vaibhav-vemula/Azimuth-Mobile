@@ -4,16 +4,26 @@ const assert = require('node:assert/strict');
 const { openStore } = require('../lib/store');
 const { createReviewer } = require('../lib/review');
 const { newNode, bucket, signedReport, signText } = require('./helpers');
+const crypto = require('node:crypto');
+const { canonicalize } = require('../lib/verify-report.cjs');
 
 const NOW = Date.UTC(2026, 9, 2, 15, 0, 0);
 const iso = (ms) => new Date(ms).toISOString();
 
+const SEED_CHALLENGES = [
+  { id: 'scan-30', title: 'Scan for 30 minutes', blurb: 'Keep mapping on for half an hour today.', period: 'daily', metric: 'mapping_minutes', goal: 30, reward: 5, go_tab: 'Map', active: true, sort: 10 },
+  { id: 'cells-20', title: 'Find 20 new cells', blurb: 'Map 20 cells nobody has mapped yet.', period: 'daily', metric: 'new_cells', goal: 20, reward: 5, go_tab: 'Map', active: true, sort: 20 },
+  { id: 'ground-weekly', title: 'Explore new ground', blurb: 'Reveal 70 new cells this week.', period: 'weekly', metric: 'new_cells', goal: 70, reward: 40, go_tab: 'Map', active: true, sort: 30 },
+  { id: 'passes-3', title: 'Catch 3 satellite passes', blurb: 'Record three satellite passes this week.', period: 'weekly', metric: 'satellite_passes', goal: 3, reward: 30, go_tab: 'Satellites', active: true, sort: 40 },
+  { id: 'first-chest', title: 'Open your first chest', blurb: 'Find a chest and open it. Once only.', period: 'once', metric: 'chests_opened', goal: 1, reward: 20, go_tab: 'Map', active: true, sort: 50 },
+];
+
 /** An in-memory stand-in for the Supabase tables, with the same methods as the real sink. */
 function fakeSupabase() {
-  const db = { reports: new Map(), rewards: [], chests: new Map(), deletions: [], erased: [] };
+  const db = { reports: new Map(), rewards: [], chests: new Map(), deletions: [], erased: [], challenges: SEED_CHALLENGES.map((c) => ({ ...c })), activity: [], cellRewards: [] };
   const failures = { insertRewards: 0 };
   const sink = {
-    async listNewReports(limit = 100) { return [...db.reports.values()].filter((r) => r.status === 'new').sort((a, b) => a.received_at.localeCompare(b.received_at)).slice(0, limit); },
+    async listNewReports(limit = 100) { return [...db.reports.values()].filter((r) => r.status === 'new' && r.type !== 'challenge-claim').sort((a, b) => a.received_at.localeCompare(b.received_at)).slice(0, limit); },
     async setOnchain(hash, patch) { Object.assign(db.reports.get(hash), patch); },
     async finishReport(hash, status, reasons) { Object.assign(db.reports.get(hash), { status, reasons: reasons && reasons.length ? reasons : null }); },
     async getReport(hash) { return db.reports.get(hash) || null; },
@@ -25,6 +35,13 @@ function fakeSupabase() {
     async updateChest(id, patch) { Object.assign(db.chests.get(id), patch); },
     async listDeletionRequests() { return db.deletions.filter((d) => d.status === 'new'); },
     async finishDeletion(id, status, note) { Object.assign(db.deletions.find((d) => d.id === id), { status, note }); },
+    async listChallenges() { return db.challenges; },
+    async listNewClaims(limit = 50) { return [...db.reports.values()].filter((r) => r.status === 'new' && r.type === 'challenge-claim').sort((a, b) => a.received_at.localeCompare(b.received_at)).slice(0, limit); },
+    async findVerifiedClaim(node, id, period) {
+      return [...db.reports.values()].find((r) => r.type === 'challenge-claim' && r.status === 'verified' && r.node === node && r.body && r.body.report && r.body.report.challengeId === id && r.body.report.period === period) || null;
+    },
+    async listVerifiedActivity(node, from, to) { return db.activity.filter((a) => a.node === node && a.atMs >= Date.parse(from) && a.atMs < Date.parse(to)); },
+    async listNewCellRewards(node, from, to) { return db.cellRewards.filter((a) => a.node === node && a.atMs >= Date.parse(from) && a.atMs < Date.parse(to)); },
     async eraseNode(node) { db.erased.push(node); for (const r of db.reports.values()) if (r.node === node) r.body = { deleted: true }; },
   };
   const insertReport = (env, receivedMs, over = {}) =>
@@ -439,4 +456,120 @@ test('a type column that differs from the signed report is blocked and rejected'
   assert.equal(run.rejected, 1);
   assert.match(fake.db.reports.get(env.hash).reasons.join(), /type column/);
   assert.equal(chain.calls.length, 0);
+});
+
+function claimRow(node, over = {}, receivedMs = NOW) {
+  const report = { version: 1, type: 'challenge-claim', node: node.address, challengeId: 'scan-30', period: '2026-10-02', claimedMs: receivedMs, ...over };
+  const canonical = canonicalize(report);
+  const env = { report, signature: node.signMessage(`azimuth-report-v1\n${canonical}`), hash: crypto.createHash('sha256').update(canonical, 'utf8').digest('hex') };
+  return { hash: env.hash, node: node.address, type: 'challenge-claim', received_at: new Date(receivedMs).toISOString(), body: env, status: 'new' };
+}
+
+test('a met daily challenge is verified and paid on-chain with the derived hash and kind 3', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  fake.db.activity.push({ node: node.address, atMs: NOW - 3600_000, type: 'mapping-session', seconds: '2400' }); // 40 min
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'verified');
+  const { onchainHash } = require('../lib/challenges');
+  assert.deepEqual(chain.calls, [{ wallet: node.address, hash: onchainHash('scan-30', '2026-10-02'), kind: 3, amount: 5 }]);
+  const saved = fake.db.reports.get(row.hash);
+  assert.equal(saved.status, 'verified');
+  assert.equal(saved.onchain_amount, 5);
+  assert.equal(saved.onchain_tx, 'SIG');
+});
+
+test('an unmet challenge is rejected with the real numbers and pays nothing', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  fake.db.activity.push({ node: node.address, atMs: NOW - 3600_000, type: 'mapping-session', seconds: '1380' }); // 23 min
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'rejected');
+  assert.match(out[0].reasons[0], /23 of 30/);
+  assert.equal(chain.calls.length, 0);
+  assert.equal(fake.db.reports.get(row.hash).status, 'rejected');
+});
+
+test('new-cell challenges count the wallet\'s paid new-cell rewards', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  fake.db.cellRewards.push({ node: node.address, atMs: NOW - 1000, amount_usdc: 0.020 });
+  const row = claimRow(node, { challengeId: 'cells-20' }); fake.db.reports.set(row.hash, row);
+  assert.equal((await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW }))[0].status, 'verified');
+});
+
+test('stale, future, unknown and malformed claims are rejected without paying', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  const rows = [
+    claimRow(node, { period: '2026-09-20' }, NOW),      // too old
+    claimRow(node, { period: '2026-10-05' }, NOW + 1),  // future
+    claimRow(node, { challengeId: 'does-not-exist' }, NOW + 2),
+    { ...claimRow(node, {}, NOW + 3), node: 'SomeoneElse1111111111111111111111111111111' }, // wallet column differs from the signed body
+  ];
+  for (const r of rows) fake.db.reports.set(r.hash, r);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW + 10 });
+  assert.deepEqual(out.map((o) => o.status), ['rejected', 'rejected', 'rejected', 'rejected']);
+  assert.equal(chain.calls.length, 0);
+});
+
+test('a second claim for the same challenge and period is rejected even with a different hash', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  fake.db.activity.push({ node: node.address, atMs: NOW - 3600_000, type: 'mapping-session', seconds: '2400' });
+  const first = claimRow(node, {}, NOW); const second = claimRow(node, {}, NOW + 5);
+  fake.db.reports.set(first.hash, first); fake.db.reports.set(second.hash, second);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW + 10 });
+  assert.deepEqual(out.map((o) => o.status), ['verified', 'rejected']);
+  assert.match(out[1].reasons[0], /already claimed/);
+  assert.equal(chain.calls.length, 1);
+});
+
+test('a chain failure keeps the claim verified and unpaid; retry pays with the derived hash', async () => {
+  const fake = fakeSupabase();
+  const node = newNode();
+  fake.db.activity.push({ node: node.address, atMs: NOW - 3600_000, type: 'mapping-session', seconds: '2400' });
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain: fakeChain({ fail: 'Rewards are paused' }) }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'verified');
+  assert.equal(out[0].onchain.ok, false);
+  assert.equal(fake.db.reports.get(row.hash).onchain_error, 'Rewards are paused');
+  const good = fakeChain();
+  const retried = await reviewer(fake, { chain: good }).retryOnChain(row.hash);
+  assert.equal(retried.status, 'paid');
+  const { onchainHash } = require('../lib/challenges');
+  assert.deepEqual(good.calls[0], { wallet: node.address, hash: onchainHash('scan-30', '2026-10-02'), kind: 3, amount: 5 });
+});
+
+test('without a chain nothing is settled and claims stay new', async () => {
+  const fake = fakeSupabase();
+  const node = newNode();
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  assert.deepEqual(await reviewer(fake).settleChallenges({ nowMs: NOW }), []);
+  assert.equal(fake.db.reports.get(row.hash).status, 'new');
+});
+
+test('claims never reach manual review or auto-approval', async () => {
+  const fake = fakeSupabase();
+  const node = newNode();
+  const row = claimRow(node); fake.db.reports.set(row.hash, row);
+  const out = await reviewer(fake, { chain: fakeChain() }).run({ auto: true });
+  assert.equal(out.results.length, 0);
+  assert.equal(fake.db.reports.get(row.hash).status, 'new');
+});
+
+test('a claim whose challenge is removed or has no reward is rejected as unknown and pays nothing', async () => {
+  for (const mutate of [(db) => { db.challenges.length = 0; }, (db) => { db.challenges.find((c) => c.id === 'scan-30').reward = 0; }]) {
+    const fake = fakeSupabase(); const chain = fakeChain();
+    const node = newNode();
+    fake.db.activity.push({ node: node.address, atMs: NOW - 3600_000, type: 'mapping-session', seconds: '2400' });
+    mutate(fake.db);
+    const row = claimRow(node); fake.db.reports.set(row.hash, row);
+    const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+    assert.equal(out[0].status, 'rejected');
+    assert.match(out[0].reasons[0], /unknown challenge/);
+    assert.equal(chain.calls.length, 0);
+  }
 });

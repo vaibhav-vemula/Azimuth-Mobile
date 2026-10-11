@@ -2,7 +2,8 @@
 const { openStore } = require('./store');
 const { createService } = require('./service');
 const { azmAmount, kindFor } = require('./azmRewards');
-const { verifyEnvelope } = require('./verify-report.cjs');
+const { verifyEnvelope, verifyClaim } = require('./verify-report.cjs');
+const { createChallengeSource, isClaimablePeriod, periodWindow, onchainHash, progressFor } = require('./challenges');
 
 const DAY = 24 * 3600_000;
 /** A deletion request stays valid this long, because review runs in batches rather than instantly. */
@@ -22,7 +23,7 @@ const DELETION_MAX_AGE_MS = 7 * DAY;
  * Each report is judged as of the time it was received, so review delays never turn a good report into an expired
  * one. Local state (known cells, chest claims) lives in a SQLite file that must be kept between runs.
  */
-function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor, config, chain = null, azmEnv = process.env, log = () => undefined }) {
+function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor, config, chain = null, challenges = createChallengeSource({ sink }), azmEnv = process.env, log = () => undefined }) {
   const clock = { t: Date.now() };
   const service = createService(store, { now: () => clock.t, checkNode, tleFor, config });
 
@@ -60,10 +61,10 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
   }
 
   /** Sends the AZMTest payout for a verified report and records the outcome. Never throws. */
-  async function payOnChain(hash, node, type, amount) {
+  async function payOnChain(hash, node, type, amount, chainHash = hash) {
     let out;
     try {
-      out = await chain.reward({ wallet: node, hash, kind: kindFor(type), amount });
+      out = await chain.reward({ wallet: node, hash: chainHash, kind: kindFor(type), amount });
     } catch (e) {
       const error = String((e && e.message) || e).slice(0, 300);
       await sink.setOnchain(hash, { onchain_error: error }).catch(() => undefined);
@@ -86,7 +87,9 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     if (r.onchain_tx) return { hash, status: 'already-paid' };
     const amount = Number(r.onchain_amount) || 0;
     if (kindFor(r.type) === null || amount <= 0) return { hash, status: 'nothing-to-pay' };
-    const onchain = await payOnChain(hash, r.node, r.type, amount);
+    const rep = r.body && r.body.report;
+    const chainHash = r.type === 'challenge-claim' && rep ? onchainHash(String(rep.challengeId), String(rep.period)) : hash;
+    const onchain = await payOnChain(hash, r.node, r.type, amount, chainHash);
     return { hash, status: onchain.ok ? 'paid' : 'failed', onchain };
   }
 
@@ -136,6 +139,49 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     return { hash, status: 'verified', rewards: rows, onchain };
   }
 
+  /** Settles one stored claim. Returns the outcome; never throws for a bad claim, only for storage failures. */
+  async function settleClaim(r, nowMs) {
+    const reject = async (reasons) => { await sink.finishReport(r.hash, 'rejected', reasons); return { hash: r.hash, status: 'rejected', reasons }; };
+    const checked = verifyClaim(r.body);
+    if (!checked.valid) return reject(checked.problems);
+    const c = r.body.report;
+    if (checked.hash !== r.hash) return reject(['the report hash column does not match the signed claim']);
+    if (c.node !== r.node) return reject(['the wallet column does not match the signed claim']);
+    if (r.type !== 'challenge-claim') return reject(['the type column does not match the signed claim']);
+    const def = await challenges.get(c.challengeId);
+    if (!def) return reject(['unknown challenge']);
+    if (!isClaimablePeriod(def.period, c.period, nowMs)) return reject(['this period can no longer be claimed']);
+    if (await sink.findVerifiedClaim(r.node, def.id, c.period)) return reject(['already claimed for this period']);
+
+    const { fromMs, toMs } = periodWindow(def.period, c.period, nowMs);
+    const [reports, rewards] = await Promise.all([
+      sink.listVerifiedActivity(r.node, new Date(fromMs).toISOString(), new Date(toMs).toISOString()),
+      sink.listNewCellRewards(r.node, new Date(fromMs).toISOString(), new Date(toMs).toISOString()),
+    ]);
+    const progress = progressFor(def.metric, { reports, rewards }, service.config.newCellUsdc);
+    if (progress < def.goal) return reject([`${progress} of ${def.goal} verified so far. Reports are counted once they have been checked.`]);
+
+    await sink.finishReport(r.hash, 'verified', null);
+    let onchain;
+    try {
+      await sink.setOnchain(r.hash, { onchain_amount: def.reward });
+      onchain = await payOnChain(r.hash, r.node, 'challenge-claim', def.reward, onchainHash(def.id, c.period));
+    } catch (e) {
+      onchain = { ok: false, amount: def.reward, error: `Could not save the payout amount (nothing was sent): ${String((e && e.message) || e).slice(0, 250)}` };
+    }
+    return { hash: r.hash, status: 'verified', onchain };
+  }
+
+  /** Settles every new challenge claim. Does nothing unless on-chain payouts are configured. */
+  async function settleChallenges({ nowMs = Date.now(), limit = 50 } = {}) {
+    if (!chain) return [];
+    const out = [];
+    for (const r of await sink.listNewClaims(limit)) {
+      try { out.push(await settleClaim(r, nowMs)); } catch (e) { out.push({ hash: r.hash, status: 'skipped', reasons: [String((e && e.message) || e)] }); }
+    }
+    return out;
+  }
+
   async function processDeletions() {
     const done = [];
     for (const d of await sink.listDeletionRequests()) {
@@ -179,7 +225,7 @@ function createReviewer({ sink, store = openStore(':memory:'), checkNode, tleFor
     };
   }
 
-  return { run, preview, approve, reject, retryOnChain, syncChests, processDeletions, service, store };
+  return { run, preview, approve, reject, retryOnChain, settleChallenges, syncChests, processDeletions, service, store };
 }
 
 module.exports = { createReviewer, DELETION_MAX_AGE_MS };
