@@ -18,6 +18,8 @@
     "admin": "node --env-file=.env admin/index.js"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.99.0",
     "leaflet": "^1.9.4",
     "satellite.js": "^7.1.0"
   }
