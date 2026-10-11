@@ -27,3 +27,6 @@ server/.env
 *.db
 *.db-shm
 *.db-wal
+
+# Agent worktrees
+.claude/worktrees/

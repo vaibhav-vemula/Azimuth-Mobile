@@ -1,5 +1,6 @@
 import { BackupCard } from './BackupCard';
 import { TestChestCard } from './TestChestCard';
+import { ArSpikeCard } from './ArSpikeCard';
 import { useUnits } from '../../units/units';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
@@ -246,6 +247,7 @@ export default function SettingsScreen() {
       </GlassCard>
 
       <TestChestCard />
+      <ArSpikeCard />
 
       <GlassCard style={{ gap: 10 }}>
         <SectionLabel>Storage</SectionLabel>

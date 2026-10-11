@@ -3,6 +3,8 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+if (!config.resolver.assetExts.includes('glb')) config.resolver.assetExts.push('glb');
+
 const emptyModule = path.resolve(__dirname, 'src/vendor/emptyModule.js');
 const upstreamResolve = config.resolver.resolveRequest;
 
