@@ -1,6 +1,8 @@
 # Ground-anchored AR chest (ViroReact / ARCore) — design
 
-Status: draft for review. Piece 3 of three (1: AZMTest registry, built; 2: Challenges, built). Android only (Seeker). Needs a native rebuild and a real-device test.
+Status: SUPERSEDED (2026-10-11). The Seeker reports "Google Play Services for AR is not supported for this device", so ARCore/ViroReact cannot run on the only target device. Viro was removed; the sensor-based `ChestARView` stays as the AR view. Kept for reference if an ARCore device is ever targeted.
+
+Original status: draft for review. Piece 3 of three (1: AZMTest registry, built; 2: Challenges, built). Android only (Seeker). Needs a native rebuild and a real-device test.
 
 ## Goal
 

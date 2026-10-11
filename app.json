@@ -57,13 +57,6 @@
       "./plugins/withAzimuthBackup",
       "expo-audio",
       "./plugins/withCleartextAudio",
-      [
-        "@reactvision/react-viro",
-        {
-          "provider": "none",
-          "android": { "xRMode": ["AR"] }
-        }
-      ],
       "./plugins/withArm64Only"
     ],
     "extra": {
