@@ -1,13 +1,84 @@
-# Azimuth
+<p align="center">
+  <img src="docs/images/azimuth-logo.svg" alt="Azimuth" width="120">
+</p>
 
-An Android app for the **RTL-SDR Blog V4** (and other RTL2832U dongles) that does two things well:
+<h1 align="center">Azimuth</h1>
 
-- **Radio:** a live spectrum analyzer and wideband FM receiver.
-- **Satellites:** predicts the next **Meteor-M2 3 / M2-4** weather-satellite passes over your location, shows each pass N2YO-style (ground track on a map plus a sky plot), and **records the pass** to a file you can turn into a weather image with SatDump.
+<p align="center"><b>Map the world. Get paid for it.</b><br>A decentralized satellite ground station and coverage network that lives in a Solana Seeker phone.</p>
 
-Beyond the original two features, Azimuth is being built into a network for **Solana Seeker** phones: you map cellular, Wi-Fi, Bluetooth and (with a dongle) radio signals as you move, uncover a fog-of-war map, and take paid measurement requests called chests. Reports are signed by your wallet and checked by a verifier; rewards come from requester-funded escrow. Mapping, the fog map and the original Radio and Satellites features all work offline and without a wallet.
+<p align="center">
+  <a href="https://www.loom.com/share/52b807d557944b8da304b7e39e465274">Demo video</a> ·
+  <a href="https://drive.google.com/file/d/1Hbc5a72XcJw3o8reSlotrZtVxCtY8oS_/view?usp=sharing">Pitch slides</a> ·
+  <a href="#live-contracts-solana-devnet">Live contracts</a> ·
+  <a href="#how-reports-are-verified">How reports are verified</a>
+</p>
 
-The network parts are described in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) (what exists, how to run it, what is and is not verified) and [docs/DEPIN_DESIGN.md](docs/DEPIN_DESIGN.md) (the reasoning and plan). Orbital data comes from CelesTrak and SatNOGS.
+## About
+
+Azimuth turns a phone into a sensor, a wallet and, with a small radio dongle, a satellite ground station.
+
+- **Map signal coverage.** Turn on mapping and walk. The app records cellular, Wi-Fi, Bluetooth and (with a dongle) radio signal strength, and clears a fog-of-war map as you cover new ground. Dead spots show up on the map.
+- **Get paid in AZM.** You sign each session with your Seeker's Seed Vault. A verifier checks it, and approved work is paid in the **AZM** token on Solana. Quests, bounty chests and treasure chests add more rewards.
+- **Receive satellites.** With an RTL-SDR dongle the app predicts Meteor-M weather-satellite passes, tracks radiosondes, plays FM radio and records satellite passes you can turn into weather images.
+
+Why a phone: coverage data is gathered by a few companies, locked behind them and paid to almost nobody. A ground station costs on the order of $100K to build, which keeps small teams and communities out. Azimuth spreads that work across many cheap receivers and pays the people who do it. The phone is the sensor and the wallet; the Seeker's Seed Vault and `.skr` name give each contributor a real identity.
+
+Azimuth grew out of an earlier Azimuth satellite ground station project. This repository is the mobile app, its verification server and the on-chain reward program.
+
+### Screens
+
+| Tab | What it does |
+|-----|--------------|
+| **Explore** (home) | A street map covered in fog, with Cellular, Wi-Fi, Bluetooth, Radio and Sondes layers. Turn on mapping and walk: the fog clears where you go. Open chests appear on the map; the nearest one shows as an arrow and distance, and close up you can find it in **AR** and open it. Swipe up the sheet for live stats and to sign and submit a session. |
+| **Quests** | Daily and weekly goals that pay AZM when claimed. |
+| **Satellites** | Next Meteor-M passes (peak elevation, direction, quality, countdown), reminders, per-pass ground track and sky view, and a **Capture** button. A second tab tracks radiosondes. |
+| **Radio** | Connect the dongle, tune 0.5 MHz to 1.766 GHz, live spectrum and FM audio. An Online mode works without a dongle. |
+| **Profile** | Wallet, Seeker check, AZM balance and earnings, privacy and data deletion, plus Recordings and Settings. |
+
+## Hardware setup
+
+A Seeker phone, an OTG adapter and an RTL-SDR Blog V4 with a telescopic antenna. The Radio tab shows the live spectrum from the dongle.
+
+<p align="center"><img src="docs/images/setup-rtl-sdr-seeker.jpg" alt="RTL-SDR Blog V4 plugged into a phone running Azimuth" width="560"></p>
+
+## Live contracts (Solana devnet)
+
+| What | Address |
+|------|---------|
+| Registry program (`azimuth_registry`) | [`AJtmjGMQPjPUF5zscYXdMqvMXgRYZHeWHgNijAEae9Zh`](https://explorer.solana.com/address/AJtmjGMQPjPUF5zscYXdMqvMXgRYZHeWHgNijAEae9Zh?cluster=devnet) |
+| AZM token mint (0 decimals) | [`J2GWTK6eYacXU45DJzsCYrVotftyaG5F6fo1z9AyJg9H`](https://explorer.solana.com/address/J2GWTK6eYacXU45DJzsCYrVotftyaG5F6fo1z9AyJg9H?cluster=devnet) |
+| Program config | [`8tGhCf8RbNvgwzVxtf196juTSfyu9uHSDTMhqTWXyKrV`](https://explorer.solana.com/address/8tGhCf8RbNvgwzVxtf196juTSfyu9uHSDTMhqTWXyKrV?cluster=devnet) |
+| Reward vault | [`5WWETEbsUHTne8FTJsSxAYQgr8aZFQdrcyhX2XCWJ5Rf`](https://explorer.solana.com/address/5WWETEbsUHTne8FTJsSxAYQgr8aZFQdrcyhX2XCWJ5Rf?cluster=devnet) |
+| Authority (the only signer that can pay) | [`qq45wBYoZwKfQ7kkidp6CGAuK4A17SFkvQCzcg9YWBC`](https://explorer.solana.com/address/qq45wBYoZwKfQ7kkidp6CGAuK4A17SFkvQCzcg9YWBC?cluster=devnet) |
+
+These are **devnet** addresses; AZM has no real-world value yet. The same values are in `onchain/devnet.json`. The program source is in `onchain/programs/azimuth_registry`.
+
+## How reports are verified
+
+Nobody has to be trusted to be honest. A report earns AZM only after several independent checks, and the weakest links are listed below.
+
+**What a report is.** A mapping session, chest claim or satellite pass is turned into canonical JSON, hashed with SHA-256, and signed with the contributor's wallet key through Seed Vault. The signing key never leaves the phone.
+
+**What is checked, in order**
+
+1. **Signature and hash.** The server recomputes the hash and checks the ed25519 signature against the wallet address in the report. A second verifier (`server/lib/verify-report.cjs`) shares no code with the app, so anyone can check a report independently: `node server/lib/verify-report.cjs report.json`.
+2. **Identity.** The wallet can be required to hold a **Seeker Genesis Token**, with each token allowed to serve only one wallet, to limit one person running many accounts. This gate is switched on with `REQUIRE_SEEKER=1` on the server; it is **off by default** during the hackathon so the app can be tried on any wallet.
+3. **Location and motion (GPS).** On the phone, fixes are dropped if there is no fix, the fix is stale or inaccurate, Android flags it as a mock location, or the speed is not plausible. The session records how many mocked fixes it saw, and the server rejects any session that saw one, or one that peaked above 70 m/s, lasted under 30 seconds, or claims more readings than its length allows.
+4. **Sensor-log plausibility.** Readings are kept in 15-minute buckets per map cell. The server rejects signal levels that are not physical (for example cellular outside -140 to -30 dBm), min/mean/max values that contradict each other, more Wi-Fi or Bluetooth readings than samples, duplicate cell-and-time entries, reports older than 72 hours or from the future, and sonde or radio levels outside what the hardware can produce.
+5. **Satellite passes.** The pass window, frequency band (137 MHz), recording size and sample count must agree, and the claimed peak elevation must match what the satellite's orbital data predicts for that place and time (within 12 degrees).
+6. **Chest claims.** The report must contain enough of the right kind of readings in the chest's cell or the cells next to it, taken after the chest was created, and a chest can only be filled up to its limit.
+7. **Admin review.** Mapping, satellite and chest reports wait in a review queue. A person approves or rejects each one in the admin portal. A report that fails the automatic checks cannot be approved. Challenge claims are settled automatically, but only after the same checks, and only against work the server already counts.
+
+**What stops replay and fake reports**
+
+- **Same report twice.** The report hash is unique. A repeat is refused by the server, and on chain the payout record is created at an address derived from the wallet and the report hash, so a second payout for the same report fails.
+- **Same quest twice.** A challenge can be claimed once per wallet per period (daily or weekly). The on-chain hash is derived from the challenge and the period.
+- **Walking the same ground again.** A map cell pays only the first time anyone reports it, and each wallet has a daily cap on paid new cells. For quests, only the best of several overlapping reports counts.
+- **Old or future reports.** Reports must be recent and not dated in the future.
+- **Floods.** There is a limit on reports per wallet per hour.
+- **Overpaying.** The on-chain program rejects any single payout above its cap (100 AZM), a payout of zero, an unknown reward type, and any payout while rewards are paused. Only the authority key can pay, and rewards come only from the fixed reward vault.
+
+**What is not proven.** The server cannot prove that a radio, Wi-Fi or cellular reading is real. The checks make cheap fabrication fail and make consistent fabrication costly, and the admin review is the backstop. A determined attacker with a rooted device could still feed fake GPS that Android does not flag. Devices are not attested, and the Seeker gate is optional. These are the next hardening steps, together with moving payouts to mainnet.
 
 ## Status
 
