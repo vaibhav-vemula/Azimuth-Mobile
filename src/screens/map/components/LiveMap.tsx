@@ -85,8 +85,15 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
 
   // Rebuilding the fog shape is the heaviest thing here; while you walk it only needs to keep up a couple of times a second.
   const shownExplored = useThrottled(explored, 800);
-  const fog = useMemo(() => fogFeature(shownExplored), [shownExplored]);
-  const edge = useMemo(() => clearedBoundary(shownExplored), [shownExplored]);
+  const latestFog = useMemo(() => fogFeature(shownExplored), [shownExplored]);
+  const latestEdge = useMemo(() => clearedBoundary(shownExplored), [shownExplored]);
+  // While the map is being pinched or flown, keep handing the sources the same objects. Sending new data makes the map
+  // rebuild every fog tile, and during a zoom those rebuilds leave the fog missing until they finish.
+  const [moving, setMoving] = useState(false);
+  const held = useRef({ fog: latestFog, edge: latestEdge });
+  if (!moving) held.current = { fog: latestFog, edge: latestEdge };
+  const fog = held.current.fog;
+  const edge = held.current.edge;
   const vision = useMemo<GeoJSON.Feature<GeoJSON.LineString> | null>(
     () => (position ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: circleRing(position, VISION_RADIUS_M) } } : null),
     [position]
@@ -157,8 +164,12 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
           setMapReady(false);
           onLoadState('failed');
         }}
-        onRegionIsChanging={(e) => useHeadingStore.getState().setMapBearing(e.nativeEvent.bearing)}
+        onRegionIsChanging={(e) => {
+          useHeadingStore.getState().setMapBearing(e.nativeEvent.bearing);
+          setMoving(true);
+        }}
         onRegionDidChange={(e) => {
+          setMoving(false);
           useHeadingStore.getState().setMapBearing(e.nativeEvent.bearing);
           if (e.nativeEvent.userInteraction) onFollowingChange(false);
         }}
