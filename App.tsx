@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DialogHost } from './src/components/dialog';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useCapture } from './src/capture/useCapture';
 import { useReceiver } from './src/receiver/useReceiver';
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       {!splashDone ? <SplashScreen onDone={onSplashDone} /> : showConnect ? <ConnectScreen /> : <RootNavigator />}
+      <DialogHost />
       <StatusBar style="light" />
     </SafeAreaProvider>
   );

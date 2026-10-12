@@ -1,6 +1,7 @@
 import { longDistanceParts, useUnitSystem } from '../../units/units';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { appAlert } from '../../components/dialog';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { useNavigation } from '@react-navigation/native';
@@ -115,7 +116,7 @@ export default function CaptureScreen() {
   }, [options]);
 
   const confirmStop = useCallback(() => {
-    Alert.alert('Stop recording?', 'The pass is still in progress. The part recorded so far will be saved.', [
+    appAlert('Stop recording?', 'The pass is still in progress. The part recorded so far will be saved.', [
       { text: 'Keep recording', style: 'cancel' },
       { text: 'Stop and save', style: 'destructive', onPress: () => void useCapture.getState().stop('user') },
     ]);
@@ -141,7 +142,7 @@ export default function CaptureScreen() {
     setExporting(true);
     try {
       const path = await exportRecording(result.name);
-      Alert.alert('Exported', `Saved to ${path}\n\nOpen the Files app, or connect the phone to a computer, and look in Downloads/Azimuth.`);
+      appAlert('Exported', `Saved to ${path}\n\nOpen the Files app, or connect the phone to a computer, and look in Downloads/Azimuth.`);
     } catch (e) {
       setActionError(errorMessage(e));
     } finally {

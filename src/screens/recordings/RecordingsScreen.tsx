@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { appAlert } from '../../components/dialog';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { useFocusEffect } from '@react-navigation/native';
@@ -46,7 +47,7 @@ export default function RecordingsScreen() {
         dialogTitle: 'Share baseband recording',
       });
     } catch (e) {
-      Alert.alert('Could not share', `${e instanceof Error ? e.message : String(e)}\n\nTry Export instead.`);
+      appAlert('Could not share', `${e instanceof Error ? e.message : String(e)}\n\nTry Export instead.`);
     } finally {
       setBusyName(null);
     }
@@ -56,9 +57,9 @@ export default function RecordingsScreen() {
     setBusyName(recording.name);
     try {
       const path = await exportRecording(recording.name);
-      Alert.alert('Exported', `Saved to ${path}\n\nLook in Downloads/Azimuth in the Files app, or from a computer.`);
+      appAlert('Exported', `Saved to ${path}\n\nLook in Downloads/Azimuth in the Files app, or from a computer.`);
     } catch (e) {
-      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+      appAlert('Export failed', e instanceof Error ? e.message : String(e));
     } finally {
       setBusyName(null);
     }
@@ -66,7 +67,7 @@ export default function RecordingsScreen() {
 
   const remove = useCallback(
     (recording: RecordingInfo) => {
-      Alert.alert('Delete recording?', `${recording.name} (${formatBytes(recording.dataBytes)}) will be removed from this phone.`, [
+      appAlert('Delete recording?', `${recording.name} (${formatBytes(recording.dataBytes)}) will be removed from this phone.`, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -77,7 +78,7 @@ export default function RecordingsScreen() {
               await deleteRecording(recording.name);
               await load();
             } catch (e) {
-              Alert.alert('Delete failed', e instanceof Error ? e.message : String(e));
+              appAlert('Delete failed', e instanceof Error ? e.message : String(e));
             } finally {
               setBusyName(null);
             }

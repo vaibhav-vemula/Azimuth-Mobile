@@ -1,6 +1,7 @@
 import { StoreBubble } from '../../store/StoreBubble';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { appAlert } from '../../components/dialog';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -105,18 +106,18 @@ export default function PassesScreen() {
         } else {
           const store = useAppStore.getState();
           if (!store.settings.notificationsEnabled) {
-            Alert.alert('Reminders are off', 'Turn on pass reminders in Settings first.');
+            appAlert('Reminders are off', 'Turn on pass reminders in Settings first.');
             return;
           }
           if (!(await store.requestNotificationPermission())) {
-            Alert.alert('Notifications blocked', 'Allow notifications for Azimuth in system settings to get pass reminders.');
+            appAlert('Notifications blocked', 'Allow notifications for Azimuth in system settings to get pass reminders.');
             return;
           }
           const scheduled = await Reminders.schedule(pass.id, pass, name, store.settings.reminderMinutes);
-          if (!scheduled) Alert.alert('Pass already started', 'This pass has already begun.');
+          if (!scheduled) appAlert('Pass already started', 'This pass has already begun.');
         }
       } catch (e) {
-        Alert.alert('Reminder failed', e instanceof Error ? e.message : 'Unknown error');
+        appAlert('Reminder failed', e instanceof Error ? e.message : 'Unknown error');
       }
       setReminderTick((n) => n + 1);
     },

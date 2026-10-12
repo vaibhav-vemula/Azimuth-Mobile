@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { appAlert } from '../../components/dialog';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -151,7 +152,7 @@ export default function MapScreen() {
   const onToggle = useCallback(async () => {
     if (running) {
       const report = await stop(address);
-      if (!report && address) Alert.alert('Nothing recorded', 'No usable readings were collected this time.');
+      if (!report && address) appAlert('Nothing recorded', 'No usable readings were collected this time.');
       else if (report) setSheetOpen(true);
     } else {
       setSheetSeen(false);

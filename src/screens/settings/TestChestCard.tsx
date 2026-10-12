@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import * as Location from 'expo-location';
-import { GlassCard } from '../../components/GlassCard';
-import { Button, SectionLabel } from '../../components/ui';
+import { Button } from '../../components/ui';
+import { Row, Section } from './SettingsParts';
 import { colors, typography } from '../../theme';
 import { useChests } from '../../network/useChests';
 import { useHeadingStore } from '../../mapping/headingStore';
@@ -32,15 +32,16 @@ export function TestChestCard() {
   };
 
   return (
-    <GlassCard style={{ gap: 10 }}>
-      <SectionLabel>Test chest</SectionLabel>
-      <Text style={styles.hint}>
-        Puts a chest right where you are standing, to try opening it in AR. It exists only on this phone, needs one reading and no wallet, and opening it sends nothing and pays nothing.
-      </Text>
-      <Button label={busy ? 'Finding you…' : 'Drop a test chest here'} icon="cube-outline" loading={busy} disabled={busy} onPress={() => void drop()} />
-      {hasTest ? <Button label="Remove test chests" variant="secondary" onPress={clearTestChests} /> : null}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-    </GlassCard>
+    <Section icon="cube-outline" title="Test chest" subtitle="Try opening a chest in AR anywhere" tone="warning">
+      <Row first>
+        <Text style={styles.hint}>
+          Puts a chest right where you are standing, to try opening it in AR. It exists only on this phone, needs one reading and no wallet, and opening it sends nothing and pays nothing.
+        </Text>
+        <Button label={busy ? 'Finding you…' : 'Drop a test chest here'} icon="cube-outline" loading={busy} disabled={busy} onPress={() => void drop()} />
+        {hasTest ? <Button label="Remove test chests" variant="secondary" onPress={clearTestChests} /> : null}
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+      </Row>
+    </Section>
   );
 }
 

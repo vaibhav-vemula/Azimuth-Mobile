@@ -2,12 +2,14 @@ import { BackupCard } from './BackupCard';
 import { TestChestCard } from './TestChestCard';
 import { useUnits } from '../../units/units';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { appAlert } from '../../components/dialog';
 import Constants from 'expo-constants';
-import { GlassCard } from '../../components/GlassCard';
+import { AzimuthMark } from '../../components/Logo';
 import { ManualLocationPrompt } from '../../components/ManualLocationPrompt';
 import { Screen } from '../../components/Screen';
-import { Badge, Button, Chip, Row, SectionLabel } from '../../components/ui';
+import { Badge, Button } from '../../components/ui';
+import { Row, Section, Segmented, StepperPill, ToggleRow } from './SettingsParts';
 import { RECORDING_FORMATS, RecordingFormat } from '../../capture/sigmf';
 import { getFreeStorageBytes } from '../../../modules/rtl-sdr';
 import { MONITORED_SATELLITES } from '../../data/satellites';
@@ -55,240 +57,200 @@ export default function SettingsScreen() {
 
   return (
     <Screen topInset={false}>
-      <View>
-        <Text style={styles.subtitle}>Location, predictions and storage</Text>
+      <View style={styles.hero}>
+        <AzimuthMark size={56} tile />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heroTitle}>Azimuth</Text>
+          <Text style={styles.heroSub}>Version {Constants.expoConfig?.version ?? ''}</Text>
+        </View>
+        <Badge label="Devnet" color={colors.warning} />
       </View>
 
       <BackupCard />
 
-      <GlassCard style={{ gap: 12 }}>
-        <SectionLabel>Units</SectionLabel>
-        <Text style={styles.subtitle}>
-          Distances on the map, in chests and in session stats. Automatic follows the country you are in: miles and feet in the US and Canada, kilometres and metres elsewhere. Until your location is known it goes by your phone's region setting.
-        </Text>
-        <Row style={{ flexWrap: 'wrap' }}>
-          <Chip label="Automatic" selected={unitPreference === 'auto'} onPress={() => setUnitPreference('auto')} />
-          <Chip label="Miles & feet" selected={unitPreference === 'imperial'} onPress={() => setUnitPreference('imperial')} />
-          <Chip label="Kilometres & metres" selected={unitPreference === 'metric'} onPress={() => setUnitPreference('metric')} />
-        </Row>
-      </GlassCard>
-
-      <GlassCard style={{ gap: 12 }}>
-        <SectionLabel>Unmapped ground</SectionLabel>
-        <Text style={styles.subtitle}>How the map looks where you have not been yet.</Text>
-        <Row style={{ flexWrap: 'wrap' }}>
-          <Chip label="Night sky" selected={fogStyle === 'sky'} onPress={() => setFogStyle('sky')} />
-          <Chip label="Terrain lines" selected={fogStyle === 'terrain'} onPress={() => setFogStyle('terrain')} />
-        </Row>
-      </GlassCard>
-
-      <GlassCard style={{ gap: 12 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <SectionLabel>Your location</SectionLabel>
-          <Badge label={locationLabel} color={locationStatus === 'denied' ? colors.danger : colors.accent} />
-        </Row>
-        <Text style={styles.value}>
-          {location ? `${location.latitudeDeg.toFixed(4)}°, ${location.longitudeDeg.toFixed(4)}°` : 'Not set'}
-        </Text>
-        <Row>
-          <Button
-            style={{ flex: 1 }}
-            compact
-            variant="secondary"
-            icon="locate"
-            label="Use GPS"
-            onPress={() => {
-              if (locationStatus === 'manual') useAppStore.setState({ locationStatus: 'loading' });
-              void useAppStore.getState().requestLocation();
-            }}
+      <Section icon="map-outline" title="Map" subtitle="Units and how unexplored ground looks">
+        <Row first label="Units" hint="Distances on the map, in chests and in session stats. Automatic follows the country you are in.">
+          <Segmented
+            value={unitPreference}
+            onChange={setUnitPreference}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'imperial', label: 'Miles' },
+              { value: 'metric', label: 'Km' },
+            ]}
           />
-          <Button style={{ flex: 1 }} compact variant="secondary" icon="pencil" label="Enter manually" onPress={() => setShowManual((v) => !v)} />
         </Row>
-        {showManual ? (
-          <ManualLocationPrompt
-            onSubmit={(lat, lon) => {
-              useAppStore.getState().setManualLocation(lat, lon);
-              setShowManual(false);
-            }}
+        <Row label="Unmapped ground" hint="How the map looks where you have not been yet.">
+          <Segmented
+            value={fogStyle}
+            onChange={setFogStyle}
+            options={[
+              { value: 'sky', label: 'Night sky' },
+              { value: 'terrain', label: 'Terrain lines' },
+            ]}
           />
-        ) : null}
-      </GlassCard>
+        </Row>
+      </Section>
 
-      <GlassCard style={{ gap: 14 }}>
-        <SectionLabel>Pass predictions</SectionLabel>
-        <Stepper
+      <Section icon="location-outline" title="Your location" subtitle="Used for pass predictions and the map" right={<Badge label={locationLabel} color={locationStatus === 'denied' ? colors.danger : colors.accent} />}>
+        <Row first label="Coordinates">
+          <Text style={styles.coords}>{location ? `${location.latitudeDeg.toFixed(4)}°, ${location.longitudeDeg.toFixed(4)}°` : 'Not set'}</Text>
+          <View style={styles.buttons}>
+            <Button
+              style={{ flex: 1 }}
+              compact
+              variant="secondary"
+              icon="locate"
+              label="Use GPS"
+              onPress={() => {
+                if (locationStatus === 'manual') useAppStore.setState({ locationStatus: 'loading' });
+                void useAppStore.getState().requestLocation();
+              }}
+            />
+            <Button style={{ flex: 1 }} compact variant="secondary" icon="pencil" label="Enter manually" onPress={() => setShowManual((v) => !v)} />
+          </View>
+          {showManual ? (
+            <ManualLocationPrompt
+              onSubmit={(lat, lon) => {
+                useAppStore.getState().setManualLocation(lat, lon);
+                setShowManual(false);
+              }}
+            />
+          ) : null}
+        </Row>
+      </Section>
+
+      <Section icon="planet-outline" title="Satellite passes" subtitle="Which passes to show and when to remind you">
+        <Row
+          first
           label="Minimum peak elevation"
           hint="Low passes are noisy and rarely decode. 15° or higher is a good start."
-          value={`${settings.minElevationDeg}°`}
-          onMinus={() => update({ minElevationDeg: step(MIN_ELEVATIONS, settings.minElevationDeg, -1) })}
-          onPlus={() => update({ minElevationDeg: step(MIN_ELEVATIONS, settings.minElevationDeg, 1) })}
+          right={
+            <StepperPill
+              value={`${settings.minElevationDeg}°`}
+              onMinus={() => update({ minElevationDeg: step(MIN_ELEVATIONS, settings.minElevationDeg, -1) })}
+              onPlus={() => update({ minElevationDeg: step(MIN_ELEVATIONS, settings.minElevationDeg, 1) })}
+            />
+          }
         />
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Pass reminders</Text>
-            <Text style={styles.hint}>Notify before a pass starts.</Text>
-          </View>
-          <Switch
-            value={settings.notificationsEnabled}
-            onValueChange={(enabled) => update({ notificationsEnabled: enabled })}
-            trackColor={{ true: colors.accentMuted, false: colors.surfaceBorder }}
-            thumbColor={settings.notificationsEnabled ? colors.accent : colors.textSecondary}
-          />
-        </Row>
+        <ToggleRow label="Pass reminders" hint="Notify before a pass starts." value={settings.notificationsEnabled} onChange={(enabled) => update({ notificationsEnabled: enabled })} />
         {settings.notificationsEnabled ? (
-          <Stepper
+          <Row
             label="Remind me"
-            value={`${settings.reminderMinutes} min before`}
-            onMinus={() => update({ reminderMinutes: step(REMINDER_MINUTES, settings.reminderMinutes, -1) })}
-            onPlus={() => update({ reminderMinutes: step(REMINDER_MINUTES, settings.reminderMinutes, 1) })}
+            right={
+              <StepperPill
+                value={`${settings.reminderMinutes} min`}
+                onMinus={() => update({ reminderMinutes: step(REMINDER_MINUTES, settings.reminderMinutes, -1) })}
+                onPlus={() => update({ reminderMinutes: step(REMINDER_MINUTES, settings.reminderMinutes, 1) })}
+              />
+            }
           />
         ) : null}
-      </GlassCard>
+      </Section>
 
-      <GlassCard style={{ gap: 12 }}>
-        <SectionLabel>Recording format</SectionLabel>
-        <Row>
-          {(Object.keys(RECORDING_FORMATS) as RecordingFormat[]).map((key) => (
-            <Chip
-              key={key}
-              label={`${RECORDING_FORMATS[key].label} · ${RECORDING_FORMATS[key].rateLabel}`}
-              selected={settings.recordingFormat === key}
-              onPress={() => update({ recordingFormat: key })}
-            />
-          ))}
-        </Row>
-        <Text style={styles.hint}>
-          {settings.recordingFormat === 'fullband'
-            ? 'Records the receiver\'s whole stream the way SatDump does: 2.3 MHz of spectrum with both Meteor downlinks, nothing filtered. About 4.6 MB per second, so roughly 2.8 GB for a 10 minute pass.'
-            : 'Records only a 0.29 MHz slice around the downlink, filtered and with DC removed. About 0.58 MB per second, roughly 350 MB for a 10 minute pass, but the other downlink is not in the file.'}
-        </Text>
-      </GlassCard>
-
-      <GlassCard style={{ gap: 10 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <SectionLabel>Antenna power (bias-tee)</SectionLabel>
-            <Text style={styles.label}>My antenna has a powered LNA</Text>
-            <Text style={styles.hint}>
-              Sends 4.5 V (up to 180 mA) up the coax to power an LNA or active antenna. Leave this off for a plain antenna. Never turn
-              it on with a DC-shorted antenna (many QFH, loop and some V-dipole designs): it can damage the receiver.
-            </Text>
-          </View>
-          <Switch
-            value={settings.biasTee}
-            onValueChange={(enabled) => {
-              if (!enabled) {
-                update({ biasTee: false });
-                return;
-              }
-              Alert.alert(
-                'Turn on antenna power?',
-                'Only do this if your LNA or active antenna needs power from the receiver and you know the antenna is not DC-shorted. A short circuit can damage the receiver.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Turn on', style: 'destructive', onPress: () => update({ biasTee: true }) },
-                ]
-              );
-            }}
-            trackColor={{ true: colors.accentMuted, false: colors.surfaceBorder }}
-            thumbColor={settings.biasTee ? colors.accent : colors.textSecondary}
+      <Section icon="radio-outline" title="Receiver" subtitle="Recording and antenna power">
+        <Row first label="Recording format">
+          <Segmented
+            value={settings.recordingFormat}
+            onChange={(key) => update({ recordingFormat: key })}
+            options={(Object.keys(RECORDING_FORMATS) as RecordingFormat[]).map((key) => ({ value: key, label: `${RECORDING_FORMATS[key].label} · ${RECORDING_FORMATS[key].rateLabel}` }))}
           />
+          <Text style={styles.hint}>
+            {settings.recordingFormat === 'fullband'
+              ? "Records the receiver's whole stream the way SatDump does: 2.3 MHz of spectrum with both Meteor downlinks, nothing filtered. About 4.6 MB per second, so roughly 2.8 GB for a 10 minute pass."
+              : 'Records only a 0.29 MHz slice around the downlink, filtered and with DC removed. About 0.58 MB per second, roughly 350 MB for a 10 minute pass, but the other downlink is not in the file.'}
+          </Text>
         </Row>
-        <Text style={styles.hint}>Gain and frequency are always chosen automatically during capture.</Text>
-      </GlassCard>
+        <ToggleRow
+          label="My antenna has a powered LNA"
+          hint="Sends 4.5 V (up to 180 mA) up the coax to power an LNA or active antenna. Leave this off for a plain antenna. Never turn it on with a DC-shorted antenna (many QFH, loop and some V-dipole designs): it can damage the receiver."
+          value={settings.biasTee}
+          onChange={(enabled) => {
+            if (!enabled) {
+              update({ biasTee: false });
+              return;
+            }
+            appAlert(
+              'Turn on antenna power?',
+              'Only do this if your LNA or active antenna needs power from the receiver and you know the antenna is not DC-shorted. A short circuit can damage the receiver.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Turn on', style: 'destructive', onPress: () => update({ biasTee: true }) },
+              ]
+            );
+          }}
+        />
+        <Row>
+          <Text style={styles.hint}>Gain and frequency are always chosen automatically during capture.</Text>
+        </Row>
+      </Section>
 
-      <GlassCard style={{ gap: 12 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <SectionLabel>Orbital data</SectionLabel>
-          <Button compact variant="secondary" icon="refresh" label="Refresh" loading={tleLoading} onPress={() => void useAppStore.getState().refreshTles(true)} />
-        </Row>
-        {MONITORED_SATELLITES.map((sat) => {
+      <Section
+        icon="cloud-download-outline"
+        title="Orbital data"
+        subtitle="Satellite positions come from CelesTrak and SatNOGS"
+        right={<Button compact variant="secondary" icon="refresh" label="Refresh" loading={tleLoading} onPress={() => void useAppStore.getState().refreshTles(true)} />}
+      >
+        {MONITORED_SATELLITES.map((sat, i) => {
           const tle = tles[sat.noradId];
           return (
-            <Row key={sat.noradId} style={{ justifyContent: 'space-between' }}>
-              <View>
-                <Text style={styles.label}>{sat.name}</Text>
-                <Text style={styles.hint}>NORAD {sat.noradId}</Text>
-              </View>
-              {tle ? (
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Badge label={tle.outdated ? 'Outdated' : tle.stale ? 'Offline copy' : 'Up to date'} color={tle.outdated ? colors.warning : tle.stale ? colors.warning : colors.success} />
-                  <Text style={styles.hint}>
-                    {tle.source} · {ageLabel(tle.fetchedAt)}
-                  </Text>
-                </View>
-              ) : (
-                <Badge label="Not loaded" color={colors.textTertiary} />
-              )}
-            </Row>
+            <Row
+              key={sat.noradId}
+              first={i === 0}
+              label={sat.name}
+              hint={`NORAD ${sat.noradId}${tle ? ` · ${tle.source} · ${ageLabel(tle.fetchedAt)}` : ''}`}
+              right={
+                tle ? (
+                  <Badge label={tle.outdated ? 'Outdated' : tle.stale ? 'Offline copy' : 'Up to date'} color={tle.outdated || tle.stale ? colors.warning : colors.success} />
+                ) : (
+                  <Badge label="Not loaded" color={colors.textTertiary} />
+                )
+              }
+            />
           );
         })}
-        {tleError ? <Text style={[styles.hint, { color: colors.danger }]}>{tleError}</Text> : null}
-      </GlassCard>
+        {tleError ? (
+          <Row>
+            <Text style={[styles.hint, { color: colors.danger }]}>{tleError}</Text>
+          </Row>
+        ) : null}
+      </Section>
 
-      <GlassCard style={{ gap: 10 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <SectionLabel>Testing</SectionLabel>
-            <Text style={styles.label}>Unlock capture for any pass</Text>
-            <Text style={styles.hint}>
-              Lets you start a 2 minute test recording at any time, to check the dongle, storage and export. Test recordings
-              are flagged in their metadata. During a real pass the normal behaviour applies either way.
-            </Text>
-          </View>
-          <Switch
-            value={settings.captureTestMode}
-            onValueChange={(enabled) => update({ captureTestMode: enabled })}
-            trackColor={{ true: colors.accentMuted, false: colors.surfaceBorder }}
-            thumbColor={settings.captureTestMode ? colors.accent : colors.textSecondary}
-          />
-        </Row>
-      </GlassCard>
+      <Section icon="hardware-chip-outline" title="Storage" subtitle="Recordings stay in the app until you export or delete them">
+        <Row first label="Free space" right={<Text style={styles.value}>{freeBytes === null ? '–' : formatBytes(freeBytes)}</Text>} hint="A 10 minute pass records about 2.8 GB in Full band format, or about 350 MB in Compact." />
+      </Section>
+
+      <Section icon="flask-outline" title="Testing" subtitle="Tools for trying things without a real pass or chest" tone="warning">
+        <ToggleRow
+          first
+          label="Unlock capture for any pass"
+          hint="Lets you start a 2 minute test recording at any time, to check the dongle, storage and export. Test recordings are flagged in their metadata. During a real pass the normal behaviour applies either way."
+          value={settings.captureTestMode}
+          onChange={(enabled) => update({ captureTestMode: enabled })}
+        />
+      </Section>
 
       <TestChestCard />
 
-      <GlassCard style={{ gap: 10 }}>
-        <SectionLabel>Storage</SectionLabel>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={styles.label}>Free space</Text>
-          <Text style={styles.value}>{freeBytes === null ? '–' : formatBytes(freeBytes)}</Text>
-        </Row>
-        <Text style={styles.hint}>
-          A 10 minute pass records about 2.8 GB in Full band format, or about 350 MB in Compact. Recordings are kept in the app's storage until you export or delete them.
+      <View style={styles.about}>
+        <Text style={styles.aboutTitle}>Azimuth {Constants.expoConfig?.version ?? ''}</Text>
+        <Text style={styles.aboutText}>
+          Orbital data from CelesTrak and SatNOGS DB. Receiver driver: RTL-SDR Blog librtlsdr (GPL) with libusb (LGPL). Azimuth is licensed GPL-3.0-or-later.
         </Text>
-      </GlassCard>
-
-      <GlassCard style={{ gap: 6 }}>
-        <SectionLabel>About</SectionLabel>
-        <Text style={styles.label}>Azimuth {Constants.expoConfig?.version ?? ''}</Text>
-        <Text style={styles.hint}>
-          Orbital data from CelesTrak and SatNOGS DB. Receiver driver: RTL-SDR Blog librtlsdr (GPL) with libusb (LGPL). Azimuth is
-          licensed GPL-3.0-or-later.
-        </Text>
-      </GlassCard>
+      </View>
     </Screen>
   );
 }
 
-function Stepper({ label, hint, value, onMinus, onPlus }: { label: string; hint?: string; value: string; onMinus: () => void; onPlus: () => void }) {
-  return (
-    <View style={{ gap: 8 }}>
-      <Text style={styles.label}>{label}</Text>
-      <Row>
-        <Button compact variant="secondary" icon="remove" label="" onPress={onMinus} />
-        <Text style={styles.stepperValue}>{value}</Text>
-        <Button compact variant="secondary" icon="add" label="" onPress={onPlus} />
-      </Row>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  title: { ...typography.heading, fontSize: 28, color: colors.textPrimary },
-  subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  label: { ...typography.subheading, fontSize: 14, color: colors.textPrimary },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 20, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.accentMuted },
+  heroTitle: { ...typography.heading, fontSize: 22, color: colors.textPrimary },
+  heroSub: { ...typography.caption, color: colors.textSecondary },
+  coords: { ...typography.subheading, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  buttons: { flexDirection: 'row', gap: 10 },
   value: { ...typography.subheading, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
-  hint: { ...typography.caption, color: colors.textTertiary },
-  stepperValue: { ...typography.subheading, color: colors.textPrimary, flex: 1, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  hint: { ...typography.caption, color: colors.textSecondary, lineHeight: 17 },
+  about: { gap: 4, paddingHorizontal: 6, paddingBottom: 8 },
+  aboutTitle: { ...typography.subheading, fontSize: 13, color: colors.textSecondary },
+  aboutText: { ...typography.caption, color: colors.textTertiary, lineHeight: 17 },
 });

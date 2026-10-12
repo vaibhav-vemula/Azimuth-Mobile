@@ -1,4 +1,5 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { appAlert } from '../../../components/dialog';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '../../../theme';
 import { useMapping } from '../../../mapping/useMapping';
@@ -26,7 +27,7 @@ export function SessionHistory({ skipFirst = false }: { skipFirst?: boolean }) {
           selected={r.id === selectedId}
           onShow={() => show(r.id === selectedId ? null : r.id)}
           onDelete={() =>
-            Alert.alert('Delete this session?', 'It is removed from the history. The fog it cleared stays cleared.', [
+            appAlert('Delete this session?', 'It is removed from the history. The fog it cleared stays cleared.', [
               { text: 'Cancel', style: 'cancel' },
               {
                 text: 'Delete',
@@ -69,7 +70,7 @@ function Row({ record: r, selected, onShow, onDelete }: { record: SessionRecord;
 
 /** Towers, Wi-Fi, Bluetooth and radio for a session, as icons and numbers. A rebuilt session has none of these, so it says so. */
 export function SessionChips({ record: r }: { record: SessionRecord }) {
-  if (r.estimated) return <Text style={styles.note}>Rebuilt from your fog map. Mapped before sessions were recorded, so there are no signal counts.</Text>;
+  if (r.estimated) return <Text style={styles.note}>Rebuilt from your map progress. Mapped before sessions were recorded, so there are no signal counts.</Text>;
   return (
     <View style={styles.chips}>
       <Stat icon="cellular" color="#3DDC84" value={r.towers} label="towers" />
