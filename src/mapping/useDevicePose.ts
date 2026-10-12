@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { addOrientationListener, startOrientation, stopOrientation } from '../../modules/signal-scan';
 import { smoothAngleDeg, walkingHeadingDeg } from '../ar/orientation';
 import { useUnits } from '../units/units';
-import { activityFor, compassNeedsCalibration, useHeadingStore } from './headingStore';
+import { Course, activityFor, chooseHeading, compassNeedsCalibration, courseFrom, useHeadingStore } from './headingStore';
 import type { LatLon } from './hexGrid';
 
 /** The heading is refreshed this often (the sensor reports about 60 times a second; a screen needs far fewer). */
@@ -29,6 +29,8 @@ export interface DevicePose {
 export function useDevicePose(active: boolean): DevicePose {
   /** True once the rotation sensor is delivering, so the older compass reading is not needed. */
   const sensorHeadingRef = useRef(false);
+  /** The direction of travel from the latest moving GPS fix: while you walk it replaces the compass. */
+  const courseRef = useRef<Course | null>(null);
   const [permission, setPermission] = useState<LocationPermission>('unknown');
   const [position, setPosition] = useState<LatLon | null>(null);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
@@ -72,6 +74,7 @@ export function useDevicePose(active: boolean): DevicePose {
           setPosition({ latitudeDeg: loc.coords.latitude, longitudeDeg: loc.coords.longitude });
           useUnits.getState().noteLocation(loc.coords.latitude, loc.coords.longitude);
           setActivity(activityFor(loc.coords.speed));
+          courseRef.current = courseFrom(loc.coords.speed, loc.coords.heading, Date.now());
           setAccuracyM(loc.coords.accuracy);
           setMocked(loc.mocked === true);
         });
@@ -112,7 +115,8 @@ export function useDevicePose(active: boolean): DevicePose {
       const now = Date.now();
       if (now - last < HEADING_INTERVAL_MS) return;
       last = now;
-      smoothed = smoothAngleDeg(smoothed, walkingHeadingDeg({ w: e.w, x: e.x, y: e.y, z: e.z }, e.declinationDeg), HEADING_SMOOTHING);
+      const compass = walkingHeadingDeg({ w: e.w, x: e.x, y: e.y, z: e.z }, e.declinationDeg);
+      smoothed = smoothAngleDeg(smoothed, chooseHeading(compass, courseRef.current, now) ?? compass, HEADING_SMOOTHING);
       sensorHeadingRef.current = true;
       setNeedsCalibration(compassNeedsCalibration(e.status, e.accuracyRad));
       setHeading(smoothed);

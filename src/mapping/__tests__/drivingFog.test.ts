@@ -34,11 +34,11 @@ describe('pointsAlong', () => {
 describe('driving', () => {
   beforeEach(() => useMapping.setState({ explored: {}, status: 'idle' }));
 
-  it('leaves gaps if each fix only clears a circle around itself, 300 m apart at 70 km/h', () => {
+  it('leaves gaps if each fix only clears a circle around itself, 450 m apart at 70 km/h', () => {
     useMapping.getState().revealAt(A);
-    useMapping.getState().revealAt(east(300));
+    useMapping.getState().revealAt(east(450));
     const explored = useMapping.getState().explored;
-    expect(explored[cellIdAt(east(150), FOG_CELL_M)]).toBeUndefined(); // the road between the two circles is still fog
+    expect(explored[cellIdAt(east(225), FOG_CELL_M)]).toBeUndefined(); // the road between the two circles is still fog
   });
 
   it('clears one continuous road when the line between the fixes is cleared too', () => {

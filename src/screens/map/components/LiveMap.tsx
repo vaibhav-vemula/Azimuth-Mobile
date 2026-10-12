@@ -8,7 +8,7 @@ import { PersonMarker } from './PersonMarker';
 import { VISION_RADIUS_M } from '../../../mapping/explore';
 import { HEAT_RADIUS_M, circleRing, radiusForMetres } from '../../../mapping/signalLayer';
 import type { FogStyle } from '../../../mapping/mappingStorage';
-import { useHeadingStore } from '../../../mapping/headingStore';
+import { onTurnedMap, useHeadingStore } from '../../../mapping/headingStore';
 import { useThrottled } from '../../../mapping/useThrottled';
 import type { LatLon } from '../../../mapping/hexGrid';
 import { colors } from '../../../theme';
@@ -157,7 +157,9 @@ function LiveMapImpl({ position, explored, chests, nearestId, signal, fogStyle, 
           setMapReady(false);
           onLoadState('failed');
         }}
+        onRegionIsChanging={(e) => useHeadingStore.getState().setMapBearing(e.nativeEvent.bearing)}
         onRegionDidChange={(e) => {
+          useHeadingStore.getState().setMapBearing(e.nativeEvent.bearing);
           if (e.nativeEvent.userInteraction) onFollowingChange(false);
         }}
       >
@@ -267,8 +269,10 @@ function ChestPin({ chest, nearest }: { chest: Chest; nearest: boolean }) {
 /** You: a small person in a glowing badge, with a beam for the way the phone faces. (See PersonMarker.) */
 function MeMarker() {
   const headingDeg = useHeadingStore((s) => s.heading);
+  const mapBearing = useHeadingStore((s) => s.mapBearing);
   const activity = useHeadingStore((s) => s.activity);
-  return <PersonMarker headingDeg={headingDeg} activity={activity} />;
+  // The marker does not turn with the map, so when the map is turned the beam is turned back by the same amount.
+  return <PersonMarker headingDeg={headingDeg === null ? null : onTurnedMap(headingDeg, mapBearing)} activity={activity} />;
 }
 
 function usePulse(active: boolean) {

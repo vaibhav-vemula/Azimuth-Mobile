@@ -7,8 +7,8 @@ const here = { latitudeDeg: 38.9072, longitudeDeg: -77.0369 };
 describe('clearing the fog around you', () => {
   it('clears a bubble of about the vision radius, centred on you', () => {
     const ids = cellsWithin(here);
-    expect(ids.length).toBeGreaterThan(620);
-    expect(ids.length).toBeLessThan(1050);
+    expect(ids.length).toBeGreaterThan(1400);
+    expect(ids.length).toBeLessThan(2400);
     for (const id of ids) {
       const p = parseCellId(id)!;
       expect(p.sizeM).toBe(FOG_CELL_M);
