@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Chest, fetchChests } from './api';
 import { verifierConfigured } from './config';
-import { cellIdAt } from '../mapping/hexGrid';
+import { buildTreasureChests } from './treasure';
 import { loadOpenedChests, saveOpenedChests } from '../mapping/mappingStorage';
 import type { LatLon } from '../mapping/hexGrid';
 
@@ -11,14 +11,14 @@ interface ChestsState {
   error: string | null;
   loadedAtMs: number | null;
   refresh: () => Promise<void>;
-  /** A chest that exists only on this phone, a few metres from `position`, for trying the opening without any network. */
   /** A chest was opened: it leaves the map and the list for good (this phone remembers it). */
   markOpened: (id: string) => void;
-  addTestChest: (position: LatLon, facingDeg?: number | null) => Chest;
-  clearTestChests: () => void;
+  /** Three treasure chests at once: one where you stand and two about 200 m away. They exist only on this phone. */
+  addTreasureChests: (position: LatLon, facingDeg?: number | null) => Chest[];
+  clearTreasureChests: () => void;
 }
 
-/** Test chests are kept apart from the real ones so a refresh from the network does not remove them. */
+/** Chests that live only on this phone are kept apart from the real ones so a refresh from the network does not remove them. */
 let testChests: Chest[] = [];
 /** Ids of chests already opened here. Kept off the map even if the network still lists them as open. */
 let opened = new Set<string>(loadOpenedChests());
@@ -45,28 +45,15 @@ export const useChests = create<ChestsState>((set, get) => ({
     testChests = testChests.filter((c) => c.id !== id);
     set({ chests: get().chests.filter((c) => c.id !== id) });
   },
-  addTestChest: (position, facingDeg = null) => {
-    // Exactly where you stand. GPS cannot tell which way a point under your feet lies, so in AR it is drawn in front of
-    // you, in the direction you were facing when you dropped it (see computeFrame).
-    const at = { latitudeDeg: position.latitudeDeg, longitudeDeg: position.longitudeDeg };
-    const chest: Chest = {
-      id: `test-${Date.now()}`,
-      title: 'Test chest',
-      kind: 'visit',
-      cellId: cellIdAt(at),
-      rewardUsdc: 1,
-      remaining: 1,
-      expiresMs: Date.now() + 2 * 3_600_000,
-      requester: 'Azimuth test',
-      requires: 'phone',
-      // One reading is enough, and the exact spot is given so it sits where you are.
-      spec: { minSamples: 1, lat: at.latitudeDeg, lon: at.longitudeDeg, test: true, ...(facingDeg !== null ? { facingDeg } : {}) },
-    };
-    testChests = [chest, ...testChests];
-    set({ chests: [chest, ...get().chests] });
-    return chest;
+  addTreasureChests: (position, facingDeg = null) => {
+    // The first sits exactly where you stand; the other two are about 200 m away. All are placed together, and none
+    // appears later when one is opened.
+    const fresh = buildTreasureChests(position, facingDeg);
+    testChests = [...fresh, ...testChests];
+    set({ chests: [...fresh, ...get().chests] });
+    return fresh;
   },
-  clearTestChests: () => {
+  clearTreasureChests: () => {
     testChests = [];
     set({ chests: get().chests.filter((c) => c.spec.test !== true) });
   },

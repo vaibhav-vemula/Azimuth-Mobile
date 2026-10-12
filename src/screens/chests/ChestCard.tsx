@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '../../components/GlassCard';
@@ -8,11 +9,19 @@ import { useChestClaim } from '../../ar/claim';
 import { AR_RANGE_M } from '../../ar/orientation';
 import { rangeLabel, useUnitSystem } from '../../units/units';
 import { CHEST_KIND, formatDistance, timeLeft } from './chestInfo';
+import { ChestOpening } from './ChestOpening';
+import { TREASURE_AZM } from '../../network/treasure';
 
 export function ChestCard({ chest, distance, mappingRunning, scans, onAr }: { chest: Chest; distance: number | null; mappingRunning: boolean; scans: number; onAr?: () => void }) {
   const kind = CHEST_KIND[chest.kind];
   const system = useUnitSystem();
   const { state, ready, hint, claim, passChest, dongleOnly } = useChestClaim(chest, mappingRunning, scans);
+  const [opening, setOpening] = useState(false);
+  const open = () => {
+    setOpening(true);
+    void claim();
+  };
+  const finished = state.phase === 'done' || state.phase === 'error';
 
   return (
     <GlassCard style={styles.card}>
@@ -58,10 +67,18 @@ export function ChestCard({ chest, distance, mappingRunning, scans, onAr }: { ch
             icon="cube-outline"
             disabled={!ready}
             loading={state.phase === 'signing' || state.phase === 'sending'}
-            onPress={() => void claim()}
+            onPress={open}
           />}
         </>
       )}
+      <ChestOpening
+        visible={opening}
+        phase={finished ? 'done' : 'working'}
+        accepted={state.phase === 'done' && state.accepted}
+        reward={chest.spec.treasure !== undefined ? `+${TREASURE_AZM} AZM` : undefined}
+        message={state.phase === 'done' || state.phase === 'error' ? state.message : ''}
+        onClose={() => setOpening(false)}
+      />
     </GlassCard>
   );
 }

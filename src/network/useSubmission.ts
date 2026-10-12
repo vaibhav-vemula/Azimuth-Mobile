@@ -70,5 +70,9 @@ export function useSubmission() {
   /** Shows a finished result without sending anything (used for test chests). */
   const finishLocally = useCallback((message: string) => setState({ phase: 'done', accepted: true, pending: false, message }), []);
 
-  return { state, submit, signOnly, finishLocally, reset: () => setState({ phase: 'idle' }) };
+  /** Shows that a request made outside `submit` is waiting on the wallet or the network. */
+  const working = useCallback((phase: 'signing' | 'sending') => setState({ phase }), []);
+  const failLocally = useCallback((message: string) => setState({ phase: 'error', message }), []);
+
+  return { state, submit, signOnly, finishLocally, working, failLocally, reset: () => setState({ phase: 'idle' }) };
 }

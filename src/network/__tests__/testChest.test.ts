@@ -4,36 +4,47 @@ import { useChests } from '../useChests';
 const HERE = { latitudeDeg: 38.9072, longitudeDeg: -77.0369 };
 
 beforeEach(() => {
-  useChests.getState().clearTestChests();
+  useChests.getState().clearTreasureChests();
   useChests.setState({ chests: [] });
 });
 
-describe('the test chest', () => {
-  it('is placed exactly where you are, with its cell, and remembers which way you faced', () => {
-    const chest = useChests.getState().addTestChest(HERE, 120);
-    expect(chest.spec.test).toBe(true);
-    expect(chest.spec.minSamples).toBe(1);
-    expect(chest.spec.facingDeg).toBe(120);
-    expect(chest.cellId).toMatch(/^h\d+:-?\d+:-?\d+$/);
-    expect(distanceM(HERE, { latitudeDeg: chest.spec.lat!, longitudeDeg: chest.spec.lon! })).toBeLessThan(0.01);
+describe('the treasure chests', () => {
+  it('are three, placed together: one where you are and two about 200 m away', () => {
+    const chests = useChests.getState().addTreasureChests(HERE, 120);
+    expect(chests).toHaveLength(3);
+    expect(useChests.getState().chests).toHaveLength(3);
+    const at = (c: (typeof chests)[number]) => ({ latitudeDeg: c.spec.lat!, longitudeDeg: c.spec.lon! });
+    expect(distanceM(HERE, at(chests[0]))).toBeLessThan(0.01);
+    expect(distanceM(HERE, at(chests[1]))).toBeGreaterThan(190);
+    expect(distanceM(HERE, at(chests[1]))).toBeLessThan(210);
+    expect(distanceM(HERE, at(chests[2]))).toBeGreaterThan(190);
+    expect(distanceM(HERE, at(chests[2]))).toBeLessThan(210);
+    expect(distanceM(at(chests[1]), at(chests[2]))).toBeGreaterThan(200);
   });
 
-  it('has no facing when the compass had no heading yet', () => {
-    expect(useChests.getState().addTestChest(HERE, null).spec.facingDeg).toBeUndefined();
+  it('each have their own slot, are not called test chests, and need one reading', () => {
+    const chests = useChests.getState().addTreasureChests(HERE, 120);
+    expect(chests.map((c) => c.spec.treasure)).toEqual([1, 2, 3]);
+    expect(new Set(chests.map((c) => c.id)).size).toBe(3);
+    for (const c of chests) {
+      expect(c.title).toBe('Treasure chest');
+      expect(c.requester).toBe('Azimuth');
+      expect(c.spec.minSamples).toBe(1);
+      expect(c.cellId).toMatch(/^h\d+:-?\d+:-?\d+$/);
+    }
+    expect(chests[0].spec.facingDeg).toBe(120);
   });
 
-  it('shows up in the chest list, and can be removed again', () => {
-    useChests.getState().addTestChest(HERE);
-    expect(useChests.getState().chests.filter((c) => c.spec.test)).toHaveLength(1);
-    useChests.getState().clearTestChests();
+  it('have no facing when the compass had no heading yet', () => {
+    expect(useChests.getState().addTreasureChests(HERE, null)[0].spec.facingDeg).toBeUndefined();
+  });
+
+  it('can be removed again, and opening one leaves the other two', () => {
+    const chests = useChests.getState().addTreasureChests(HERE);
+    useChests.getState().markOpened(chests[0].id);
+    expect(useChests.getState().chests.map((c) => c.id)).toEqual([chests[1].id, chests[2].id]);
+    useChests.getState().clearTreasureChests();
     expect(useChests.getState().chests).toHaveLength(0);
-  });
-
-  it('is open for two hours, to pay one USDC, and from a clearly named test requester', () => {
-    const chest = useChests.getState().addTestChest(HERE);
-    expect(chest.remaining).toBe(1);
-    expect(chest.requester).toBe('Azimuth test');
-    expect(chest.expiresMs - Date.now()).toBeGreaterThan(3_599_000 * 2 - 5000);
   });
 });
 
@@ -46,11 +57,11 @@ describe('an opened chest', () => {
     expect(useChests.getState().chests.map((c) => c.id)).toEqual(['b']);
   });
 
-  it('removes a test chest for good', () => {
-    const chest = useChests.getState().addTestChest(HERE);
+  it('removes a treasure chest for good', () => {
+    const chest = useChests.getState().addTreasureChests(HERE)[0];
     useChests.getState().markOpened(chest.id);
     expect(useChests.getState().chests.some((c) => c.id === chest.id)).toBe(false);
-    useChests.getState().clearTestChests();
+    useChests.getState().clearTreasureChests();
     expect(useChests.getState().chests).toHaveLength(0);
   });
 

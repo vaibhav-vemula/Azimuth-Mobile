@@ -94,6 +94,7 @@ test('progress per metric', () => {
   assert.equal(progressFor('mapping_minutes', data, 0.001), 35); // only mapping sessions, (600+1500)/60
   assert.equal(progressFor('satellite_passes', data, 0.001), 2);
   assert.equal(progressFor('chests_opened', data, 0.001), 1);
+  assert.equal(progressFor('treasure', { reports: [], rewards: [] }, 0.001), 1); // a treasure claim needs no server-side count
   assert.equal(progressFor('new_cells', data, 0.001), 20); // 0.020 / 0.001
   assert.equal(progressFor('mapping_minutes', { reports: [], rewards: [] }, 0.001), 0);
   assert.equal(progressFor('mapping_minutes', { reports: [{ type: 'mapping-session', seconds: 'abc' }], rewards: [] }, 0.001), 0);

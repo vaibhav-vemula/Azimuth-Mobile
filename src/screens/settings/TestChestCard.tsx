@@ -7,11 +7,11 @@ import { colors, typography } from '../../theme';
 import { useChests } from '../../network/useChests';
 import { useHeadingStore } from '../../mapping/headingStore';
 
-/** Drops a chest a few metres from where you stand, so the AR opening can be tried anywhere. It exists only on this phone. */
+/** Drops three treasure chests at once: one where you stand and two about 200 m away. Each pays 5 AZM once a day. */
 export function TestChestCard() {
   const hasTest = useChests((s) => s.chests.some((c) => c.spec.test === true));
-  const addTestChest = useChests((s) => s.addTestChest);
-  const clearTestChests = useChests((s) => s.clearTestChests);
+  const addTreasureChests = useChests((s) => s.addTreasureChests);
+  const clearTreasureChests = useChests((s) => s.clearTreasureChests);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -20,10 +20,10 @@ export function TestChestCard() {
     setMessage(null);
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) throw new Error('Location permission is needed to place the chest where you are.');
+      if (!permission.granted) throw new Error('Location permission is needed to place the chests near you.');
       const here = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      addTestChest({ latitudeDeg: here.coords.latitude, longitudeDeg: here.coords.longitude }, useHeadingStore.getState().heading);
-      setMessage('Test chest placed right where you are standing. Go to the Map tab and start mapping: the pill at the top shows it with a distance of about 0, and the camera button opens AR, where the chest appears in front of you, in the direction you were facing now.');
+      addTreasureChests({ latitudeDeg: here.coords.latitude, longitudeDeg: here.coords.longitude }, useHeadingStore.getState().heading);
+      setMessage('Three treasure chests are placed: one right where you stand and two about 200 m away. Go to the Explore tab and start mapping. Walk to a chest, open it, and 5 AZM is sent to your wallet.');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -32,13 +32,13 @@ export function TestChestCard() {
   };
 
   return (
-    <Section icon="cube-outline" title="Test chest" subtitle="Try opening a chest in AR anywhere" tone="warning">
+    <Section icon="cube-outline" title="Treasure chests" subtitle="Three chests near you, 5 AZM each">
       <Row first>
         <Text style={styles.hint}>
-          Puts a chest right where you are standing, to try opening it in AR. It exists only on this phone, needs one reading and no wallet, and opening it sends nothing and pays nothing.
+          Puts three chests near you at once: one right where you stand and two about 200 m away. Each pays 5 AZM to your wallet when opened, once a day, so you need a connected wallet and the app mapping.
         </Text>
-        <Button label={busy ? 'Finding you…' : 'Drop a test chest here'} icon="cube-outline" loading={busy} disabled={busy} onPress={() => void drop()} />
-        {hasTest ? <Button label="Remove test chests" variant="secondary" onPress={clearTestChests} /> : null}
+        <Button label={busy ? 'Finding you…' : 'Drop treasure chests near me'} icon="cube-outline" loading={busy} disabled={busy} onPress={() => void drop()} />
+        {hasTest ? <Button label="Remove treasure chests" variant="secondary" onPress={clearTreasureChests} /> : null}
         {message ? <Text style={styles.message}>{message}</Text> : null}
       </Row>
     </Section>

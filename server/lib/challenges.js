@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const DAY = 86_400_000;
 const WEEK = 7 * DAY;
 const PERIODS = ['daily', 'weekly', 'once'];
-const METRICS = ['mapping_minutes', 'new_cells', 'satellite_passes', 'chests_opened'];
+const METRICS = ['mapping_minutes', 'new_cells', 'satellite_passes', 'chests_opened', 'treasure'];
 const TABS = ['Map', 'Satellites'];
 
 /** A `challenges` table row as a challenge, or null when anything about it is off (an invalid row is never paid). */
@@ -97,6 +97,9 @@ function progressFor(metric, { reports, rewards }, newCellUsdc) {
     }
     case 'satellite_passes': return reports.filter((r) => r.type === 'satellite-pass').length;
     case 'chests_opened': return reports.filter((r) => r.type === 'chest-claim').length;
+    // Treasure chests open on the phone and the wallet signs the claim; there is nothing for the server to recount. Each
+    // slot pays once a day, and the registry refuses a second payment for the same day.
+    case 'treasure': return 1;
     case 'new_cells': return Math.round(rewards.reduce((n, r) => n + Number(r.amount_usdc), 0) / newCellUsdc);
     default: throw new Error(`unknown metric ${metric}`);
   }

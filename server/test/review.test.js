@@ -15,6 +15,7 @@ const SEED_CHALLENGES = [
   { id: 'cells-20', title: 'Find 20 new cells', blurb: 'Map 20 cells nobody has mapped yet.', period: 'daily', metric: 'new_cells', goal: 20, reward: 5, go_tab: 'Map', active: true, sort: 20 },
   { id: 'ground-weekly', title: 'Explore new ground', blurb: 'Reveal 70 new cells this week.', period: 'weekly', metric: 'new_cells', goal: 70, reward: 40, go_tab: 'Map', active: true, sort: 30 },
   { id: 'passes-3', title: 'Catch 3 satellite passes', blurb: 'Record three satellite passes this week.', period: 'weekly', metric: 'satellite_passes', goal: 3, reward: 30, go_tab: 'Satellites', active: true, sort: 40 },
+  { id: 'treasure-1', title: 'Treasure chest 1', blurb: 'Opened on the map.', period: 'daily', metric: 'treasure', goal: 1, reward: 5, go_tab: 'Map', active: true, sort: 900 },
   { id: 'first-chest', title: 'Open your first chest', blurb: 'Find a chest and open it. Once only.', period: 'once', metric: 'chests_opened', goal: 1, reward: 20, go_tab: 'Map', active: true, sort: 50 },
 ];
 
@@ -479,6 +480,21 @@ test('a met daily challenge is verified and paid on-chain with the derived hash 
   assert.equal(saved.status, 'verified');
   assert.equal(saved.onchain_amount, 5);
   assert.equal(saved.onchain_tx, 'SIG');
+});
+
+test('a treasure chest claim pays 5 AZM once for the day, and a second claim for the same day pays nothing', async () => {
+  const fake = fakeSupabase(); const chain = fakeChain();
+  const node = newNode();
+  const first = claimRow(node, { challengeId: 'treasure-1' }); fake.db.reports.set(first.hash, first);
+  const out = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW });
+  assert.equal(out[0].status, 'verified');
+  const { onchainHash } = require('../lib/challenges');
+  assert.deepEqual(chain.calls, [{ wallet: node.address, hash: onchainHash('treasure-1', '2026-10-02'), kind: 3, amount: 5 }]);
+  const again = claimRow(node, { challengeId: 'treasure-1', claimedMs: NOW + 1 }, NOW + 1); fake.db.reports.set(again.hash, again);
+  const out2 = await reviewer(fake, { chain }).settleChallenges({ nowMs: NOW + 5 });
+  assert.equal(out2[0].status, 'rejected');
+  assert.match(out2[0].reasons.join(), /already claimed/);
+  assert.equal(chain.calls.length, 1);
 });
 
 test('an unmet challenge is rejected with the real numbers and pays nothing', async () => {
